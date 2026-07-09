@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 440" role="img" aria-label="رسم توضيحي لنظام رتق: طائرة مسيّرة تصلح تسريبًا في أنبوب غاز وسط الصحراء">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EDEAF7"/>
+      <stop offset="0.7" stop-color="#F2E9E9"/>
+      <stop offset="1" stop-color="#F5EBE3"/>
+    </linearGradient>
+    <linearGradient id="pipe" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C5BBD4"/>
+      <stop offset="0.45" stop-color="#AFA3C4"/>
+      <stop offset="1" stop-color="#93869F"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7D80DA"/>
+      <stop offset="1" stop-color="#55418B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- sky -->
+  <rect width="800" height="440" fill="url(#sky)"/>
+  <circle cx="640" cy="86" r="44" fill="#F0D9C8" opacity="0.9"/>
+  <circle cx="640" cy="86" r="62" fill="#F0D9C8" opacity="0.3"/>
+
+  <!-- distant dunes -->
+  <path d="M0 268 Q140 210 300 258 Q470 306 620 252 Q720 218 800 248 L800 440 L0 440 Z" fill="#E5DBE6"/>
+  <path d="M0 316 Q180 264 380 310 Q560 350 800 300 L800 440 L0 440 Z" fill="#DECFD6" opacity="0.85"/>
+  <!-- foreground sand -->
+  <path d="M0 356 Q220 320 460 352 Q640 376 800 348 L800 440 L0 440 Z" fill="#E9D8CB"/>
+
+  <!-- pipeline supports -->
+  <g fill="#8D7F9C">
+    <rect x="128" y="322" width="10" height="42" rx="3"/>
+    <rect x="308" y="322" width="10" height="42" rx="3"/>
+    <rect x="548" y="322" width="10" height="42" rx="3"/>
+    <rect x="708" y="322" width="10" height="42" rx="3"/>
+  </g>
+
+  <!-- pipeline -->
+  <rect x="40" y="292" width="720" height="40" rx="20" fill="url(#pipe)"/>
+  <rect x="40" y="299" width="720" height="7" rx="3.5" fill="#fff" opacity="0.35"/>
+  <g fill="#7A6C8C" opacity="0.6">
+    <rect x="216" y="290" width="12" height="44" rx="4"/>
+    <rect x="436" y="290" width="12" height="44" rx="4"/>
+    <rect x="636" y="290" width="12" height="44" rx="4"/>
+  </g>
+
+  <!-- leak: gas puffs -->
+  <g fill="#B7BAE8">
+    <circle cx="497" cy="272" r="7" opacity="0.85"/>
+    <circle cx="504" cy="252" r="10" opacity="0.6"/>
+    <circle cx="494" cy="230" r="13" opacity="0.4"/>
+    <circle cx="506" cy="206" r="16" opacity="0.25"/>
+  </g>
+  <!-- sensor pulse rings -->
+  <g fill="none" stroke="#7D80DA">
+    <circle cx="497" cy="292" r="26" stroke-width="2.5" opacity="0.8"/>
+    <circle cx="497" cy="292" r="44" stroke-width="2" opacity="0.45"/>
+    <circle cx="497" cy="292" r="64" stroke-width="1.5" opacity="0.22"/>
+  </g>
+
+  <!-- repair beam -->
+  <path d="M497 170 L497 268" stroke="#7D80DA" stroke-width="3" stroke-dasharray="2 9" stroke-linecap="round"/>
+
+  <!-- drone -->
+  <g>
+    <!-- arms -->
+    <path d="M418 132 L576 132" stroke="#55418B" stroke-width="7" stroke-linecap="round"/>
+    <!-- rotors -->
+    <ellipse cx="418" cy="124" rx="40" ry="7" fill="#7D80DA" opacity="0.55"/>
+    <ellipse cx="576" cy="124" rx="40" ry="7" fill="#7D80DA" opacity="0.55"/>
+    <rect x="412" y="124" width="12" height="14" rx="4" fill="#55418B"/>
+    <rect x="570" y="124" width="12" height="14" rx="4" fill="#55418B"/>
+    <!-- body -->
+    <rect x="455" y="118" width="84" height="40" rx="18" fill="url(#body)"/>
+    <circle cx="497" cy="138" r="9" fill="#F5F5F4"/>
+    <circle cx="497" cy="138" r="4" fill="#55418B"/>
+    <!-- repair arm -->
+    <path d="M497 158 L497 172" stroke="#55418B" stroke-width="6" stroke-linecap="round"/>
+    <rect x="489" y="168" width="16" height="10" rx="4" fill="#55418B"/>
+  </g>
+
+  <!-- status chip -->
+  <g>
+    <rect x="560" y="196" width="150" height="34" rx="17" fill="#FFFFFF" opacity="0.9"/>
+    <circle cx="586" cy="213" r="6" fill="#7D80DA"/>
+    <text x="600" y="218" font-family="monospace" font-size="14" fill="#55418B">Leak sealed</text>
+  </g>
+</svg>

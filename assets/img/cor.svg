@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 440" role="img" aria-label="رسم توضيحي لمحطة كور: شاشة تفاعلية تعرض شخصية كابتن كاردو للأطفال">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F0EAF6"/>
+      <stop offset="1" stop-color="#FAF2EC"/>
+    </linearGradient>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7D80DA"/>
+      <stop offset="1" stop-color="#55418B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect width="800" height="440" fill="url(#bg)"/>
+  <circle cx="130" cy="110" r="70" fill="#E5DBE6" opacity="0.7"/>
+  <circle cx="700" cy="330" r="90" fill="#EAD9DB" opacity="0.55"/>
+  <circle cx="660" cy="90" r="26" fill="#D9C7DC" opacity="0.6"/>
+
+  <!-- floor -->
+  <ellipse cx="400" cy="404" rx="300" ry="22" fill="#DECFD6" opacity="0.6"/>
+
+  <!-- kiosk stand -->
+  <path d="M382 300 L418 300 L428 392 L372 392 Z" fill="#C9BCD8"/>
+  <rect x="340" y="386" width="120" height="16" rx="8" fill="#B3A4C6"/>
+
+  <!-- screen frame -->
+  <rect x="220" y="64" width="360" height="248" rx="26" fill="url(#frame)"/>
+  <rect x="234" y="78" width="332" height="220" rx="16" fill="#FBF8FA"/>
+
+  <!-- ECG line across screen -->
+  <path d="M250 208 L302 208 L318 178 L336 236 L354 196 L368 208 L550 208"
+        fill="none" stroke="#7D80DA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+
+  <!-- Captain Cardo: heart character -->
+  <g>
+    <!-- cape -->
+    <path d="M362 128 Q340 168 352 196 L400 176 Z" fill="#7D80DA" opacity="0.85"/>
+    <!-- heart -->
+    <path d="M400 196 C368 168 356 142 372 124 C382 113 398 114 400 128 C402 114 418 113 428 124 C444 142 432 168 400 196 Z"
+          fill="#D98A94"/>
+    <!-- face -->
+    <circle cx="390" cy="140" r="4.5" fill="#553844"/>
+    <circle cx="410" cy="140" r="4.5" fill="#553844"/>
+    <path d="M389 152 Q400 162 411 152" fill="none" stroke="#553844" stroke-width="3.5" stroke-linecap="round"/>
+    <!-- little arm waving -->
+    <path d="M430 150 Q446 142 450 128" fill="none" stroke="#D98A94" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <!-- vitals chips -->
+  <g font-family="monospace" font-size="15" fill="#55418B">
+    <rect x="252" y="98" width="96" height="34" rx="17" fill="#EFEAF7"/>
+    <text x="270" y="120">♥ 92</text>
+    <rect x="452" y="98" width="110" height="34" rx="17" fill="#EFEAF7"/>
+    <text x="466" y="120">O₂ 98%</text>
+  </g>
+
+  <!-- progress dots -->
+  <g fill="#7D80DA">
+    <circle cx="380" cy="272" r="6"/>
+    <circle cx="400" cy="272" r="6" opacity="0.45"/>
+    <circle cx="420" cy="272" r="6" opacity="0.45"/>
+  </g>
+
+  <!-- floating friendly elements -->
+  <g>
+    <path d="M600 180 C588 170 584 160 590 153 C594 149 600 149 601 155 C602 149 608 149 612 153 C618 160 614 170 601 180 Z" fill="#D98A94" opacity="0.6"/>
+    <path d="M186 250 C178 243 175 236 179 231 C182 228 186 228 187 232 C188 228 192 228 195 231 C199 236 196 243 187 250 Z" fill="#7D80DA" opacity="0.5"/>
+    <circle cx="640" cy="240" r="8" fill="#C9BCD8" opacity="0.8"/>
+    <circle cx="170" cy="170" r="6" fill="#D9C7DC"/>
+  </g>
+</svg>
