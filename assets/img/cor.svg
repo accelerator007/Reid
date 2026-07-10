@@ -9,6 +9,29 @@
       <stop offset="1" stop-color="#55418B"/>
     </linearGradient>
   </defs>
+  <style>
+    .ecg { stroke-dasharray: 16 100; animation: cr-ecg 2.2s linear infinite; }
+    .cardo { transform-box: fill-box; transform-origin: center bottom; animation: cr-bob 3s ease-in-out infinite; }
+    .heart { transform-box: fill-box; transform-origin: center; animation: cr-beat 1.1s ease-in-out infinite; }
+    .chip { animation: cr-blink 2.4s ease-in-out infinite; }
+    .chip.c2 { animation-delay: 1.2s; }
+    .dot { animation: cr-dot 2.4s ease-in-out infinite; }
+    .dot.d2 { animation-delay: 0.8s; }
+    .dot.d3 { animation-delay: 1.6s; }
+    .floaty { transform-box: fill-box; transform-origin: center; animation: cr-float 5s ease-in-out infinite; }
+    .floaty.f2 { animation-delay: 1.4s; }
+    .floaty.f3 { animation-delay: 2.6s; }
+    @keyframes cr-ecg { to { stroke-dashoffset: -116; } }
+    @keyframes cr-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes cr-beat { 0%,100% { transform: scale(1); } 15% { transform: scale(1.12); } 30% { transform: scale(1); } 45% { transform: scale(1.07); } }
+    @keyframes cr-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+    @keyframes cr-dot { 0%,100% { opacity: 0.45; } 50% { opacity: 1; } }
+    @keyframes cr-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+    @media (prefers-reduced-motion: reduce) {
+      .ecg, .cardo, .heart, .chip, .dot, .floaty { animation: none; }
+      .ecg { stroke-dasharray: none; }
+    }
+  </style>
 
   <!-- background -->
   <rect width="800" height="440" fill="url(#bg)"/>
@@ -28,15 +51,15 @@
   <rect x="234" y="78" width="332" height="220" rx="16" fill="#FBF8FA"/>
 
   <!-- ECG line across screen -->
-  <path d="M250 208 L302 208 L318 178 L336 236 L354 196 L368 208 L550 208"
+  <path class="ecg" pathLength="100" d="M250 208 L302 208 L318 178 L336 236 L354 196 L368 208 L550 208"
         fill="none" stroke="#7D80DA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
 
   <!-- Captain Cardo: heart character -->
-  <g>
+  <g class="cardo">
     <!-- cape -->
     <path d="M362 128 Q340 168 352 196 L400 176 Z" fill="#7D80DA" opacity="0.85"/>
     <!-- heart -->
-    <path d="M400 196 C368 168 356 142 372 124 C382 113 398 114 400 128 C402 114 418 113 428 124 C444 142 432 168 400 196 Z"
+    <path class="heart" d="M400 196 C368 168 356 142 372 124 C382 113 398 114 400 128 C402 114 418 113 428 124 C444 142 432 168 400 196 Z"
           fill="#D98A94"/>
     <!-- face -->
     <circle cx="390" cy="140" r="4.5" fill="#553844"/>
@@ -48,24 +71,28 @@
 
   <!-- vitals chips -->
   <g font-family="monospace" font-size="15" fill="#55418B">
-    <rect x="252" y="98" width="96" height="34" rx="17" fill="#EFEAF7"/>
-    <text x="270" y="120">♥ 92</text>
-    <rect x="452" y="98" width="110" height="34" rx="17" fill="#EFEAF7"/>
-    <text x="466" y="120">O₂ 98%</text>
+    <g class="chip c1">
+      <rect x="252" y="98" width="96" height="34" rx="17" fill="#EFEAF7"/>
+      <text x="270" y="120">♥ 92</text>
+    </g>
+    <g class="chip c2">
+      <rect x="452" y="98" width="110" height="34" rx="17" fill="#EFEAF7"/>
+      <text x="466" y="120">O₂ 98%</text>
+    </g>
   </g>
 
   <!-- progress dots -->
   <g fill="#7D80DA">
-    <circle cx="380" cy="272" r="6"/>
-    <circle cx="400" cy="272" r="6" opacity="0.45"/>
-    <circle cx="420" cy="272" r="6" opacity="0.45"/>
+    <circle class="dot d1" cx="380" cy="272" r="6"/>
+    <circle class="dot d2" cx="400" cy="272" r="6" opacity="0.45"/>
+    <circle class="dot d3" cx="420" cy="272" r="6" opacity="0.45"/>
   </g>
 
   <!-- floating friendly elements -->
   <g>
-    <path d="M600 180 C588 170 584 160 590 153 C594 149 600 149 601 155 C602 149 608 149 612 153 C618 160 614 170 601 180 Z" fill="#D98A94" opacity="0.6"/>
-    <path d="M186 250 C178 243 175 236 179 231 C182 228 186 228 187 232 C188 228 192 228 195 231 C199 236 196 243 187 250 Z" fill="#7D80DA" opacity="0.5"/>
-    <circle cx="640" cy="240" r="8" fill="#C9BCD8" opacity="0.8"/>
-    <circle cx="170" cy="170" r="6" fill="#D9C7DC"/>
+    <path class="floaty f1" d="M600 180 C588 170 584 160 590 153 C594 149 600 149 601 155 C602 149 608 149 612 153 C618 160 614 170 601 180 Z" fill="#D98A94" opacity="0.6"/>
+    <path class="floaty f2" d="M186 250 C178 243 175 236 179 231 C182 228 186 228 187 232 C188 228 192 228 195 231 C199 236 196 243 187 250 Z" fill="#7D80DA" opacity="0.5"/>
+    <circle class="floaty f3" cx="640" cy="240" r="8" fill="#C9BCD8" opacity="0.8"/>
+    <circle class="floaty f2" cx="170" cy="170" r="6" fill="#D9C7DC"/>
   </g>
 </svg>

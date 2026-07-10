@@ -79,6 +79,9 @@
 <body>
 
   <a href="#main" class="skip-link">تخطَّ إلى المحتوى</a>
+  <div class="scroll-progress" aria-hidden="true"></div>
+  <div class="cursor-dot" aria-hidden="true"></div>
+  <div class="cursor-ring" aria-hidden="true"></div>
 
   <!-- ======= NAV ======= -->
   <header class="site-header">
@@ -117,80 +120,77 @@
 
   <!-- ======= HERO ======= -->
   <section id="hero" class="hero">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-    <div class="blob blob-3"></div>
+    <div class="mesh-layer" aria-hidden="true"></div>
+    <div class="hero-orb orb-1" data-parallax="0.12" aria-hidden="true"></div>
+    <div class="hero-orb ring orb-2" data-parallax="0.2" aria-hidden="true"></div>
+    <div class="hero-orb ring orb-3" data-parallax="0.08" aria-hidden="true"></div>
 
     <div class="hero-inner">
       <div class="hero-badge" data-reveal>
         <span class="dot"></span>
         شريككم التقني للمنتجات البرمجية والاستشارات
       </div>
-      <h1 data-reveal>
+      <h1 data-split>
         نحوّل أفكاركم إلى <span class="grad-text">حلول برمجية ذكية</span> تصنع الفارق
       </h1>
       <p class="hero-sub" data-reveal>
         في رِيْد نبني منتجات برمجية متقنة ونقدّم استشارات تقنية موثوقة تساعد المؤسسات على النمو، بمرونة فريق صغير وجودة معايير عالمية.
       </p>
       <div class="hero-actions" data-reveal>
-        <a href="#contact" class="btn btn-primary" data-track="hero-consult">اطلب استشارة مجانية</a>
+        <a href="#contact" class="btn btn-primary" data-magnetic data-track="hero-consult">اطلب استشارة مجانية</a>
         <a href="#services" class="btn btn-ghost">استكشف خدماتنا</a>
-      </div>
-      <div class="hero-stats" data-reveal>
-        <div class="stat">
-          <div class="stat-value" data-count="40" data-prefix="+">+40</div>
-          <div class="stat-label">مشروعًا مُسلّمًا</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value" data-count="25" data-prefix="+">+25</div>
-          <div class="stat-label">عميلًا مؤسسيًا</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value" data-count="98" data-suffix="%">98%</div>
-          <div class="stat-label">رضا العملاء</div>
-        </div>
       </div>
     </div>
   </section>
 
-  <!-- ======= SERVICES ======= -->
+  <!-- ======= MARQUEE ======= -->
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee-track">
+      <span class="marquee-item">الذكاء الاصطناعي</span><span class="marquee-item">إنترنت الأشياء</span><span class="marquee-item">قطاع الطاقة</span><span class="marquee-item">الرعاية الصحية</span><span class="marquee-item">الطائرات المسيّرة</span><span class="marquee-item">الصيانة التنبؤية</span><span class="marquee-item">تطبيقات الويب والجوال</span><span class="marquee-item">الأنظمة المدمجة</span>
+      <span class="marquee-item">الذكاء الاصطناعي</span><span class="marquee-item">إنترنت الأشياء</span><span class="marquee-item">قطاع الطاقة</span><span class="marquee-item">الرعاية الصحية</span><span class="marquee-item">الطائرات المسيّرة</span><span class="marquee-item">الصيانة التنبؤية</span><span class="marquee-item">تطبيقات الويب والجوال</span><span class="marquee-item">الأنظمة المدمجة</span>
+    </div>
+  </div>
+
+  <!-- ======= SERVICES (BENTO) ======= -->
   <section id="services" class="section services">
     <div class="section-head" data-reveal>
       <div class="eyebrow">خدماتنا</div>
       <h2>ما الذي نقدّمه لكم؟</h2>
       <p>خدمات متكاملة تغطي رحلة منتجكم الرقمي من الفكرة إلى الإطلاق وما بعده.</p>
     </div>
-    <div class="services-grid">
-      <div class="service-card" data-reveal>
+    <div class="bento" data-stagger>
+      <div class="service-card bento-lg" data-reveal data-tilt>
+        <div>
+          <div class="service-icon"><span class="shape shape-diamond"></span></div>
+          <h3>حلول ذكاء اصطناعي وإنترنت أشياء مخصّصة</h3>
+        </div>
+        <p>أنظمة ذكية تجمع بين الاستشعار والتحليل والفعل: من الصيانة التنبؤية إلى الأجهزة التفاعلية المتصلة، مبنية خصيصًا لتحدّيات قطاعكم.</p>
+      </div>
+      <div class="service-card bento-sm" data-reveal data-tilt>
         <div class="service-icon"><span class="shape shape-square"></span></div>
         <h3>تطوير المنتجات البرمجية</h3>
-        <p>نصمّم ونبني تطبيقات ويب وجوال متكاملة، من النموذج الأولي حتى الإطلاق، بمعايير أداء وأمان عالية.</p>
+        <p>تطبيقات ويب وجوال متكاملة، من النموذج الأولي حتى الإطلاق، بمعايير أداء وأمان عالية.</p>
       </div>
-      <div class="service-card" data-reveal>
+      <div class="service-card bento-sm" data-reveal data-tilt>
         <div class="service-icon"><span class="shape shape-circle"></span></div>
         <h3>الاستشارات التقنية</h3>
-        <p>نراجع بنيتكم التقنية ونضع خارطة طريق واضحة: اختيار التقنيات، الهيكلة، وخطط التوسّع.</p>
-      </div>
-      <div class="service-card" data-reveal>
-        <div class="service-icon"><span class="shape shape-diamond"></span></div>
-        <h3>حلول ذكاء اصطناعي وإنترنت أشياء مخصّصة</h3>
-        <p>أنظمة ذكية تجمع بين الاستشعار والتحليل والفعل: من الصيانة التنبؤية إلى الأجهزة التفاعلية المتصلة.</p>
+        <p>مراجعة بنيتكم التقنية وخارطة طريق واضحة: اختيار التقنيات، الهيكلة، وخطط التوسّع.</p>
       </div>
     </div>
   </section>
 
-  <!-- ======= PRODUCTS ======= -->
-  <section id="products" class="products-band">
+  <!-- ======= PRODUCTS (FULL-BLEED SHOWCASE) ======= -->
+  <section id="products" class="products-band full-bleed">
     <div class="container">
       <div class="section-head" data-reveal>
         <div class="eyebrow">مشاريعنا</div>
         <h2>مشاريع نفخر بها</h2>
         <p>حلول حقيقية بنيناها لمشكلات حقيقية في قطاعي الطاقة والصحة.</p>
       </div>
-      <div class="products-grid">
+      <div class="showcase" data-stagger>
         <article class="product-card" data-reveal>
           <div class="product-media">
-            <img src="/assets/img/ratq.svg" alt="رسم توضيحي لنظام رتق: طائرة مسيّرة تصلح تسريبًا في أنبوب غاز وسط الصحراء" loading="lazy" width="800" height="440">
+            <img src="/assets/img/ratq.svg" alt="رسم توضيحي لنظام رتق: طائرة مسيّرة تصلح تسريبًا في أنبوب غاز وسط الصحراء" loading="lazy" width="800" height="440" data-parallax="0.05">
           </div>
           <div class="product-body">
             <div class="product-title-row">
@@ -210,7 +210,7 @@
         </article>
         <article class="product-card" data-reveal>
           <div class="product-media">
-            <img src="/assets/img/cor.svg" alt="رسم توضيحي لمحطة كور: شاشة تفاعلية تعرض شخصية كابتن كاردو للأطفال" loading="lazy" width="800" height="440">
+            <img src="/assets/img/cor.svg" alt="رسم توضيحي لمحطة كور: شاشة تفاعلية تعرض شخصية كابتن كاردو للأطفال" loading="lazy" width="800" height="440" data-parallax="0.05">
           </div>
           <div class="product-body">
             <div class="product-title-row">
@@ -232,6 +232,24 @@
     </div>
   </section>
 
+  <!-- ======= STATS BAND (dark, full-bleed) ======= -->
+  <section class="stats-band full-bleed" aria-label="أرقامنا">
+    <div class="stats-band-inner" data-stagger>
+      <div class="stat" data-reveal>
+        <div class="stat-value" data-count="40" data-prefix="+">+40</div>
+        <div class="stat-label">مشروعًا مُسلّمًا</div>
+      </div>
+      <div class="stat" data-reveal>
+        <div class="stat-value" data-count="25" data-prefix="+">+25</div>
+        <div class="stat-label">عميلًا مؤسسيًا</div>
+      </div>
+      <div class="stat" data-reveal>
+        <div class="stat-value" data-count="98" data-suffix="%">98%</div>
+        <div class="stat-label">رضا العملاء</div>
+      </div>
+    </div>
+  </section>
+
   <!-- ======= WHY REID ======= -->
   <section id="why" class="section why">
     <div class="why-grid">
@@ -240,23 +258,23 @@
         <h2 class="why-title">شريك تقني يفهم أعمالكم قبل أن يكتب سطرًا برمجيًا</h2>
         <p class="why-text">لا نكتفي بتنفيذ المطلوب؛ نغوص في تفاصيل عملكم لنقترح الحل الأنسب تقنيًا وتجاريًا، ونبقى معكم بعد التسليم.</p>
       </div>
-      <div class="features-grid">
-        <div class="feature-card" data-reveal>
+      <div class="features-grid" data-stagger>
+        <div class="feature-card" data-reveal data-tilt>
           <div class="feature-icon"><span class="shape-sm circle" style="background:#7D80DA"></span></div>
           <h3>خبرة تقنية عميقة</h3>
           <p>برمجيات، ذكاء اصطناعي، وأنظمة مدمجة تحت سقف واحد.</p>
         </div>
-        <div class="feature-card" data-reveal>
+        <div class="feature-card" data-reveal data-tilt>
           <div class="feature-icon"><span class="shape-sm diamond" style="background:#55418B"></span></div>
           <h3>حلول مبتكرة قابلة للتنفيذ</h3>
           <p>أفكار جريئة تتحوّل إلى أنظمة تعمل في الميدان فعلًا.</p>
         </div>
-        <div class="feature-card" data-reveal>
+        <div class="feature-card" data-reveal data-tilt>
           <div class="feature-icon"><span class="shape-sm square" style="background:#BBA0A0"></span></div>
           <h3>شراكة طويلة الأمد</h3>
           <p>نبقى بعد التسليم: تطوير مستمر وتحسين دائم.</p>
         </div>
-        <div class="feature-card" data-reveal>
+        <div class="feature-card" data-reveal data-tilt>
           <div class="feature-icon"><span class="shape-sm circle" style="background:#7D80DA"></span></div>
           <h3>دعم متواصل</h3>
           <p>قنوات تواصل مباشرة واستجابة خلال ساعات لا أيام.</p>
@@ -273,7 +291,8 @@
         <h2>كيف نعمل؟</h2>
         <p>مسار واضح وشفاف من أول اجتماع حتى ما بعد الإطلاق.</p>
       </div>
-      <div class="steps-grid">
+      <div class="steps-grid" data-stagger>
+        <div class="timeline-rail" aria-hidden="true"></div>
         <div class="step-card" data-reveal>
           <div class="step-num">٠١</div>
           <h3>استكشاف</h3>
@@ -432,7 +451,7 @@
           </div>
           <!-- TODO: استبدلوا الروابط بحسابات رِيْد الفعلية -->
           <div class="socials">
-            <a href="https://www.linkedin.com/company/reidpro" target="_blank" rel="noopener" aria-label="LinkedIn" class="social">
+            <a href="https://www.linkedin.com/company/135245905/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social">
               <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.07 2.07 0 1 1 0-4.13 2.07 2.07 0 0 1 0 4.13zM7.12 20.45H3.55V9h3.57v11.45zM22.23 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.46c.98 0 1.77-.77 1.77-1.72V1.72C24 .77 23.21 0 22.23 0z"/></svg>
             </a>
             <a href="https://x.com/reidpro" target="_blank" rel="noopener" aria-label="X (تويتر سابقًا)" class="social">
