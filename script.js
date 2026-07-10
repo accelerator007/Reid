@@ -12,6 +12,18 @@ document.addEventListener('click', (e) => {
   if (el) track(el.dataset.track);
 });
 
+// Robust WhatsApp / external deep links: open in a new tab when allowed,
+// fall back to same-tab navigation if the popup/new-tab is blocked
+// (in-app browsers, strict popup blockers) so the click is never dead.
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('a[href*="wa.me"]');
+  if (!link) return;
+  const href = link.href;
+  e.preventDefault();
+  const win = window.open(href, '_blank', 'noopener');
+  if (!win) window.location.href = href;
+});
+
 // Split heading text into per-word spans for staggered reveal
 (function () {
   if (reduceMotion) return;
