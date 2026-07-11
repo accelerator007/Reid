@@ -3,6 +3,26 @@
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const finePointer = window.matchMedia('(pointer: fine)').matches;
 
+// ============================================================
+// الحجز المباشر (Cal.com): ضع رابط حسابكم هنا لتفعيل أزرار الحجز
+// مثال: const BOOKING_URL = 'https://cal.com/reid/intro';
+// ما دام فارغًا تبقى أزرار الحجز مخفية ويُستخدم نموذج التواصل.
+// ============================================================
+const BOOKING_URL = '';
+
+(function () {
+  if (!BOOKING_URL) return;
+  document.querySelectorAll('[data-book]').forEach((btn) => {
+    btn.hidden = false;
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      track('booking-open');
+      const win = window.open(BOOKING_URL, '_blank', 'noopener');
+      if (!win) window.location.href = BOOKING_URL;
+    });
+  });
+})();
+
 // Analytics helper: no-ops until Plausible (or similar) is enabled
 function track(name) {
   if (window.plausible) window.plausible(name);
