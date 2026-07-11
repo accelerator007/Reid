@@ -1,0 +1,7 @@
+
+
+# Internal docs — must NOT be served publicly (Worker serves repo root)
+BUSINESS-PLAN.md
+IMPROVEMENT-PLAN.md
+README.md
+deploy.sh
