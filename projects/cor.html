@@ -17,10 +17,22 @@
   <meta property="og:image" content="https://reidpro.com/assets/img/og-image.png?v=2">
   <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg?v=2">
   <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png?v=2">
+  <link rel="manifest" href="/site.webmanifest">
   <link rel="preload" href="/assets/fonts/alexandria-arabic-4f8da94b.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/ibm-plex-sans-arabic-arabic-6fbb1d0f.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/fonts.css">
   <link rel="stylesheet" href="/styles.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "الرئيسية", "item": "https://reidpro.com/" },
+      { "@type": "ListItem", "position": 2, "name": "مشاريعنا", "item": "https://reidpro.com/#products" },
+      { "@type": "ListItem", "position": 3, "name": "كور COR" }
+    ]
+  }
+  </script>
 </head>
 <body>
 
@@ -131,7 +143,7 @@
   </div>
 
   <div class="case-cta">
-    <a href="/#contact" class="btn btn-primary">ناقشوا مشروعًا مشابهًا معنا</a>
+    <a href="/#contact" class="btn btn-primary" data-track="cor-demo-request">اطلبوا عرضًا تجريبيًا لمحطة كور</a>
   </div>
 
   </main>
@@ -139,7 +151,7 @@
   <footer class="footer">
     <div class="container">
       <div class="footer-bottom" style="border-top: none; padding-top: 0;">
-        <span>© <span id="year">2026</span> رِيْد — جميع الحقوق محفوظة</span>
+        <span>© <span id="year">2026</span> رِيْد — جميع الحقوق محفوظة · <a href="/privacy.html" style="color: rgba(229,219,230,0.85);">سياسة الخصوصية</a></span>
         <a href="/" style="color: rgba(229,219,230,0.85);">العودة إلى الرئيسية</a>
       </div>
     </div>
