@@ -7,3 +7,10 @@ README.md
 deploy.sh
 ROADMAP.md
 CONTEXT.md
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
