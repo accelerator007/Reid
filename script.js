@@ -1,4 +1,4 @@
-// Reid — رِيْد
+// COR
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const finePointer = window.matchMedia('(pointer: fine)').matches;
@@ -360,7 +360,7 @@ document.addEventListener('click', (e) => {
 
     const data = new FormData(form);
     if (data.get('_honey')) return; // bot
-    data.append('_subject', 'رسالة جديدة من موقع رِيْد');
+    data.append('_subject', 'رسالة جديدة من موقع COR');
     data.append('_template', 'table');
 
     button.disabled = true;
@@ -379,7 +379,7 @@ document.addEventListener('click', (e) => {
     } catch (err) {
       status.textContent = msgs.fail;
       status.classList.add('error');
-      const subject = encodeURIComponent('استفسار من موقع رِيْد');
+      const subject = encodeURIComponent('استفسار من موقع COR');
       const body = encodeURIComponent(`${data.get('name')}\n${data.get('email')}\n\n${data.get('message')}`);
       window.open(`mailto:contact.us@reidpro.com?subject=${subject}&body=${body}`, '_self');
     } finally {
