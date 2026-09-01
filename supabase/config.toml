@@ -1,0 +1,11 @@
+project_id = "pkogchbrknwmzefjklkr"
+[auth]
+site_url = "https://reidpro.com"
+additional_redirect_urls = ["http://localhost:5173", "https://develop.reid.pages.dev"]
+jwt_expiry = 3600
+enable_signup = false
+[auth.email]
+enable_signup = false
+double_confirm_changes = true
+[storage]
+file_size_limit = "50MiB"
