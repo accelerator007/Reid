@@ -437,7 +437,7 @@ function Profile({
 }: {
   lang: Lang;
   user: User;
-  complete: () => void;
+  complete: () => Promise<void>;
   signout: () => void;
 }) {
   const empty: ProfileData = {
@@ -450,9 +450,15 @@ function Profile({
     bio: "",
   };
   const [p, setP] = React.useState(empty),
+    [roles, setRoles] = React.useState<string[]>([]),
     [message, setMessage] = React.useState("");
   React.useEffect(() => {
     getProfile(user).then((x) => x && setP({ ...empty, ...x }));
+    supabase!
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .then(({ data }) => setRoles(data?.map((item) => item.role) || []));
   }, [user.id]);
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -461,7 +467,7 @@ function Profile({
       .update(p)
       .eq("id", user.id);
     setMessage(error?.message || (lang === "ar" ? "تم الحفظ." : "Saved."));
-    if (!error) complete();
+    if (!error) await complete();
   };
   const field = (n: keyof ProfileData, l: string, r = false, t = "text") => (
     <label>
@@ -489,6 +495,11 @@ function Profile({
         <div className="avatar">R</div>
         <div>
           <h2>{p.full_name || user.email}</h2>
+          <div className="role-badges">
+            {roles.map((role) => (
+              <b key={role}>{role.replace("_", " ")}</b>
+            ))}
+          </div>
         </div>
       </section>
       <form className="profile-form" onSubmit={save}>
@@ -885,7 +896,10 @@ function App() {
           <Profile
             lang={lang}
             user={session.user}
-            complete={() => check(session.user)}
+            complete={async () => {
+              await check(session.user);
+              go("dashboard");
+            }}
             signout={async () => {
               await supabase?.auth.signOut();
               go("home");
