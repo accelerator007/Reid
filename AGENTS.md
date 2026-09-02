@@ -95,7 +95,7 @@ Last verified: 2026-09-02, Asia/Muscat.
 - Browser routes, bilingual privacy content, `robots.txt`, `sitemap.xml`, SPA redirects, and deployable security headers were added under `public/`.
 - Local Supabase Auth configuration now matches the verified remote public-signup behavior and Storage default is 5 MB.
 - Local verification passes with 5 unit tests, 4 Chromium E2E tests, TypeScript, Vite build, and 0 npm vulnerabilities.
-- Deployment state: application commit `f434ae6` is deployed to Staging. Migrations through `202609020002`, private CV Storage, Realtime, notifications, and Edge Function `decide-application` version 1 are deployed. Production promotion is proceeding through the protected PR workflow.
+- Deployment state: critical V1 is deployed to Production and Staging. Git main commit `0edb0e6`, Cloudflare Worker Build `reid`, and Cloudflare Pages all passed. Migrations through `202609020002`, private CV Storage, Realtime, notifications, and Edge Function `decide-application` version 1 are deployed.
 ### Repository and delivery
 
 - Repository is public; default branch is `main`.
@@ -209,6 +209,7 @@ Last verified: 2026-09-02, Asia/Muscat.
 - An unauthenticated `decide-application` request returned HTTP 401 (`Missing authorization header`), confirming the function is not callable without a session.
 - Production Worker build failure was traced to Cloudflare rejecting the wildcard SPA `_redirects` rule as an infinite loop (API code `100324`). The rule was replaced with explicit application routes, which also restores a real edge 404 for unknown paths.
 - Production was deployed manually to Worker `reid`, version `2c51371b-4e23-48ed-bfc4-5b3aab62b393`, after a successful Wrangler dry run. Live verification found the new bundle markers, HTTP 404 for unknown routes, correct robots/sitemap content types, and CSP/HSTS/frame/content-type/referrer/permissions headers.
+- The follow-up connected Worker Build for Git commit `0edb0e6` completed successfully, proving future Git-to-Production deployment is repaired rather than only manually recovered.
 - Static secret scan: no committed credential found; Edge Function references runtime-managed `SUPABASE_SERVICE_ROLE_KEY` only.
 - Supabase remote migration/function deployment is complete through `202609020002`; CLI authentication succeeded through the company account.
 - GitHub collaborator downgrade was requested twice through the official API, but GitHub retained `sheikhaalmamari4-cyber` at `write`; Owner-only merge enforcement therefore remains open and was not falsely marked complete.
