@@ -131,8 +131,7 @@ function Login({
   done: () => void;
   apply: () => void;
 }) {
-  const [mode, setMode] = React.useState<"login" | "register">("login"),
-    [message, setMessage] = React.useState(""),
+  const [message, setMessage] = React.useState(""),
     [busy, setBusy] = React.useState(false);
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -148,33 +147,12 @@ function Login({
       setBusy(false);
       return;
     }
-    if (mode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: String(f.get("email")),
-        password: String(f.get("password")),
-      });
-      setMessage(error?.message || "");
-      if (!error) done();
-    } else {
-      const { error } = await supabase.auth.signUp({
-        email: String(f.get("email")),
-        password: String(f.get("password")),
-        options: {
-          emailRedirectTo: `${location.origin}/profile`,
-          data: {
-            full_name: f.get("full_name"),
-            linkedin_url: f.get("linkedin"),
-            github_url: f.get("github") || null,
-          },
-        },
-      });
-      setMessage(
-        error?.message ||
-          (lang === "ar"
-            ? "تحقق من بريدك لإكمال التسجيل."
-            : "Check your email to finish registration."),
-      );
-    }
+    const { error } = await supabase.auth.signInWithPassword({
+      email: String(f.get("email")),
+      password: String(f.get("password")),
+    });
+    setMessage(error?.message || "");
+    if (!error) done();
     setBusy(false);
   };
   const oauth = async (provider: "google" | "azure" | "github") => {
@@ -189,17 +167,11 @@ function Login({
     <main className="auth">
       <section className="auth-card">
         <span>REID ACCOUNT</span>
-        <h1>
-          {mode === "login"
-            ? tr[lang].login
-            : lang === "ar"
-              ? "إنشاء حساب"
-              : "Create account"}
-        </h1>
+        <h1>{tr[lang].login}</h1>
         <p>
           {lang === "ar"
-            ? "دخول آمن إلى مساحة عمل ريّد."
-            : "Secure access to your Reid workspace."}
+            ? "الدخول للحسابات المعتمدة فقط. إذا لم يكن لديك حساب، أرسل طلب انضمام أولًا."
+            : "Approved accounts only. If you do not have an account, submit a join request first."}
         </p>
         <div className="oauth">
           <button onClick={() => oauth("google")}>G Google</button>
@@ -212,31 +184,6 @@ function Login({
           <i />
         </div>
         <form onSubmit={submit}>
-          {mode === "register" && (
-            <>
-              <label>
-                {lang === "ar" ? "الاسم الكامل" : "Full name"}
-                <input name="full_name" required />
-              </label>
-              <label>
-                LinkedIn <em>required</em>
-                <input
-                  name="linkedin"
-                  type="url"
-                  required
-                  pattern="https://(www\.)?linkedin\.com/.*"
-                />
-              </label>
-              <label>
-                GitHub <em>optional</em>
-                <input
-                  name="github"
-                  type="url"
-                  pattern="https://(www\.)?github\.com/.*"
-                />
-              </label>
-            </>
-          )}
           <label>
             {lang === "ar" ? "البريد الإلكتروني" : "Email"}
             <input name="email" type="email" required />
@@ -248,11 +195,7 @@ function Login({
           <button className="primary" disabled={busy}>
             {busy
               ? "…"
-              : mode === "login"
-                ? tr[lang].login
-                : lang === "ar"
-                  ? "إنشاء الحساب"
-                  : "Create account"}
+              : tr[lang].login}
           </button>
         </form>
         {message && (
@@ -260,21 +203,9 @@ function Login({
             {message}
           </p>
         )}
-        <button
-          className="text-link"
-          onClick={() => setMode(mode === "login" ? "register" : "login")}
-        >
-          {mode === "login"
-            ? lang === "ar"
-              ? "أنشئ حسابًا"
-              : "Create account"
-            : tr[lang].login}
+        <button className="text-link" onClick={apply}>
+          {lang === "ar" ? "ليس لديك حساب؟ أرسل طلب انضمام" : "No account? Submit a join request"}
         </button>
-        {mode === "register" && (
-          <button className="text-link" onClick={apply}>
-            {lang === "ar" ? "أو أرسل طلب انضمام" : "Or submit a join request"}
-          </button>
-        )}
       </section>
     </main>
   );
