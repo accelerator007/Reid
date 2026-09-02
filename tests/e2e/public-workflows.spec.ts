@@ -20,6 +20,8 @@ test('keeps account creation behind the join approval workflow', async ({ page }
   await expect(page.getByText('الدخول للحسابات المعتمدة فقط.')).toBeVisible();
   await expect(page.getByRole('button', { name: /أرسل طلب انضمام/ })).toBeVisible();
   await expect(page.getByText('أنشئ حسابًا')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'أرسل رابط دخول آمن' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'نسيت كلمة المرور' })).toBeVisible();
 });
 
 test('join form validates required fields and CV constraints', async ({ page }) => {
