@@ -243,6 +243,18 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - Local `npm run check` passes with 8 tests and the Production build. Authenticated Owner/CV/decision/retry browser coverage remains required on Staging before release.
 - Release-process correction: merging the `develop → main` release PR with automatic head deletion removed `develop`. The branch was immediately restored from current `main` (`17b5f59`). Never use `--delete-branch` when the release PR head is the persistent `develop` branch.
 
+### 2026-09-02 account lifecycle completion
+
+- Migration `202609020004` adds audited `active/suspended/disabled` account controls, backfills existing users, makes role mutation function-only, and enforces active-account checks in role, project, research, task, timesheet, notification, and profile-update policies.
+- New `manage-account` Edge Function allows active Owner/Super Admin callers to assign non-Owner roles and suspend/reactivate non-Owner accounts. It blocks self-modification, Owner suspension/removal, unauthorized callers, and synchronizes suspension with Supabase Auth ban state.
+- The Owner/Super Admin Dashboard now lists company accounts, multiple roles, status and reason, and provides protected role/status controls. Suspended users receive a dedicated access gate.
+- Application notifications and future email buttons can deep-link to `/dashboard?review=<id>`; authentication plus RLS/RBAC are still required and the link never executes a decision itself.
+- Remote migration and Edge Function deployment completed; an unauthenticated account-management call returned HTTP 401. Real Owner mutation tests must use a synthetic non-Owner account on Staging before Production.
+- Outbound Arabic email remains blocked by missing SMTP provider credentials. Cloudflare Email Routing is not treated as an outbound SMTP service.
+- Remote Supabase Auth public signup and email signup are now disabled through `supabase config push`; the authoritative application → approval → invitation flow is enforced at the Auth service, not only hidden in UI. Admin invitations remain the account-creation path.
+- Approved accounts can request a Magic Link or password recovery without creating a new user (`shouldCreateUser: false`), and invited users can set an 8+ character password from their authenticated Profile.
+- Arabic source templates for invite, Magic Link, recovery and confirmation are stored under `supabase/templates/`. Supabase refused hosted template activation on the Free plan with its default provider; activation requires custom SMTP or a paid plan. Existing remote confirmation, OTP length, MFA, redirects and Storage settings were preserved during config synchronization.
+
 ### 2026-09-02 critical V1 implementation verification
 
 - `npm run check`: pass; 5 tests, TypeScript build, and Vite production build.
