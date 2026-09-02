@@ -95,7 +95,7 @@ Last verified: 2026-09-02, Asia/Muscat.
 - Browser routes, bilingual privacy content, `robots.txt`, `sitemap.xml`, SPA redirects, and deployable security headers were added under `public/`.
 - Local Supabase Auth configuration now matches the verified remote public-signup behavior and Storage default is 5 MB.
 - Local verification passes with 5 unit tests, 4 Chromium E2E tests, TypeScript, Vite build, and 0 npm vulnerabilities.
-- Deployment state: application commit `f434ae6` is deployed to Staging. Migrations through `202609020002`, private CV Storage, Realtime, notifications, and Edge Function `decide-application` version 1 are deployed. Production promotion is proceeding through the protected PR workflow.
+- Deployment state: critical V1 is deployed to Production and Staging. Git main commit `0edb0e6`, Cloudflare Worker Build `reid`, and Cloudflare Pages all passed. Migrations through `202609020002`, private CV Storage, Realtime, notifications, and Edge Function `decide-application` version 1 are deployed.
 ### Repository and delivery
 
 - Repository is public; default branch is `main`.
@@ -197,6 +197,15 @@ Last verified: 2026-09-02, Asia/Muscat.
 
 ## Verification log
 
+### 2026-09-02 Dashboard route hotfix
+
+- Confirmed the Production account `alialajmi524@gmail.com` already has the `Owner` role; the failure to open Admin was not an RBAC assignment problem.
+- Root cause: Cloudflare interpreted the explicit `/dashboard /index.html 200` static redirect as a canonical redirect to `/`, discarding the application route and rendering the public homepage.
+- Replaced static application redirects with a Worker asset fallback that serves `index.html` internally for the five known React routes before Cloudflare asset canonicalization, preserving the browser URL and retaining real 404 responses for unknown routes.
+- Added automated coverage for Dashboard fallback, unknown-route 404, and the legacy privacy redirect. Production verification is recorded after deployment below.
+- `npm run test`: pass; 8 tests. Production Worker version `a09b8338-3776-422d-9ab5-f4c146bddbad` deployed successfully.
+- Live verification: `https://reidpro.com/dashboard` returns HTTP 200 with no redirect and the Reid app shell; an unknown URL returns HTTP 404.
+
 ### 2026-09-02 critical V1 implementation verification
 
 - `npm run check`: pass; 5 tests, TypeScript build, and Vite production build.
@@ -209,6 +218,8 @@ Last verified: 2026-09-02, Asia/Muscat.
 - An unauthenticated `decide-application` request returned HTTP 401 (`Missing authorization header`), confirming the function is not callable without a session.
 - Production Worker build failure was traced to Cloudflare rejecting the wildcard SPA `_redirects` rule as an infinite loop (API code `100324`). The rule was replaced with explicit application routes, which also restores a real edge 404 for unknown paths.
 - Production was deployed manually to Worker `reid`, version `2c51371b-4e23-48ed-bfc4-5b3aab62b393`, after a successful Wrangler dry run. Live verification found the new bundle markers, HTTP 404 for unknown routes, correct robots/sitemap content types, and CSP/HSTS/frame/content-type/referrer/permissions headers.
+- The follow-up connected Worker Build for Git commit `0edb0e6` completed successfully, proving future Git-to-Production deployment is repaired rather than only manually recovered.
+- Owner account verification found one profile and one `user_roles` row in Production. The profile UI was corrected to display role badges and navigate to Dashboard after a successful LinkedIn/profile save; the previous UI silently remained on Profile even when Owner authorization existed.
 - Static secret scan: no committed credential found; Edge Function references runtime-managed `SUPABASE_SERVICE_ROLE_KEY` only.
 - Supabase remote migration/function deployment is complete through `202609020002`; CLI authentication succeeded through the company account.
 - GitHub collaborator downgrade was requested twice through the official API, but GitHub retained `sheikhaalmamari4-cyber` at `write`; Owner-only merge enforcement therefore remains open and was not falsely marked complete.
