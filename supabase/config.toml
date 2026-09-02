@@ -3,9 +3,9 @@ project_id = "pkogchbrknwmzefjklkr"
 site_url = "https://reidpro.com"
 additional_redirect_urls = ["http://localhost:5173", "https://staging.reidpro.com", "https://reid-staging.pages.dev"]
 jwt_expiry = 3600
-enable_signup = false
+enable_signup = true
 [auth.email]
-enable_signup = false
+enable_signup = true
 double_confirm_changes = true
 [storage]
-file_size_limit = "50MiB"
+file_size_limit = "5MiB"

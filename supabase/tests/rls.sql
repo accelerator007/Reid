@@ -1,1 +1,14 @@
-begin;select plan(5);select has_table('public','applications');select has_table('public','audit_logs');select col_is_pk('public','user_roles',array['user_id','role']);select policies_are('public','applications',array['applications_first_decision','applications_public_insert','applications_staff_read']);select results_eq($$select model from public.agents where id='ceo'$$,$$values('gemma4:12b'::text)$$);select * from finish();rollback;
+begin;
+select plan(10);
+select has_table('public', 'applications');
+select has_table('public', 'audit_logs');
+select has_table('public', 'notifications');
+select col_is_pk('public', 'user_roles', array['user_id','role']);
+select policies_are('public', 'applications', array['applications_first_decision','applications_public_insert','applications_staff_read']);
+select policies_are('public', 'notifications', array['notifications_own_read','notifications_own_update']);
+select has_function('public', 'decide_application', array['uuid','application_status','text']);
+select results_eq($$select model from public.agents where id='ceo'$$, $$values('gemma4:12b'::text)$$);
+select results_eq($$select public.has_role('owner')$$, $$values(false)$$, 'anonymous caller has no owner role');
+select results_eq($$select public.is_admin()$$, $$values(false)$$, 'anonymous caller is not admin');
+select * from finish();
+rollback;
