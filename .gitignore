@@ -10,6 +10,7 @@ CONTEXT.md
 
 # Build and local environment
 node_modules/
+.vite/
 dist/
 coverage/
 *.tsbuildinfo
