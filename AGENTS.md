@@ -241,6 +241,7 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - Fixed partial invitation delivery: migration `202609020003` tracks `not_sent/pending/sent/failed`, error and delivery time independently from the atomic first decision. Failed invitations remain visible to reviewers and can be retried.
 - Deployed migration `202609020003` and the updated `decide-application` Edge Function to Supabase. An unauthenticated retry request returned HTTP 401.
 - Local `npm run check` passes with 8 tests and the Production build. Authenticated Owner/CV/decision/retry browser coverage remains required on Staging before release.
+- Release-process correction: merging the `develop → main` release PR with automatic head deletion removed `develop`. The branch was immediately restored from current `main` (`17b5f59`). Never use `--delete-branch` when the release PR head is the persistent `develop` branch.
 
 ### 2026-09-02 critical V1 implementation verification
 
