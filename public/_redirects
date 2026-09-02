@@ -1,2 +1,6 @@
 /privacy.html /privacy 301
-/* /index.html 200
+/login /index.html 200
+/apply /index.html 200
+/profile /index.html 200
+/dashboard /index.html 200
+/privacy /index.html 200
