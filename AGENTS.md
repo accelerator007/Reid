@@ -144,8 +144,8 @@ Last verified: 2026-09-02, Asia/Muscat.
 
 ### P0 — blocks a trustworthy V1
 
-1. Join request, private CV upload, and reviewer notifications are deployed; the real Staging join/CV workflow passed. Reviewer notification display still needs an authenticated UI test.
-2. First-decision approval/rejection and approval Magic Link are deployed but still require an authenticated Owner test and real SMTP delivery test. Secure one-click email decision links are still missing.
+1. Join request, private CV upload, reviewer notifications, the review dialog, secure one-minute CV links, and Realtime refresh are deployed or implemented as recorded below. The expanded reviewer UI still needs an authenticated Owner browser test after its Staging deployment.
+2. First-decision approval/rejection and approval Magic Link are deployed. Invitation delivery now has `pending/sent/failed` state and an Admin retry path, but still requires an authenticated Owner test and real SMTP delivery test. Secure one-click email decision links are still missing.
 3. Dashboard authentication, LinkedIn completion, RBAC, live counts, applications, and agent rows pass anonymous-denial testing; authenticated Owner behavior still needs final Production verification.
 4. Microsoft login is displayed but Supabase Azure is disabled. Do not create it inside the available Sohar University tenant; use a company-owned Microsoft tenant.
 5. GitHub login is implemented in UI but its Supabase provider and company OAuth app are not configured.
@@ -233,6 +233,14 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - The authoritative onboarding workflow is now fixed as: public application → first Admin/HR decision → invitation/Magic Link on approval. Direct public account creation is removed from the UI to prevent bypassing company review.
 - Login remains available for approved email/password accounts and configured OAuth providers. RLS remains the final authorization boundary even if an external OAuth identity is created.
 - Added browser coverage proving the login page directs new people to the join workflow and no longer offers direct account creation.
+
+### 2026-09-02 application review workspace
+
+- Added a full Admin/HR application review dialog with contact, organization, requested scope, LinkedIn, GitHub, reason, cover letter, and private CV access through a signed URL that expires after 60 seconds.
+- Added reviewer notification display and Realtime refresh for applications and notifications.
+- Fixed partial invitation delivery: migration `202609020003` tracks `not_sent/pending/sent/failed`, error and delivery time independently from the atomic first decision. Failed invitations remain visible to reviewers and can be retried.
+- Deployed migration `202609020003` and the updated `decide-application` Edge Function to Supabase. An unauthenticated retry request returned HTTP 401.
+- Local `npm run check` passes with 8 tests and the Production build. Authenticated Owner/CV/decision/retry browser coverage remains required on Staging before release.
 
 ### 2026-09-02 critical V1 implementation verification
 
