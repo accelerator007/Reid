@@ -40,9 +40,26 @@ type Application = {
   email: string;
   account_type: string;
   organization: string;
+  phone: string;
+  title: string;
+  linkedin_url: string;
+  github_url: string | null;
+  project_or_research: string | null;
   join_reason: string;
+  cover_letter: string;
+  cv_path: string | null;
   created_at: string;
   status: string;
+  invitation_status?: string;
+};
+type Notification = {
+  id: string;
+  title_ar: string;
+  title_en: string;
+  body_ar: string | null;
+  body_en: string | null;
+  read_at: string | null;
+  created_at: string;
 };
 const tr = {
   ar: {
@@ -475,8 +492,13 @@ function Dashboard({
   const [roles, setRoles] = React.useState<string[]>([]),
     [agents, setAgents] = React.useState<Agent[]>([]),
     [apps, setApps] = React.useState<Application[]>([]),
+    [failedInvites, setFailedInvites] = React.useState<Application[]>([]),
+    [notifications, setNotifications] = React.useState<Notification[]>([]),
     [counts, setCounts] = React.useState([0, 0, 0, 0, 0]),
-    [message, setMessage] = React.useState("");
+    [message, setMessage] = React.useState(""),
+    [reviewing, setReviewing] = React.useState<Application | null>(null),
+    [rejectReason, setRejectReason] = React.useState(""),
+    [busyDecision, setBusyDecision] = React.useState(false);
   const allowed = roles.some((x) =>
     ["owner", "super_admin", "admin", "hr"].includes(x),
   );
@@ -490,23 +512,37 @@ function Dashboard({
     setRoles(next);
     if (!next.some((x) => ["owner", "super_admin", "admin", "hr"].includes(x)))
       return;
-    const [a, p, projects, tasks, people, leads] = await Promise.all([
+    const [a, p, failed, projects, tasks, people, leads, notices] = await Promise.all([
       supabase
         .from("agents")
         .select("id,name,status,model,host,approval_level"),
       supabase
         .from("applications")
         .select(
-          "id,full_name,email,account_type,organization,join_reason,created_at,status",
+          "id,full_name,email,phone,organization,title,linkedin_url,github_url,account_type,project_or_research,join_reason,cover_letter,cv_path,created_at,status",
         )
-        .eq("status", "pending"),
+        .eq("status", "pending")
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("applications")
+        .select("id,full_name,email,phone,organization,title,linkedin_url,github_url,account_type,project_or_research,join_reason,cover_letter,cv_path,created_at,status,invitation_status")
+        .eq("status", "approved")
+        .eq("invitation_status", "failed")
+        .order("created_at", { ascending: true }),
       supabase.from("projects").select("*", { count: "exact", head: true }),
       supabase.from("tasks").select("*", { count: "exact", head: true }),
       supabase.from("profiles").select("*", { count: "exact", head: true }),
       supabase.from("crm_contacts").select("*", { count: "exact", head: true }),
+      supabase
+        .from("notifications")
+        .select("id,title_ar,title_en,body_ar,body_en,read_at,created_at")
+        .order("created_at", { ascending: false })
+        .limit(8),
     ]);
     setAgents((a.data || []) as Agent[]);
     setApps((p.data || []) as Application[]);
+    setFailedInvites((failed.data || []) as Application[]);
+    setNotifications((notices.data || []) as Notification[]);
     setCounts([
       projects.count || 0,
       tasks.count || 0,
@@ -518,26 +554,58 @@ function Dashboard({
   React.useEffect(() => {
     refresh();
   }, [refresh]);
+  React.useEffect(() => {
+    if (!supabase || !user || !allowed) return;
+    const channel = supabase
+      .channel(`review-workspace:${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "applications" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, refresh)
+      .subscribe();
+    return () => {
+      void supabase?.removeChannel(channel);
+    };
+  }, [allowed, refresh, user]);
   const decide = async (a: Application, d: "approved" | "rejected") => {
-    const reason =
-      d === "rejected"
-        ? prompt(
-            lang === "ar"
-              ? "سبب الرفض الداخلي (إجباري)"
-              : "Internal rejection reason",
-          )
-        : null;
+    const reason = d === "rejected" ? rejectReason : null;
     if (d === "rejected" && !reason?.trim()) return;
-    const { error } = await supabase!.functions.invoke("decide-application", {
+    setBusyDecision(true);
+    setMessage("");
+    const { data, error } = await supabase!.functions.invoke("decide-application", {
       body: { applicationId: a.id, decision: d, rejectionReason: reason },
     });
     setMessage(
-      error?.message ||
-        (lang === "ar"
-          ? "تم القرار. إرسال البريد ينتظر إعداد SMTP."
-          : "Decision saved. Email awaits SMTP setup."),
+      error?.message || (data?.invitationStatus === "failed"
+        ? (lang === "ar" ? "تم القبول لكن فشل إرسال الدعوة. ظهرت في قائمة إعادة المحاولة." : "Approved, but invitation delivery failed. It is now in the retry list.")
+        : (lang === "ar" ? "تم حفظ القرار." : "Decision saved.")),
     );
-    if (!error) refresh();
+    if (!error) {
+      setReviewing(null);
+      setRejectReason("");
+      await refresh();
+    }
+    setBusyDecision(false);
+  };
+  const retryInvitation = async (application: Application) => {
+    setBusyDecision(true);
+    const { data, error } = await supabase!.functions.invoke("decide-application", {
+      body: { applicationId: application.id, decision: "retry_invitation" },
+    });
+    setMessage(error?.message || (data?.invitationStatus === "sent"
+      ? (lang === "ar" ? "تم إرسال الدعوة." : "Invitation sent.")
+      : (lang === "ar" ? "فشل إرسال الدعوة مرة أخرى." : "Invitation delivery failed again.")));
+    await refresh();
+    setBusyDecision(false);
+  };
+  const openCv = async (application: Application) => {
+    if (!application.cv_path || !supabase) return;
+    const { data, error } = await supabase.storage
+      .from("application-cvs")
+      .createSignedUrl(application.cv_path, 60);
+    if (error || !data?.signedUrl) {
+      setMessage(lang === "ar" ? "تعذر فتح ملف CV." : "Could not open CV.");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
   if (!user)
     return (
@@ -578,6 +646,18 @@ function Dashboard({
         ))}
       </section>
       {message && <p className="guard-message">{message}</p>}
+      <section className="review-overview">
+        <article>
+          <h2>{lang === "ar" ? "الإشعارات" : "Notifications"}</h2>
+          {notifications.length ? notifications.map((notice) => (
+            <div className={notice.read_at ? "notice" : "notice unread"} key={notice.id}>
+              <b>{lang === "ar" ? notice.title_ar : notice.title_en}</b>
+              <p>{lang === "ar" ? notice.body_ar : notice.body_en}</p>
+              <small>{new Date(notice.created_at).toLocaleString(lang === "ar" ? "ar-OM" : "en-OM")}</small>
+            </div>
+          )) : <p>{lang === "ar" ? "لا توجد إشعارات." : "No notifications."}</p>}
+        </article>
+      </section>
       <h2>{lang === "ar" ? "طلبات معلقة" : "Pending applications"}</h2>
       <section className="applications-list">
         {apps.length ? (
@@ -591,11 +671,8 @@ function Dashboard({
                 <p>{a.join_reason}</p>
               </div>
               <div>
-                <button onClick={() => decide(a, "approved")}>
-                  {lang === "ar" ? "قبول" : "Approve"}
-                </button>
-                <button onClick={() => decide(a, "rejected")}>
-                  {lang === "ar" ? "رفض" : "Reject"}
+                <button onClick={() => { setReviewing(a); setRejectReason(""); }}>
+                  {lang === "ar" ? "مراجعة" : "Review"}
                 </button>
               </div>
             </article>
@@ -604,6 +681,42 @@ function Dashboard({
           <p>{lang === "ar" ? "لا توجد طلبات." : "No pending applications."}</p>
         )}
       </section>
+      {failedInvites.length > 0 && <>
+        <h2>{lang === "ar" ? "دعوات تحتاج إعادة إرسال" : "Invitations needing retry"}</h2>
+        <section className="applications-list failed-invitations">
+          {failedInvites.map((application) => <article key={application.id}>
+            <div><b>{application.full_name}</b><small>{application.email}</small></div>
+            <div><button disabled={busyDecision} onClick={() => retryInvitation(application)}>{lang === "ar" ? "إعادة إرسال الدعوة" : "Retry invitation"}</button></div>
+          </article>)}
+        </section>
+      </>}
+      {reviewing && (
+        <div className="review-backdrop" role="presentation" onMouseDown={() => setReviewing(null)}>
+          <section className="review-dialog" role="dialog" aria-modal="true" aria-labelledby="review-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header>
+              <div><small>{reviewing.account_type.replaceAll("_", " ")}</small><h2 id="review-title">{reviewing.full_name}</h2></div>
+              <button aria-label={lang === "ar" ? "إغلاق" : "Close"} onClick={() => setReviewing(null)}>×</button>
+            </header>
+            <dl>
+              <div><dt>{lang === "ar" ? "البريد" : "Email"}</dt><dd>{reviewing.email}</dd></div>
+              <div><dt>{lang === "ar" ? "الهاتف" : "Phone"}</dt><dd>{reviewing.phone}</dd></div>
+              <div><dt>{lang === "ar" ? "الجهة" : "Organization"}</dt><dd>{reviewing.organization}</dd></div>
+              <div><dt>{lang === "ar" ? "المسمى" : "Title"}</dt><dd>{reviewing.title}</dd></div>
+              <div><dt>LinkedIn</dt><dd><a href={reviewing.linkedin_url} target="_blank" rel="noreferrer">{reviewing.linkedin_url}</a></dd></div>
+              <div><dt>GitHub</dt><dd>{reviewing.github_url ? <a href={reviewing.github_url} target="_blank" rel="noreferrer">{reviewing.github_url}</a> : "—"}</dd></div>
+              <div><dt>{lang === "ar" ? "المشروع / البحث" : "Project / research"}</dt><dd>{reviewing.project_or_research || "—"}</dd></div>
+            </dl>
+            <article><b>{lang === "ar" ? "سبب الانضمام" : "Join reason"}</b><p>{reviewing.join_reason}</p></article>
+            <article><b>{lang === "ar" ? "الرسالة التعريفية" : "Cover letter"}</b><p>{reviewing.cover_letter}</p></article>
+            {reviewing.cv_path && <button onClick={() => openCv(reviewing)}>{lang === "ar" ? "فتح CV بشكل آمن" : "Open CV securely"}</button>}
+            <label>{lang === "ar" ? "سبب الرفض الداخلي" : "Internal rejection reason"}<textarea value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder={lang === "ar" ? "إجباري عند الرفض، ولا يُرسل للمتقدم" : "Required for rejection; never sent to applicant"} /></label>
+            <footer>
+              <button className="primary" disabled={busyDecision} onClick={() => decide(reviewing, "approved")}>{lang === "ar" ? "قبول وإرسال الدعوة" : "Approve and invite"}</button>
+              <button disabled={busyDecision || !rejectReason.trim()} onClick={() => decide(reviewing, "rejected")}>{lang === "ar" ? "رفض الطلب" : "Reject application"}</button>
+            </footer>
+          </section>
+        </div>
+      )}
       <h2>{lang === "ar" ? "الوكلاء" : "Agents"}</h2>
       <section className="grid">
         {agents.map((a) => (
