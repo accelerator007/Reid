@@ -1,0 +1,53 @@
+.guard-message {
+  padding: 14px 18px;
+  border: 1px solid #8d7de0;
+  border-radius: 14px;
+  background: #8d7de015;
+}
+.applications-list {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 42px;
+}
+.applications-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+}
+.applications-list article div:last-child {
+  display: flex;
+  gap: 8px;
+}
+.applications-list small {
+  display: block;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.legal {
+  max-width: 850px;
+  min-height: 65vh;
+  margin: auto;
+  padding: 90px 24px;
+}
+.legal h1 {
+  font-size: clamp(42px, 7vw, 76px);
+}
+.legal p {
+  font-size: 18px;
+  line-height: 2;
+  color: var(--muted);
+}
+@media (max-width: 800px) {
+  .applications-list article {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .applications-list article div:last-child button {
+    flex: 1;
+  }
+}
