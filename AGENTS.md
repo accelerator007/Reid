@@ -95,7 +95,7 @@ Last verified: 2026-09-02, Asia/Muscat.
 - Browser routes, bilingual privacy content, `robots.txt`, `sitemap.xml`, SPA redirects, and deployable security headers were added under `public/`.
 - Local Supabase Auth configuration now matches the verified remote public-signup behavior and Storage default is 5 MB.
 - Local verification passes with 5 unit tests, 4 Chromium E2E tests, TypeScript, Vite build, and 0 npm vulnerabilities.
-- Deployment state: application commit `f434ae6` is deployed to Staging. It is not remotely complete until migration `202609020001_onboarding_storage_realtime.sql` and Edge Function `decide-application` are applied. Supabase CLI is logged out and Chrome control was unavailable during this work. Production was deliberately not promoted.
+- Deployment state: application commit `f434ae6` is deployed to Staging. Migrations through `202609020002`, private CV Storage, Realtime, notifications, and Edge Function `decide-application` version 1 are deployed. Production promotion is proceeding through the protected PR workflow.
 
 ### Repository and delivery
 
@@ -145,9 +145,9 @@ Last verified: 2026-09-02, Asia/Muscat.
 
 ### P0 — blocks a trustworthy V1
 
-1. Join request, CV upload, and reviewer notifications are implemented in code but remain non-operational remotely until the new migration is applied.
-2. First-decision approval/rejection and approval Magic Link are implemented in migration/Edge Function code but remain non-operational until deployment and SMTP delivery testing. Secure one-click email decision links are still missing.
-3. Dashboard authentication, LinkedIn completion, RBAC, live counts, applications, and agent rows are implemented in code; Production remains on the old public mock until release and Supabase deployment.
+1. Join request, private CV upload, and reviewer notifications are deployed; the real Staging join/CV workflow passed. Reviewer notification display still needs an authenticated UI test.
+2. First-decision approval/rejection and approval Magic Link are deployed but still require an authenticated Owner test and real SMTP delivery test. Secure one-click email decision links are still missing.
+3. Dashboard authentication, LinkedIn completion, RBAC, live counts, applications, and agent rows pass anonymous-denial testing; authenticated Owner behavior still needs final Production verification.
 4. Microsoft login is displayed but Supabase Azure is disabled. Do not create it inside the available Sohar University tenant; use a company-owned Microsoft tenant.
 5. GitHub login is implemented in UI but its Supabase provider and company OAuth app are not configured.
 6. Google OAuth LinkedIn completion is enforced in code but is not yet released to Production.
@@ -205,6 +205,9 @@ Last verified: 2026-09-02, Asia/Muscat.
 - `npm audit --audit-level=high`: 0 vulnerabilities.
 - Vite output contains `_headers`, `_redirects`, `robots.txt`, and `sitemap.xml`.
 - Staging deployment `f434ae6`: Cloudflare and CI passed; live Chromium verified anonymous Dashboard denial and privacy rendering; fresh `robots.txt` is `text/plain`, `sitemap.xml` is XML, and CSP/HSTS/X-Frame-Options/Permissions-Policy/Referrer-Policy/X-Content-Type-Options are present.
+- Supabase CLI authenticated as the company account; migration history was reconciled to the already-existing schema, migration `202609020001` was applied, and Edge Function `decide-application` version 1 is ACTIVE. Migration `202609020002` backfills Owner/Admin roles for approved accounts created before the bootstrap trigger.
+- Live Staging onboarding passed using synthetic identity `reid-e2e-1788330139887@example.com`: application insert succeeded and a synthetic PDF CV uploaded to the private bucket. The test record is retained for the Owner's first Dashboard decision test.
+- An unauthenticated `decide-application` request returned HTTP 401 (`Missing authorization header`), confirming the function is not callable without a session.
 - Static secret scan: no committed credential found; Edge Function references runtime-managed `SUPABASE_SERVICE_ROLE_KEY` only.
 - Supabase remote migration/function deployment: blocked because CLI has no access token and Chrome connection timed out twice. No partial remote database changes were made.
 - GitHub collaborator downgrade was requested twice through the official API, but GitHub retained `sheikhaalmamari4-cyber` at `write`; Owner-only merge enforcement therefore remains open and was not falsely marked complete.
