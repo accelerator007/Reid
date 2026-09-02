@@ -96,7 +96,6 @@ Last verified: 2026-09-02, Asia/Muscat.
 - Local Supabase Auth configuration now matches the verified remote public-signup behavior and Storage default is 5 MB.
 - Local verification passes with 5 unit tests, 4 Chromium E2E tests, TypeScript, Vite build, and 0 npm vulnerabilities.
 - Deployment state: application commit `f434ae6` is deployed to Staging. Migrations through `202609020002`, private CV Storage, Realtime, notifications, and Edge Function `decide-application` version 1 are deployed. Production promotion is proceeding through the protected PR workflow.
-
 ### Repository and delivery
 
 - Repository is public; default branch is `main`.
@@ -167,7 +166,7 @@ Last verified: 2026-09-02, Asia/Muscat.
 - No working project dashboards, Kanban, milestones, meetings, budgets, file-level permissions, clients, GitHub integration, activity, or project agents.
 - No working research workflows, datasets, experiments, ethics/approvals, publication/DOI/conference tracking, or AI research assistant.
 - No working CRM UI, lead pipeline, Sales permissions E2E, or Sales agent.
-- CV Storage, three Realtime tables, and the decision Edge Function are defined in code but not deployed. Project, research, HR, and avatar buckets/policies are still missing.
+- CV Storage, three Realtime tables, and the decision Edge Function are deployed. Project, research, HR, and avatar buckets/policies are still missing.
 - RAG/Knowledge Agent, Google Drive synchronization, embeddings pipeline, and document ACL filtering are not implemented.
 - No Operations/HR/Finance/Marketing/Support/Analytics/Competitor agent execution.
 - No daily/weekly executive report generation or weekly email delivery.
@@ -209,10 +208,9 @@ Last verified: 2026-09-02, Asia/Muscat.
 - Live Staging onboarding passed using synthetic identity `reid-e2e-1788330139887@example.com`: application insert succeeded and a synthetic PDF CV uploaded to the private bucket. The test record is retained for the Owner's first Dashboard decision test.
 - An unauthenticated `decide-application` request returned HTTP 401 (`Missing authorization header`), confirming the function is not callable without a session.
 - Static secret scan: no committed credential found; Edge Function references runtime-managed `SUPABASE_SERVICE_ROLE_KEY` only.
-- Supabase remote migration/function deployment: blocked because CLI has no access token and Chrome connection timed out twice. No partial remote database changes were made.
+- Supabase remote migration/function deployment is complete through `202609020002`; CLI authentication succeeded through the company account.
 - GitHub collaborator downgrade was requested twice through the official API, but GitHub retained `sheikhaalmamari4-cyber` at `write`; Owner-only merge enforcement therefore remains open and was not falsely marked complete.
 - `ai-lap`: intentionally not touched; host remains out of scope while offline.
-
 ### 2026-09-02 comprehensive audit
 
 - `npm run check`: pass; 3 tests, TypeScript build, Vite build.
