@@ -1,0 +1,16 @@
+name: Weekly Supabase backup
+on:
+  schedule: [{cron: '15 2 * * 0'}]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+      - run: mkdir -p backup && supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql && supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --data-only --use-copy
+        env: {SUPABASE_DB_URL: "${{ secrets.SUPABASE_DB_URL }}"}
+      - uses: actions/upload-artifact@v4
+        with: {name: "reid-db-backup-${{ github.run_id }}", path: backup, retention-days: 30}

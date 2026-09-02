@@ -7,3 +7,14 @@ README.md
 deploy.sh
 ROADMAP.md
 CONTEXT.md
+
+# Build and local environment
+node_modules/
+.vite/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+.dev.vars
+.supabase/
