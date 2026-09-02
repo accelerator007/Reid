@@ -182,18 +182,40 @@ Last verified: 2026-09-02, Asia/Muscat.
 - Legacy static files and COR-era assets remain in the repository and should be deliberately migrated or removed only after confirming which historical project pages are still required.
 - Documentation files other than this status have stale claims, including hosting details and OAuth progress. Update them alongside implementation.
 
-## Required next-work order
+## Ordered delivery plan
 
-1. Rotate the exposed Google OAuth secret and retest Google callback.
-2. Decide onboarding authority: public account creation versus application approval. Enforce one consistent model.
-3. Implement the real application/CV/notification/approve-reject/Magic-Link workflow with E2E tests.
-4. Protect dashboard and profile-completion routes with session and RBAC guards; enforce 20-minute inactivity logout.
-5. Configure company SMTP and Arabic templates; run real delivery tests to both Admin addresses.
-6. Add company-owned Microsoft OAuth and GitHub OAuth; test complete callbacks.
-7. Fix public routing, privacy, robots, sitemap, 404 behavior, and production security headers.
-8. Configure encrypted weekly backups and complete a restore drill.
-9. Add storage buckets and file policies for CVs, HR, project, research, and avatar files.
-10. Build modules incrementally with RLS integration tests, then connect live agents after `ai-lap` is online.
+The product must be released vertically: each phase includes database, RLS, UI, audit, notifications, responsive behavior, and automated tests. A later phase must not be presented as live before its vertical workflow passes.
+
+### Phase 0 — security and account recovery
+
+1. Rotate the previously exposed Google OAuth secret, store the replacement only in Supabase, and retest the callback.
+2. Keep public registration application-only; approved applicants receive the invitation/Magic Link.
+3. Configure company SMTP and Arabic Auth/application templates; test delivery to both Admin addresses.
+4. Configure company-owned GitHub OAuth and Microsoft OAuth when the company tenant/client credentials exist.
+5. Add encrypted weekly backup credentials and complete one documented restore drill.
+
+### Phase 1 — operational company V1
+
+1. Finish authenticated application review: details, private CV access, first-decision race, notifications, approval invitation, rejection audit, and secure email action links.
+2. Build the authenticated shell and role-aware navigation for Profile, People, Projects, Research, Tasks, Calendar, Documents, Announcements, KPIs, Notifications, Timesheets, CRM, Agents, Approvals, and Settings.
+3. Deliver Employees + departments + onboarding + announcements + timesheets as real workflows.
+4. Deliver Projects + members + Kanban tasks + milestones + files + meetings + activity + KPIs + GitHub repository link.
+5. Deliver Research + members + documents + datasets + experiments + ethics/approvals + publications/DOI/conference tracking.
+6. Deliver CRM contacts/leads/pipeline for Admin, HR, and Sales.
+
+### Phase 2 — governance and integrations
+
+1. Add private HR, project, research, avatar, and general document buckets with file-level authorization.
+2. Add authenticated RLS allow/deny integration tests to CI, plus accessibility, mobile visual, and performance checks.
+3. Add error monitoring, uptime checks, retention policy, disaster-recovery runbook, and staging-data policy.
+4. Enforce Owner-only Production merge authority in GitHub; current collaborator permission still prevents claiming this complete.
+
+### Phase 3 — AI agents
+
+1. Resume only when `ai-lap` is online; re-verify GPU/RAM, Ollama health, network reachability, and the exact installed model. Do not expose Ollama publicly.
+2. Build a private authenticated gateway, queue, tool allow-lists, approval engine L0-L4, memory scopes, audit, pause/disable/manual run/replay, usage, latency, logs, and errors.
+3. Activate agents incrementally: Knowledge/RAG first, then Operations/HR/Sales/Analytics, then the remaining V1 agents and CEO orchestration.
+4. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
 
 ## Verification log
 
@@ -205,6 +227,12 @@ Last verified: 2026-09-02, Asia/Muscat.
 - Added automated coverage for Dashboard fallback, unknown-route 404, and the legacy privacy redirect. Production verification is recorded after deployment below.
 - `npm run test`: pass; 8 tests. Production Worker version `a09b8338-3776-422d-9ab5-f4c146bddbad` deployed successfully.
 - Live verification: `https://reidpro.com/dashboard` returns HTTP 200 with no redirect and the Reid app shell; an unknown URL returns HTTP 404.
+
+### 2026-09-02 operational V1 alignment
+
+- The authoritative onboarding workflow is now fixed as: public application → first Admin/HR decision → invitation/Magic Link on approval. Direct public account creation is removed from the UI to prevent bypassing company review.
+- Login remains available for approved email/password accounts and configured OAuth providers. RLS remains the final authorization boundary even if an external OAuth identity is created.
+- Added browser coverage proving the login page directs new people to the join workflow and no longer offers direct account creation.
 
 ### 2026-09-02 critical V1 implementation verification
 
