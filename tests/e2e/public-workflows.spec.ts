@@ -15,6 +15,13 @@ test('protects the dashboard for anonymous visitors', async ({ page }) => {
   await expect(page.getByText('Pending Approvals')).toHaveCount(0);
 });
 
+test('keeps account creation behind the join approval workflow', async ({ page }) => {
+  await page.goto('/login');
+  await expect(page.getByText('الدخول للحسابات المعتمدة فقط.')).toBeVisible();
+  await expect(page.getByRole('button', { name: /أرسل طلب انضمام/ })).toBeVisible();
+  await expect(page.getByText('أنشئ حسابًا')).toHaveCount(0);
+});
+
 test('join form validates required fields and CV constraints', async ({ page }) => {
   await page.goto('/apply');
   await page.getByRole('button', { name: 'إرسال الطلب' }).click();
