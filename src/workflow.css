@@ -4,6 +4,7 @@
   border-radius: 14px;
   background: #8d7de015;
 }
+.role-badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.role-badges b{padding:5px 10px;border-radius:999px;background:#7256c718;color:#674db6;text-transform:capitalize;font-size:12px}
 .applications-list {
   display: grid;
   gap: 12px;
