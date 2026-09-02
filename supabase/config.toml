@@ -1,7 +1,7 @@
 project_id = "pkogchbrknwmzefjklkr"
 [auth]
 site_url = "https://reidpro.com"
-additional_redirect_urls = ["http://localhost:5173", "https://develop.reid.pages.dev"]
+additional_redirect_urls = ["http://localhost:5173", "https://staging.reidpro.com", "https://reid-staging.pages.dev"]
 jwt_expiry = 3600
 enable_signup = false
 [auth.email]
