@@ -197,6 +197,15 @@ Last verified: 2026-09-02, Asia/Muscat.
 
 ## Verification log
 
+### 2026-09-02 Dashboard route hotfix
+
+- Confirmed the Production account `alialajmi524@gmail.com` already has the `Owner` role; the failure to open Admin was not an RBAC assignment problem.
+- Root cause: Cloudflare interpreted the explicit `/dashboard /index.html 200` static redirect as a canonical redirect to `/`, discarding the application route and rendering the public homepage.
+- Replaced static application redirects with a Worker asset fallback that serves `index.html` internally for the five known React routes before Cloudflare asset canonicalization, preserving the browser URL and retaining real 404 responses for unknown routes.
+- Added automated coverage for Dashboard fallback, unknown-route 404, and the legacy privacy redirect. Production verification is recorded after deployment below.
+- `npm run test`: pass; 8 tests. Production Worker version `a09b8338-3776-422d-9ab5-f4c146bddbad` deployed successfully.
+- Live verification: `https://reidpro.com/dashboard` returns HTTP 200 with no redirect and the Reid app shell; an unknown URL returns HTTP 404.
+
 ### 2026-09-02 critical V1 implementation verification
 
 - `npm run check`: pass; 5 tests, TypeScript build, and Vite production build.
