@@ -95,7 +95,7 @@ Last verified: 2026-09-02, Asia/Muscat.
 - Browser routes, bilingual privacy content, `robots.txt`, `sitemap.xml`, SPA redirects, and deployable security headers were added under `public/`.
 - Local Supabase Auth configuration now matches the verified remote public-signup behavior and Storage default is 5 MB.
 - Local verification passes with 5 unit tests, 4 Chromium E2E tests, TypeScript, Vite build, and 0 npm vulnerabilities.
-- Deployment state: code is not remotely complete until migration `202609020001_onboarding_storage_realtime.sql` and Edge Function `decide-application` are applied. Supabase CLI is logged out and Chrome control was unavailable during this work.
+- Deployment state: application commit `f434ae6` is deployed to Staging. It is not remotely complete until migration `202609020001_onboarding_storage_realtime.sql` and Edge Function `decide-application` are applied. Supabase CLI is logged out and Chrome control was unavailable during this work. Production was deliberately not promoted.
 
 ### Repository and delivery
 
@@ -204,6 +204,7 @@ Last verified: 2026-09-02, Asia/Muscat.
 - `npm run test:e2e`: pass; 4 Chromium workflows covering bilingual home/chat/WhatsApp, anonymous dashboard denial, join-form validation, privacy, and 404.
 - `npm audit --audit-level=high`: 0 vulnerabilities.
 - Vite output contains `_headers`, `_redirects`, `robots.txt`, and `sitemap.xml`.
+- Staging deployment `f434ae6`: Cloudflare and CI passed; live Chromium verified anonymous Dashboard denial and privacy rendering; fresh `robots.txt` is `text/plain`, `sitemap.xml` is XML, and CSP/HSTS/X-Frame-Options/Permissions-Policy/Referrer-Policy/X-Content-Type-Options are present.
 - Static secret scan: no committed credential found; Edge Function references runtime-managed `SUPABASE_SERVICE_ROLE_KEY` only.
 - Supabase remote migration/function deployment: blocked because CLI has no access token and Chrome connection timed out twice. No partial remote database changes were made.
 - GitHub collaborator downgrade was requested twice through the official API, but GitHub retained `sheikhaalmamari4-cyber` at `write`; Owner-only merge enforcement therefore remains open and was not falsely marked complete.
