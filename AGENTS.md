@@ -83,6 +83,20 @@ The current Agent Map is a visual mock with hard-coded states. There is no live 
 
 Last verified: 2026-09-02, Asia/Muscat.
 
+### 2026-09-02 critical V1 implementation (feature branch)
+
+- Public join form now validates and inserts a real `applications` row instead of showing unconditional success.
+- Optional CV upload is limited to PDF/5 MB and targets the private `application-cvs` bucket; failed inserts clean up the uploaded object.
+- New migration creates private CV storage policies, `notifications`, audit trigger, reviewer notifications, Realtime publication entries, and atomic `decide_application` RPC.
+- New `decide-application` Edge Function validates the caller, executes the first-decision RPC, and sends an Auth invitation/Magic Link on approval.
+- Dashboard now requires an authenticated user, completed LinkedIn profile, and Owner/Super Admin/Admin/HR role. KPIs, applications, and agents load from Supabase instead of hard-coded dashboard values.
+- OAuth profile completion is enforced before workspace access. GitHub is now present in the login UI; provider activation still requires company OAuth credentials.
+- The 20-minute inactivity logout is installed in the application and covered by two tests.
+- Browser routes, bilingual privacy content, `robots.txt`, `sitemap.xml`, SPA redirects, and deployable security headers were added under `public/`.
+- Local Supabase Auth configuration now matches the verified remote public-signup behavior and Storage default is 5 MB.
+- Local verification passes with 5 unit tests, 4 Chromium E2E tests, TypeScript, Vite build, and 0 npm vulnerabilities.
+- Deployment state: code is not remotely complete until migration `202609020001_onboarding_storage_realtime.sql` and Edge Function `decide-application` are applied. Supabase CLI is logged out and Chrome control was unavailable during this work.
+
 ### Repository and delivery
 
 - Repository is public; default branch is `main`.
@@ -131,18 +145,18 @@ Last verified: 2026-09-02, Asia/Muscat.
 
 ### P0 — blocks a trustworthy V1
 
-1. Join request is a fake UI success. It does not insert into `applications`, upload the CV, notify Admin/HR, or handle errors.
-2. Approve/reject workflow is not implemented. There are no secure email action tokens, first-decision transaction, Arabic notification emails, internal rejection flow, or approval Magic Link.
-3. The Company System/Agent Map dashboard is public and contains hard-coded numbers and agent states. It must require authentication and RBAC.
+1. Join request, CV upload, and reviewer notifications are implemented in code but remain non-operational remotely until the new migration is applied.
+2. First-decision approval/rejection and approval Magic Link are implemented in migration/Edge Function code but remain non-operational until deployment and SMTP delivery testing. Secure one-click email decision links are still missing.
+3. Dashboard authentication, LinkedIn completion, RBAC, live counts, applications, and agent rows are implemented in code; Production remains on the old public mock until release and Supabase deployment.
 4. Microsoft login is displayed but Supabase Azure is disabled. Do not create it inside the available Sohar University tenant; use a company-owned Microsoft tenant.
-5. GitHub login requested in the original specification is not implemented in UI or Supabase.
-6. Google OAuth users can enter without a LinkedIn URL. Workspace access must be blocked until profile completion.
-7. The 20-minute inactivity timeout exists only as a tested helper; the application never invokes it and Supabase JWT expiry is 60 minutes.
-8. Remote signup behavior conflicts with `supabase/config.toml`: remote signup is enabled while the file says `enable_signup=false`. Decide whether public signup or approval-only onboarding is authoritative and align both.
+5. GitHub login is implemented in UI but its Supabase provider and company OAuth app are not configured.
+6. Google OAuth LinkedIn completion is enforced in code but is not yet released to Production.
+7. The 20-minute inactivity timeout is enforced in code and tested, but is not yet released to Production. Supabase JWT expiry remains 60 minutes.
+8. Public signup is now authoritative and local `supabase/config.toml` is aligned; remote re-verification remains required after release.
 9. Custom SMTP is disabled. Cloudflare Email/SMTP, Arabic templates, Admin notifications, and reliable Auth email delivery are not configured.
 10. Weekly backup cannot run: GitHub has no `SUPABASE_DB_URL` Actions secret. There is no successful backup/restore test.
-11. `robots.txt`, `sitemap.xml`, `privacy.html`, and unknown paths return the React app with HTTP 200. SEO, legal pages, correct content types, and 404 handling are broken.
-12. Production response is missing the intended `_headers` protections. At minimum verify CSP, HSTS, X-Content-Type-Options, Referrer-Policy, X-Frame-Options/frame-ancestors, and Permissions-Policy after deployment changes.
+11. `robots.txt`, `sitemap.xml`, privacy route, and in-app 404 were added, but production content types/status behavior must be verified after deployment; SPA unknown routes still use HTTP 200 at the edge.
+12. Security headers are now emitted from `public/_headers`; Production header verification remains required because Worker static-asset handling may differ from Pages.
 13. Owner-only Production merging is not fully enforced. Collaborator `sheikhaalmamari4-cyber` currently has `write` permission, and main protection requires zero approvals; a writer could merge a passing PR.
 14. A Google OAuth client secret appeared in an automation tool transcript during setup. It is not committed to Git, but it should be rotated and the replacement stored only in Supabase after explicit credential-rotation confirmation.
 
@@ -153,9 +167,7 @@ Last verified: 2026-09-02, Asia/Muscat.
 - No working project dashboards, Kanban, milestones, meetings, budgets, file-level permissions, clients, GitHub integration, activity, or project agents.
 - No working research workflows, datasets, experiments, ethics/approvals, publication/DOI/conference tracking, or AI research assistant.
 - No working CRM UI, lead pipeline, Sales permissions E2E, or Sales agent.
-- Storage has 0 buckets. CVs, project files, research documents, and avatars have no storage policies.
-- Realtime has 0 public tables in the Supabase realtime publication.
-- Edge Functions were not deployed or verified.
+- CV Storage, three Realtime tables, and the decision Edge Function are defined in code but not deployed. Project, research, HR, and avatar buckets/policies are still missing.
 - RAG/Knowledge Agent, Google Drive synchronization, embeddings pipeline, and document ACL filtering are not implemented.
 - No Operations/HR/Finance/Marketing/Support/Analytics/Competitor agent execution.
 - No daily/weekly executive report generation or weekly email delivery.
@@ -164,9 +176,9 @@ Last verified: 2026-09-02, Asia/Muscat.
 
 ### P2 — quality and operations
 
-- Only 3 unit tests exist. They test helper logic, not real Auth, RLS, database workflows, UI, email, storage, or deployments.
+- Five unit tests and four public-browser E2E tests exist. Authenticated Auth/RLS/database/email/storage workflows still lack executable integration coverage.
 - `supabase/tests/rls.sql` has 5 schema checks but is not run by GitHub CI and does not impersonate roles to test allow/deny behavior.
-- No browser E2E suite, accessibility automation, mobile visual regression, performance budgets, error monitoring, or uptime alerts.
+- A Chromium public-flow E2E suite exists; authenticated E2E, accessibility automation, mobile visual regression, performance budgets, error monitoring, and uptime alerts remain missing.
 - No tested recovery procedure, restore drill, staging data policy, retention policy, or disaster recovery evidence.
 - Legacy static files and COR-era assets remain in the repository and should be deliberately migrated or removed only after confirming which historical project pages are still required.
 - Documentation files other than this status have stale claims, including hosting details and OAuth progress. Update them alongside implementation.
@@ -185,6 +197,17 @@ Last verified: 2026-09-02, Asia/Muscat.
 10. Build modules incrementally with RLS integration tests, then connect live agents after `ai-lap` is online.
 
 ## Verification log
+
+### 2026-09-02 critical V1 implementation verification
+
+- `npm run check`: pass; 5 tests, TypeScript build, and Vite production build.
+- `npm run test:e2e`: pass; 4 Chromium workflows covering bilingual home/chat/WhatsApp, anonymous dashboard denial, join-form validation, privacy, and 404.
+- `npm audit --audit-level=high`: 0 vulnerabilities.
+- Vite output contains `_headers`, `_redirects`, `robots.txt`, and `sitemap.xml`.
+- Static secret scan: no committed credential found; Edge Function references runtime-managed `SUPABASE_SERVICE_ROLE_KEY` only.
+- Supabase remote migration/function deployment: blocked because CLI has no access token and Chrome connection timed out twice. No partial remote database changes were made.
+- GitHub collaborator downgrade was requested twice through the official API, but GitHub retained `sheikhaalmamari4-cyber` at `write`; Owner-only merge enforcement therefore remains open and was not falsely marked complete.
+- `ai-lap`: intentionally not touched; host remains out of scope while offline.
 
 ### 2026-09-02 comprehensive audit
 
