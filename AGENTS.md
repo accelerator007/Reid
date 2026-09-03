@@ -262,6 +262,8 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - Live Owner verification for `alialajmi524@gmail.com` passed: the session resolves the `owner` role, `/dashboard` opens the Company Command Center, one pending synthetic application is visible, and Admin/HR review data is protected behind authentication.
 - Corrected Google/Microsoft/GitHub OAuth return routing to `/dashboard`. Profile remains available through `حسابي / My profile`.
 - Corrected the Owner account directory loader to fetch profiles, roles, and account controls independently and join them client-side. This avoids a PostgREST embedded-relationship failure that silently rendered an empty account list.
+- Released the routing/directory correction through Staging PR `#28` and owner Production PR `#30`; CI and Cloudflare checks passed. Production Worker version `283e9c28-12fc-408f-aca0-c6aa0d8789ec` is live.
+- Final authenticated browser verification passed on `https://reidpro.com/dashboard`: `Ali Alajmi / alialajmi524@gmail.com` appears as an active `owner`; Owner role removal, self-suspension, and role-add controls are disabled by design. The synthetic `Reid E2E Test` application remains pending for a deliberate decision test.
 - Remaining deployment gap: permanent GitHub-to-Production Worker automation needs a scoped Cloudflare API token stored as a GitHub Actions secret. Creating that persistent credential requires explicit action-time authorization; until then Production deployment is manual.
 
 ### 2026-09-02 critical V1 implementation verification
