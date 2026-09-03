@@ -15,6 +15,12 @@ test('protects the dashboard for anonymous visitors', async ({ page }) => {
   await expect(page.getByText('Pending Approvals')).toHaveCount(0);
 });
 
+test('protects the employee workspace for anonymous visitors', async ({ page }) => {
+  await page.goto('/workspace');
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'G Google' })).toBeVisible();
+});
+
 test('keeps account creation behind the join approval workflow', async ({ page }) => {
   await page.goto('/login');
   await expect(page.getByText('الدخول للحسابات المعتمدة فقط.')).toBeVisible();
