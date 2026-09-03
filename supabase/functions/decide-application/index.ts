@@ -11,13 +11,23 @@ Deno.serve(async (request) => {
     const { data: auth, error: authError } = await caller.auth.getUser();
     if (authError || !auth.user) throw new Error('invalid_session');
     const { applicationId, decision, rejectionReason } = await request.json();
-    const { data: application, error } = await caller.rpc('decide_application', { application_id: applicationId, decision, rejection_reason: rejectionReason || null });
-    if (error) throw error;
-    if (decision === 'approved') {
-      const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(application.email, { redirectTo: 'https://reidpro.com/profile', data: { full_name: application.full_name, linkedin_url: application.linkedin_url, github_url: application.github_url, approved_application_id: application.id } });
-      if (inviteError) throw inviteError;
+    let application;
+    if (decision === 'retry_invitation') {
+      const { data, error } = await caller.from('applications').select('*').eq('id', applicationId).eq('status', 'approved').eq('invitation_status', 'failed').single();
+      if (error) throw error;
+      application = data;
+    } else {
+      const result = await caller.rpc('decide_application', { application_id: applicationId, decision, rejection_reason: rejectionReason || null });
+      if (result.error) throw result.error;
+      application = result.data;
     }
-    return Response.json({ application }, { headers: cors });
+    if (decision === 'approved' || decision === 'retry_invitation') {
+      const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(application.email, { redirectTo: 'https://reidpro.com/profile', data: { full_name: application.full_name, linkedin_url: application.linkedin_url, github_url: application.github_url, approved_application_id: application.id } });
+      const invitationStatus = inviteError ? 'failed' : 'sent';
+      await admin.from('applications').update({ invitation_status: invitationStatus, invitation_error: inviteError?.message || null, invited_at: inviteError ? null : new Date().toISOString() }).eq('id', application.id);
+      return Response.json({ application, invitationStatus, warning: inviteError?.message || null }, { headers: cors });
+    }
+    return Response.json({ application, invitationStatus: 'not_sent' }, { headers: cors });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : 'unknown_error' }, { status: 400, headers: cors });
   }

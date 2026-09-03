@@ -144,8 +144,8 @@ Last verified: 2026-09-02, Asia/Muscat.
 
 ### P0 — blocks a trustworthy V1
 
-1. Join request, private CV upload, and reviewer notifications are deployed; the real Staging join/CV workflow passed. Reviewer notification display still needs an authenticated UI test.
-2. First-decision approval/rejection and approval Magic Link are deployed but still require an authenticated Owner test and real SMTP delivery test. Secure one-click email decision links are still missing.
+1. Join request, private CV upload, reviewer notifications, the review dialog, secure one-minute CV links, and Realtime refresh are deployed or implemented as recorded below. The expanded reviewer UI still needs an authenticated Owner browser test after its Staging deployment.
+2. First-decision approval/rejection and approval Magic Link are deployed. Invitation delivery now has `pending/sent/failed` state and an Admin retry path, but still requires an authenticated Owner test and real SMTP delivery test. Secure one-click email decision links are still missing.
 3. Dashboard authentication, LinkedIn completion, RBAC, live counts, applications, and agent rows pass anonymous-denial testing; authenticated Owner behavior still needs final Production verification.
 4. Microsoft login is displayed but Supabase Azure is disabled. Do not create it inside the available Sohar University tenant; use a company-owned Microsoft tenant.
 5. GitHub login is implemented in UI but its Supabase provider and company OAuth app are not configured.
@@ -233,6 +233,27 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - The authoritative onboarding workflow is now fixed as: public application → first Admin/HR decision → invitation/Magic Link on approval. Direct public account creation is removed from the UI to prevent bypassing company review.
 - Login remains available for approved email/password accounts and configured OAuth providers. RLS remains the final authorization boundary even if an external OAuth identity is created.
 - Added browser coverage proving the login page directs new people to the join workflow and no longer offers direct account creation.
+
+### 2026-09-02 application review workspace
+
+- Added a full Admin/HR application review dialog with contact, organization, requested scope, LinkedIn, GitHub, reason, cover letter, and private CV access through a signed URL that expires after 60 seconds.
+- Added reviewer notification display and Realtime refresh for applications and notifications.
+- Fixed partial invitation delivery: migration `202609020003` tracks `not_sent/pending/sent/failed`, error and delivery time independently from the atomic first decision. Failed invitations remain visible to reviewers and can be retried.
+- Deployed migration `202609020003` and the updated `decide-application` Edge Function to Supabase. An unauthenticated retry request returned HTTP 401.
+- Local `npm run check` passes with 8 tests and the Production build. Authenticated Owner/CV/decision/retry browser coverage remains required on Staging before release.
+- Release-process correction: merging the `develop → main` release PR with automatic head deletion removed `develop`. The branch was immediately restored from current `main` (`17b5f59`). Never use `--delete-branch` when the release PR head is the persistent `develop` branch.
+
+### 2026-09-02 account lifecycle completion
+
+- Migration `202609020004` adds audited `active/suspended/disabled` account controls, backfills existing users, makes role mutation function-only, and enforces active-account checks in role, project, research, task, timesheet, notification, and profile-update policies.
+- New `manage-account` Edge Function allows active Owner/Super Admin callers to assign non-Owner roles and suspend/reactivate non-Owner accounts. It blocks self-modification, Owner suspension/removal, unauthorized callers, and synchronizes suspension with Supabase Auth ban state.
+- The Owner/Super Admin Dashboard now lists company accounts, multiple roles, status and reason, and provides protected role/status controls. Suspended users receive a dedicated access gate.
+- Application notifications and future email buttons can deep-link to `/dashboard?review=<id>`; authentication plus RLS/RBAC are still required and the link never executes a decision itself.
+- Remote migration and Edge Function deployment completed; an unauthenticated account-management call returned HTTP 401. Real Owner mutation tests must use a synthetic non-Owner account on Staging before Production.
+- Outbound Arabic email remains blocked by missing SMTP provider credentials. Cloudflare Email Routing is not treated as an outbound SMTP service.
+- Remote Supabase Auth public signup and email signup are now disabled through `supabase config push`; the authoritative application → approval → invitation flow is enforced at the Auth service, not only hidden in UI. Admin invitations remain the account-creation path.
+- Approved accounts can request a Magic Link or password recovery without creating a new user (`shouldCreateUser: false`), and invited users can set an 8+ character password from their authenticated Profile.
+- Arabic source templates for invite, Magic Link, recovery and confirmation are stored under `supabase/templates/`. Supabase refused hosted template activation on the Free plan with its default provider; activation requires custom SMTP or a paid plan. Existing remote confirmation, OTP length, MFA, redirects and Storage settings were preserved during config synchronization.
 
 ### 2026-09-02 critical V1 implementation verification
 

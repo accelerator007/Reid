@@ -1,11 +1,17 @@
 project_id = "pkogchbrknwmzefjklkr"
 [auth]
 site_url = "https://reidpro.com"
-additional_redirect_urls = ["http://localhost:5173", "https://staging.reidpro.com", "https://reid-staging.pages.dev"]
+additional_redirect_urls = ["https://reidpro.com", "https://staging.reidpro.com", "https://reid-staging.pages.dev", "http://localhost:5173", "http://127.0.0.1:5174"]
 jwt_expiry = 3600
-enable_signup = true
+enable_signup = false
 [auth.email]
-enable_signup = true
+enable_signup = false
 double_confirm_changes = true
+enable_confirmations = true
+max_frequency = "1m"
+otp_length = 8
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
 [storage]
-file_size_limit = "5MiB"
+file_size_limit = "50MiB"

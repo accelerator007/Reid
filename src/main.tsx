@@ -40,9 +40,39 @@ type Application = {
   email: string;
   account_type: string;
   organization: string;
+  phone: string;
+  title: string;
+  linkedin_url: string;
+  github_url: string | null;
+  project_or_research: string | null;
   join_reason: string;
+  cover_letter: string;
+  cv_path: string | null;
   created_at: string;
   status: string;
+  invitation_status?: string;
+};
+type Notification = {
+  id: string;
+  title_ar: string;
+  title_en: string;
+  body_ar: string | null;
+  body_en: string | null;
+  read_at: string | null;
+  created_at: string;
+  entity_id: string | null;
+};
+type CompanyAccount = {
+  id: string;
+  full_name: string;
+  email: string;
+  department: string | null;
+  position: string | null;
+  user_roles: { role: string }[];
+  account_controls:
+    | { status: string; reason: string | null }[]
+    | { status: string; reason: string | null }
+    | null;
 };
 const tr = {
   ar: {
@@ -132,7 +162,8 @@ function Login({
   apply: () => void;
 }) {
   const [message, setMessage] = React.useState(""),
-    [busy, setBusy] = React.useState(false);
+    [busy, setBusy] = React.useState(false),
+    [email, setEmail] = React.useState("");
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setBusy(true);
@@ -163,6 +194,34 @@ function Login({
     });
     if (error) setMessage(error.message);
   };
+  const emailLink = async (kind: "magic" | "recovery") => {
+    if (!supabase || !email.trim()) {
+      setMessage(
+        lang === "ar" ? "اكتب بريدك أولًا." : "Enter your email first.",
+      );
+      return;
+    }
+    setBusy(true);
+    const result =
+      kind === "magic"
+        ? await supabase.auth.signInWithOtp({
+            email: email.trim(),
+            options: {
+              shouldCreateUser: false,
+              emailRedirectTo: `${location.origin}/profile`,
+            },
+          })
+        : await supabase.auth.resetPasswordForEmail(email.trim(), {
+            redirectTo: `${location.origin}/profile`,
+          });
+    setMessage(
+      result.error?.message ||
+        (lang === "ar"
+          ? "إذا كان الحساب معتمدًا فسيصل الرابط إلى بريدك."
+          : "If the account is approved, the link will arrive by email."),
+    );
+    setBusy(false);
+  };
   return (
     <main className="auth">
       <section className="auth-card">
@@ -186,16 +245,20 @@ function Login({
         <form onSubmit={submit}>
           <label>
             {lang === "ar" ? "البريد الإلكتروني" : "Email"}
-            <input name="email" type="email" required />
+            <input
+              name="email"
+              type="email"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
           </label>
           <label>
             {lang === "ar" ? "كلمة المرور" : "Password"}
             <input name="password" type="password" minLength={8} required />
           </label>
           <button className="primary" disabled={busy}>
-            {busy
-              ? "…"
-              : tr[lang].login}
+            {busy ? "…" : tr[lang].login}
           </button>
         </form>
         {message && (
@@ -204,8 +267,28 @@ function Login({
           </p>
         )}
         <button className="text-link" onClick={apply}>
-          {lang === "ar" ? "ليس لديك حساب؟ أرسل طلب انضمام" : "No account? Submit a join request"}
+          {lang === "ar"
+            ? "ليس لديك حساب؟ أرسل طلب انضمام"
+            : "No account? Submit a join request"}
         </button>
+        <div className="auth-links">
+          <button
+            className="text-link"
+            disabled={busy}
+            onClick={() => emailLink("magic")}
+          >
+            {lang === "ar"
+              ? "أرسل رابط دخول آمن"
+              : "Send a secure sign-in link"}
+          </button>
+          <button
+            className="text-link"
+            disabled={busy}
+            onClick={() => emailLink("recovery")}
+          >
+            {lang === "ar" ? "نسيت كلمة المرور" : "Forgot password"}
+          </button>
+        </div>
       </section>
     </main>
   );
@@ -244,23 +327,21 @@ function Join({ lang }: { lang: Lang }) {
         return;
       }
     }
-    const { error } = await supabase
-      .from("applications")
-      .insert({
-        id,
-        full_name: f.get("full_name"),
-        email: f.get("email"),
-        phone: f.get("phone"),
-        organization: f.get("organization"),
-        title: f.get("title"),
-        linkedin_url: f.get("linkedin"),
-        github_url: f.get("github") || null,
-        account_type: f.get("account_type"),
-        project_or_research: f.get("project_or_research") || null,
-        join_reason: f.get("join_reason"),
-        cover_letter: f.get("cover_letter"),
-        cv_path,
-      });
+    const { error } = await supabase.from("applications").insert({
+      id,
+      full_name: f.get("full_name"),
+      email: f.get("email"),
+      phone: f.get("phone"),
+      organization: f.get("organization"),
+      title: f.get("title"),
+      linkedin_url: f.get("linkedin"),
+      github_url: f.get("github") || null,
+      account_type: f.get("account_type"),
+      project_or_research: f.get("project_or_research") || null,
+      join_reason: f.get("join_reason"),
+      cover_letter: f.get("cover_letter"),
+      cv_path,
+    });
     if (error) {
       if (cv_path)
         await supabase.storage.from("application-cvs").remove([cv_path]);
@@ -382,7 +463,8 @@ function Profile({
   };
   const [p, setP] = React.useState(empty),
     [roles, setRoles] = React.useState<string[]>([]),
-    [message, setMessage] = React.useState("");
+    [message, setMessage] = React.useState(""),
+    [newPassword, setNewPassword] = React.useState("");
   React.useEffect(() => {
     getProfile(user).then((x) => x && setP({ ...empty, ...x }));
     supabase!
@@ -393,12 +475,28 @@ function Profile({
   }, [user.id]);
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (newPassword && newPassword.length < 8) {
+      setMessage(
+        lang === "ar"
+          ? "كلمة المرور يجب أن تكون 8 أحرف على الأقل."
+          : "Password must be at least 8 characters.",
+      );
+      return;
+    }
     const { error } = await supabase!
       .from("profiles")
       .update(p)
       .eq("id", user.id);
-    setMessage(error?.message || (lang === "ar" ? "تم الحفظ." : "Saved."));
-    if (!error) await complete();
+    const passwordResult =
+      !error && newPassword
+        ? await supabase!.auth.updateUser({ password: newPassword })
+        : { error: null };
+    const finalError = error || passwordResult.error;
+    setMessage(finalError?.message || (lang === "ar" ? "تم الحفظ." : "Saved."));
+    if (!finalError) {
+      setNewPassword("");
+      await complete();
+    }
   };
   const field = (n: keyof ProfileData, l: string, r = false, t = "text") => (
     <label>
@@ -447,6 +545,18 @@ function Profile({
             onChange={(e) => setP({ ...p, bio: e.target.value })}
           />
         </label>
+        <label className="wide">
+          {lang === "ar"
+            ? "كلمة مرور جديدة (اختياري)"
+            : "New password (optional)"}
+          <input
+            type="password"
+            minLength={8}
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+          />
+        </label>
         <button className="primary">
           {lang === "ar" ? "حفظ الملف" : "Save profile"}
         </button>
@@ -475,8 +585,15 @@ function Dashboard({
   const [roles, setRoles] = React.useState<string[]>([]),
     [agents, setAgents] = React.useState<Agent[]>([]),
     [apps, setApps] = React.useState<Application[]>([]),
+    [failedInvites, setFailedInvites] = React.useState<Application[]>([]),
+    [accounts, setAccounts] = React.useState<CompanyAccount[]>([]),
+    [accountStatus, setAccountStatus] = React.useState("active"),
+    [notifications, setNotifications] = React.useState<Notification[]>([]),
     [counts, setCounts] = React.useState([0, 0, 0, 0, 0]),
-    [message, setMessage] = React.useState("");
+    [message, setMessage] = React.useState(""),
+    [reviewing, setReviewing] = React.useState<Application | null>(null),
+    [rejectReason, setRejectReason] = React.useState(""),
+    [busyDecision, setBusyDecision] = React.useState(false);
   const allowed = roles.some((x) =>
     ["owner", "super_admin", "admin", "hr"].includes(x),
   );
@@ -488,25 +605,67 @@ function Dashboard({
         .eq("user_id", user.id),
       next = r.data?.map((x) => x.role) || [];
     setRoles(next);
+    const control = await supabase
+      .from("account_controls")
+      .select("status")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    setAccountStatus(control.data?.status || "active");
+    if (control.data?.status && control.data.status !== "active") return;
     if (!next.some((x) => ["owner", "super_admin", "admin", "hr"].includes(x)))
       return;
-    const [a, p, projects, tasks, people, leads] = await Promise.all([
+    const [
+      a,
+      p,
+      failed,
+      projects,
+      tasks,
+      people,
+      leads,
+      notices,
+      companyAccounts,
+    ] = await Promise.all([
       supabase
         .from("agents")
         .select("id,name,status,model,host,approval_level"),
       supabase
         .from("applications")
         .select(
-          "id,full_name,email,account_type,organization,join_reason,created_at,status",
+          "id,full_name,email,phone,organization,title,linkedin_url,github_url,account_type,project_or_research,join_reason,cover_letter,cv_path,created_at,status",
         )
-        .eq("status", "pending"),
+        .eq("status", "pending")
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("applications")
+        .select(
+          "id,full_name,email,phone,organization,title,linkedin_url,github_url,account_type,project_or_research,join_reason,cover_letter,cv_path,created_at,status,invitation_status",
+        )
+        .eq("status", "approved")
+        .eq("invitation_status", "failed")
+        .order("created_at", { ascending: true }),
       supabase.from("projects").select("*", { count: "exact", head: true }),
       supabase.from("tasks").select("*", { count: "exact", head: true }),
       supabase.from("profiles").select("*", { count: "exact", head: true }),
       supabase.from("crm_contacts").select("*", { count: "exact", head: true }),
+      supabase
+        .from("notifications")
+        .select(
+          "id,title_ar,title_en,body_ar,body_en,read_at,created_at,entity_id",
+        )
+        .order("created_at", { ascending: false })
+        .limit(8),
+      supabase
+        .from("profiles")
+        .select(
+          "id,full_name,email,department,position,user_roles(role),account_controls(status,reason)",
+        )
+        .order("full_name"),
     ]);
     setAgents((a.data || []) as Agent[]);
     setApps((p.data || []) as Application[]);
+    setFailedInvites((failed.data || []) as Application[]);
+    setNotifications((notices.data || []) as Notification[]);
+    setAccounts((companyAccounts.data || []) as unknown as CompanyAccount[]);
     setCounts([
       projects.count || 0,
       tasks.count || 0,
@@ -518,26 +677,101 @@ function Dashboard({
   React.useEffect(() => {
     refresh();
   }, [refresh]);
+  React.useEffect(() => {
+    const requested = new URLSearchParams(location.search).get("review");
+    if (!requested || reviewing) return;
+    const application = apps.find(({ id }) => id === requested);
+    if (application) setReviewing(application);
+  }, [apps, reviewing]);
+  React.useEffect(() => {
+    if (!supabase || !user || !allowed) return;
+    const channel = supabase
+      .channel(`review-workspace:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "applications" },
+        refresh,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications" },
+        refresh,
+      )
+      .subscribe();
+    return () => {
+      void supabase?.removeChannel(channel);
+    };
+  }, [allowed, refresh, user]);
   const decide = async (a: Application, d: "approved" | "rejected") => {
-    const reason =
-      d === "rejected"
-        ? prompt(
-            lang === "ar"
-              ? "سبب الرفض الداخلي (إجباري)"
-              : "Internal rejection reason",
-          )
-        : null;
+    const reason = d === "rejected" ? rejectReason : null;
     if (d === "rejected" && !reason?.trim()) return;
-    const { error } = await supabase!.functions.invoke("decide-application", {
-      body: { applicationId: a.id, decision: d, rejectionReason: reason },
+    setBusyDecision(true);
+    setMessage("");
+    const { data, error } = await supabase!.functions.invoke(
+      "decide-application",
+      {
+        body: { applicationId: a.id, decision: d, rejectionReason: reason },
+      },
+    );
+    setMessage(
+      error?.message ||
+        (data?.invitationStatus === "failed"
+          ? lang === "ar"
+            ? "تم القبول لكن فشل إرسال الدعوة. ظهرت في قائمة إعادة المحاولة."
+            : "Approved, but invitation delivery failed. It is now in the retry list."
+          : lang === "ar"
+            ? "تم حفظ القرار."
+            : "Decision saved."),
+    );
+    if (!error) {
+      setReviewing(null);
+      setRejectReason("");
+      await refresh();
+    }
+    setBusyDecision(false);
+  };
+  const retryInvitation = async (application: Application) => {
+    setBusyDecision(true);
+    const { data, error } = await supabase!.functions.invoke(
+      "decide-application",
+      {
+        body: { applicationId: application.id, decision: "retry_invitation" },
+      },
+    );
+    setMessage(
+      error?.message ||
+        (data?.invitationStatus === "sent"
+          ? lang === "ar"
+            ? "تم إرسال الدعوة."
+            : "Invitation sent."
+          : lang === "ar"
+            ? "فشل إرسال الدعوة مرة أخرى."
+            : "Invitation delivery failed again."),
+    );
+    await refresh();
+    setBusyDecision(false);
+  };
+  const manageAccount = async (body: Record<string, unknown>) => {
+    setMessage("");
+    const { error } = await supabase!.functions.invoke("manage-account", {
+      body,
     });
     setMessage(
       error?.message ||
-        (lang === "ar"
-          ? "تم القرار. إرسال البريد ينتظر إعداد SMTP."
-          : "Decision saved. Email awaits SMTP setup."),
+        (lang === "ar" ? "تم تحديث الحساب." : "Account updated."),
     );
-    if (!error) refresh();
+    if (!error) await refresh();
+  };
+  const openCv = async (application: Application) => {
+    if (!application.cv_path || !supabase) return;
+    const { data, error } = await supabase.storage
+      .from("application-cvs")
+      .createSignedUrl(application.cv_path, 60);
+    if (error || !data?.signedUrl) {
+      setMessage(lang === "ar" ? "تعذر فتح ملف CV." : "Could not open CV.");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
   if (!user)
     return (
@@ -555,6 +789,16 @@ function Dashboard({
         }
         action={profile}
         label={tr[lang].account}
+      />
+    );
+  if (accountStatus !== "active")
+    return (
+      <Gate
+        title={
+          lang === "ar"
+            ? "الحساب موقوف. تواصل مع الإدارة."
+            : "Account suspended. Contact an administrator."
+        }
       />
     );
   if (!allowed)
@@ -578,6 +822,42 @@ function Dashboard({
         ))}
       </section>
       {message && <p className="guard-message">{message}</p>}
+      <section className="review-overview">
+        <article>
+          <h2>{lang === "ar" ? "الإشعارات" : "Notifications"}</h2>
+          {notifications.length ? (
+            notifications.map((notice) => (
+              <div
+                className={notice.read_at ? "notice" : "notice unread"}
+                key={notice.id}
+              >
+                <b>{lang === "ar" ? notice.title_ar : notice.title_en}</b>
+                <p>{lang === "ar" ? notice.body_ar : notice.body_en}</p>
+                <small>
+                  {new Date(notice.created_at).toLocaleString(
+                    lang === "ar" ? "ar-OM" : "en-OM",
+                  )}
+                </small>
+                {notice.entity_id &&
+                  apps.some(({ id }) => id === notice.entity_id) && (
+                    <button
+                      onClick={() =>
+                        setReviewing(
+                          apps.find(({ id }) => id === notice.entity_id) ||
+                            null,
+                        )
+                      }
+                    >
+                      {lang === "ar" ? "مراجعة الطلب" : "Review application"}
+                    </button>
+                  )}
+              </div>
+            ))
+          ) : (
+            <p>{lang === "ar" ? "لا توجد إشعارات." : "No notifications."}</p>
+          )}
+        </article>
+      </section>
       <h2>{lang === "ar" ? "طلبات معلقة" : "Pending applications"}</h2>
       <section className="applications-list">
         {apps.length ? (
@@ -591,11 +871,13 @@ function Dashboard({
                 <p>{a.join_reason}</p>
               </div>
               <div>
-                <button onClick={() => decide(a, "approved")}>
-                  {lang === "ar" ? "قبول" : "Approve"}
-                </button>
-                <button onClick={() => decide(a, "rejected")}>
-                  {lang === "ar" ? "رفض" : "Reject"}
+                <button
+                  onClick={() => {
+                    setReviewing(a);
+                    setRejectReason("");
+                  }}
+                >
+                  {lang === "ar" ? "مراجعة" : "Review"}
                 </button>
               </div>
             </article>
@@ -604,6 +886,276 @@ function Dashboard({
           <p>{lang === "ar" ? "لا توجد طلبات." : "No pending applications."}</p>
         )}
       </section>
+      {failedInvites.length > 0 && (
+        <>
+          <h2>
+            {lang === "ar"
+              ? "دعوات تحتاج إعادة إرسال"
+              : "Invitations needing retry"}
+          </h2>
+          <section className="applications-list failed-invitations">
+            {failedInvites.map((application) => (
+              <article key={application.id}>
+                <div>
+                  <b>{application.full_name}</b>
+                  <small>{application.email}</small>
+                </div>
+                <div>
+                  <button
+                    disabled={busyDecision}
+                    onClick={() => retryInvitation(application)}
+                  >
+                    {lang === "ar" ? "إعادة إرسال الدعوة" : "Retry invitation"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </section>
+        </>
+      )}
+      {(roles.includes("owner") || roles.includes("super_admin")) && (
+        <>
+          <h2>
+            {lang === "ar" ? "الحسابات والصلاحيات" : "Accounts and roles"}
+          </h2>
+          <section className="accounts-list">
+            {accounts.map((account) => {
+              const control = Array.isArray(account.account_controls)
+                ? account.account_controls[0]
+                : account.account_controls;
+              const status = control?.status || "active";
+              const roleNames =
+                account.user_roles?.map(({ role }) => role) || [];
+              const protectedAccount =
+                account.id === user.id || roleNames.includes("owner");
+              return (
+                <article key={account.id}>
+                  <div>
+                    <b>{account.full_name}</b>
+                    <small>{account.email}</small>
+                    <small>
+                      {account.department || "—"} · {account.position || "—"}
+                    </small>
+                  </div>
+                  <div className="account-roles">
+                    {roleNames.map((role) => (
+                      <button
+                        type="button"
+                        key={role}
+                        disabled={protectedAccount || role === "owner"}
+                        title={lang === "ar" ? "إزالة الصلاحية" : "Remove role"}
+                        onClick={() => void manageAccount({ action: "set_role", targetUserId: account.id, role, enabled: false })}
+                      >
+                        {role.replaceAll("_", " ")} {protectedAccount || role === "owner" ? "" : "×"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className={`account-status ${status}`}>
+                    <b>{status}</b>
+                    {control?.reason && <small>{control.reason}</small>}
+                  </div>
+                  <div className="account-actions">
+                    <select
+                      aria-label={
+                        lang === "ar"
+                          ? `إضافة صلاحية ${account.full_name}`
+                          : `Add role for ${account.full_name}`
+                      }
+                      defaultValue=""
+                      disabled={protectedAccount}
+                      onChange={(event) => {
+                        if (!event.target.value) return;
+                        void manageAccount({
+                          action: "set_role",
+                          targetUserId: account.id,
+                          role: event.target.value,
+                          enabled: true,
+                        });
+                        event.target.value = "";
+                      }}
+                    >
+                      <option value="">
+                        {lang === "ar" ? "إضافة صلاحية" : "Add role"}
+                      </option>
+                      {[
+                        "super_admin",
+                        "admin",
+                        "hr",
+                        "sales",
+                        "employee",
+                        "project_member",
+                        "research_member",
+                        "guest",
+                      ]
+                        .filter((role) => !roleNames.includes(role))
+                        .map((role) => (
+                          <option value={role} key={role}>
+                            {role.replaceAll("_", " ")}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      disabled={protectedAccount}
+                      onClick={() => {
+                        if (status === "active") {
+                          const reason = window.prompt(
+                            lang === "ar"
+                              ? "سبب إيقاف الحساب"
+                              : "Suspension reason",
+                          );
+                          if (reason?.trim())
+                            void manageAccount({
+                              action: "set_status",
+                              targetUserId: account.id,
+                              status: "suspended",
+                              reason,
+                            });
+                        } else {
+                          void manageAccount({
+                            action: "set_status",
+                            targetUserId: account.id,
+                            status: "active",
+                          });
+                        }
+                      }}
+                    >
+                      {status === "active"
+                        ? lang === "ar"
+                          ? "إيقاف"
+                          : "Suspend"
+                        : lang === "ar"
+                          ? "إعادة تفعيل"
+                          : "Reactivate"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        </>
+      )}
+      {reviewing && (
+        <div
+          className="review-backdrop"
+          role="presentation"
+          onMouseDown={() => setReviewing(null)}
+        >
+          <section
+            className="review-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="review-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <small>{reviewing.account_type.replaceAll("_", " ")}</small>
+                <h2 id="review-title">{reviewing.full_name}</h2>
+              </div>
+              <button
+                aria-label={lang === "ar" ? "إغلاق" : "Close"}
+                onClick={() => setReviewing(null)}
+              >
+                ×
+              </button>
+            </header>
+            <dl>
+              <div>
+                <dt>{lang === "ar" ? "البريد" : "Email"}</dt>
+                <dd>{reviewing.email}</dd>
+              </div>
+              <div>
+                <dt>{lang === "ar" ? "الهاتف" : "Phone"}</dt>
+                <dd>{reviewing.phone}</dd>
+              </div>
+              <div>
+                <dt>{lang === "ar" ? "الجهة" : "Organization"}</dt>
+                <dd>{reviewing.organization}</dd>
+              </div>
+              <div>
+                <dt>{lang === "ar" ? "المسمى" : "Title"}</dt>
+                <dd>{reviewing.title}</dd>
+              </div>
+              <div>
+                <dt>LinkedIn</dt>
+                <dd>
+                  <a
+                    href={reviewing.linkedin_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {reviewing.linkedin_url}
+                  </a>
+                </dd>
+              </div>
+              <div>
+                <dt>GitHub</dt>
+                <dd>
+                  {reviewing.github_url ? (
+                    <a
+                      href={reviewing.github_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {reviewing.github_url}
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  {lang === "ar" ? "المشروع / البحث" : "Project / research"}
+                </dt>
+                <dd>{reviewing.project_or_research || "—"}</dd>
+              </div>
+            </dl>
+            <article>
+              <b>{lang === "ar" ? "سبب الانضمام" : "Join reason"}</b>
+              <p>{reviewing.join_reason}</p>
+            </article>
+            <article>
+              <b>{lang === "ar" ? "الرسالة التعريفية" : "Cover letter"}</b>
+              <p>{reviewing.cover_letter}</p>
+            </article>
+            {reviewing.cv_path && (
+              <button onClick={() => openCv(reviewing)}>
+                {lang === "ar" ? "فتح CV بشكل آمن" : "Open CV securely"}
+              </button>
+            )}
+            <label>
+              {lang === "ar"
+                ? "سبب الرفض الداخلي"
+                : "Internal rejection reason"}
+              <textarea
+                value={rejectReason}
+                onChange={(event) => setRejectReason(event.target.value)}
+                placeholder={
+                  lang === "ar"
+                    ? "إجباري عند الرفض، ولا يُرسل للمتقدم"
+                    : "Required for rejection; never sent to applicant"
+                }
+              />
+            </label>
+            <footer>
+              <button
+                className="primary"
+                disabled={busyDecision}
+                onClick={() => decide(reviewing, "approved")}
+              >
+                {lang === "ar" ? "قبول وإرسال الدعوة" : "Approve and invite"}
+              </button>
+              <button
+                disabled={busyDecision || !rejectReason.trim()}
+                onClick={() => decide(reviewing, "rejected")}
+              >
+                {lang === "ar" ? "رفض الطلب" : "Reject application"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
       <h2>{lang === "ar" ? "الوكلاء" : "Agents"}</h2>
       <section className="grid">
         {agents.map((a) => (
