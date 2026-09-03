@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { installIdleTimeout } from "./session";
+import { EmployeeWorkspace } from "./employee";
 import "./style.css";
 import "./auth.css";
 import "./profile.css";
@@ -15,6 +16,7 @@ type Page =
   | "apply"
   | "login"
   | "profile"
+  | "workspace"
   | "privacy"
   | "not-found";
 type ProfileData = {
@@ -88,6 +90,7 @@ const tr = {
     discover: "اكتشف النظام",
     platform: "منصة عمل موحّدة",
     account: "حسابي",
+    workspace: "مساحة العمل",
   },
   en: {
     brand: "Reid",
@@ -102,6 +105,7 @@ const tr = {
     discover: "Explore the system",
     platform: "One unified workspace",
     account: "My profile",
+    workspace: "Workspace",
   },
 };
 const routes: Record<string, Page> = {
@@ -109,6 +113,7 @@ const routes: Record<string, Page> = {
   "/login": "login",
   "/apply": "apply",
   "/profile": "profile",
+  "/workspace": "workspace",
   "/dashboard": "dashboard",
   "/privacy": "privacy",
 };
@@ -117,6 +122,7 @@ const paths: Record<Page, string> = {
   login: "/login",
   apply: "/apply",
   profile: "/profile",
+  workspace: "/workspace",
   dashboard: "/dashboard",
   privacy: "/privacy",
   "not-found": "/404",
@@ -1284,13 +1290,21 @@ function App() {
     [lang, setLang] = React.useState<Lang>("ar"),
     [dark, setDark] = React.useState(false),
     [session, setSession] = React.useState<Session | null>(null),
+    [sessionRoles, setSessionRoles] = React.useState<string[]>([]),
     [ready, setReady] = React.useState(false),
     t = tr[lang];
-  const check = React.useCallback(
-    async (u: User | null) =>
-      setReady(Boolean((await getProfile(u))?.linkedin_url)),
-    [],
+  const canManageCompany = sessionRoles.some((role) =>
+    ["owner", "super_admin", "admin", "hr"].includes(role),
   );
+  const check = React.useCallback(async (u: User | null) => {
+    setReady(Boolean((await getProfile(u))?.linkedin_url));
+    if (!supabase || !u) return setSessionRoles([]);
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", u.id);
+    setSessionRoles(data?.map(({ role }) => role) || []);
+  }, []);
   React.useEffect(() => {
     supabase?.auth.getSession().then(({ data }) => {
       setSession(data.session);
@@ -1322,8 +1336,17 @@ function App() {
         </button>
         <nav>
           <button onClick={() => go("home")}>{t.home}</button>
-          <button onClick={() => go("dashboard")}>{t.system}</button>
+          <button
+            onClick={() =>
+              go(session && !canManageCompany ? "workspace" : "dashboard")
+            }
+          >
+            {t.system}
+          </button>
           <button onClick={() => go("apply")}>{t.join}</button>
+          {session && (
+            <button onClick={() => go("workspace")}>{t.workspace}</button>
+          )}
           <button
             className="pill"
             onClick={() => go(session ? "profile" : "login")}
@@ -1389,7 +1412,7 @@ function App() {
       {page === "login" && (
         <Login
           lang={lang}
-          done={() => go("profile")}
+          done={() => go("workspace")}
           apply={() => go("apply")}
         />
       )}{" "}
@@ -1424,6 +1447,20 @@ function App() {
           profile={() => go("profile")}
         />
       )}{" "}
+      {page === "workspace" &&
+        (session?.user ? (
+          <EmployeeWorkspace
+            lang={lang}
+            user={session.user}
+            profile={() => go("profile")}
+          />
+        ) : (
+          <Login
+            lang={lang}
+            done={() => go("workspace")}
+            apply={() => go("apply")}
+          />
+        ))}{" "}
       {page === "privacy" && (
         <main className="legal">
           <h1>{lang === "ar" ? "سياسة الخصوصية" : "Privacy Policy"}</h1>

@@ -5,4 +5,8 @@ Reviewer links use `/dashboard?review=<application-id>` and never decide directl
 
 Owner/Super Admin account management → protected Edge Function → active-caller and target checks → Auth ban/unban plus audited account status. Suspended accounts lose role-based RLS access immediately; current Owner and self-modification are protected.
 
+Approved account → role-aware `/workspace` → employee directory/profile → onboarding and assigned tasks → calendar/announcements/documents → KPIs/reviews → timesheet minutes aggregated into working hours. HR/Admin manage company and employee records; employees operate only within their own assignment/ownership scope. Realtime refreshes operational feeds, while database RLS and private Storage policies remain authoritative.
+
+New task/onboarding/KPI/company announcement → database trigger → employee-owned notification → Realtime Workspace feed → employee marks read. Notification policies prevent one employee from reading or updating another employee's feed.
+
 Agent goal → policy check → task/run → allow-listed tool → approval when required → audit → KPI/report. Weekly executive report is emailed; daily remains in the dashboard.

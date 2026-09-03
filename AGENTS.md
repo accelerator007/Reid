@@ -266,6 +266,18 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - Final authenticated browser verification passed on `https://reidpro.com/dashboard`: `Ali Alajmi / alialajmi524@gmail.com` appears as an active `owner`; Owner role removal, self-suspension, and role-add controls are disabled by design. The synthetic `Reid E2E Test` application remains pending for a deliberate decision test.
 - Remaining deployment gap: permanent GitHub-to-Production Worker automation needs a scoped Cloudflare API token stored as a GitHub Actions secret. Creating that persistent credential requires explicit action-time authorization; until then Production deployment is manual.
 
+### 2026-09-03 employee workspace implementation
+
+- Work is active on `feature/employee-workspace-v1`; do not present this module as Production-ready until migration, authenticated role tests, Staging, and the release PR pass.
+- Added migration `202609030001_employee_workspace.sql` for departments, profile employment fields, onboarding, calendar, announcements, private employee-document metadata/storage, KPIs, performance reviews, task writes, audit triggers, RLS, and Realtime feeds.
+- Added the bilingual `/workspace` application route with role-aware navigation, company directory and individual employee view, onboarding checklist, assigned tasks, calendar, announcements, secure documents, KPIs/reviews, and timesheets-derived working hours. Payroll, leave, expenses, and attendance clock-in/out remain excluded.
+- Owner/Admin/HR can manage employee operational records; an active employee can read the internal directory, update their assigned task state, complete their onboarding, manage their own calendar/documents/timesheets, and read only their own HR performance records.
+- Staging OAuth verification exposed an exact-path allow-list gap: Google returned to the Production site instead of `staging.reidpro.com/workspace`. Auth redirect configuration now includes exact Profile, Dashboard, and Workspace paths for Production/Staging plus preview/local wildcards; retest after `supabase config push`.
+- Auth redirect configuration was pushed and the second Google test returned correctly to `https://staging.reidpro.com/dashboard`; Owner navigation into `/workspace` passed with all employee modules visible.
+- Live Staging writes passed for an onboarding item plus completion, an assigned task plus status update, a company calendar event, a bilingual announcement, a KPI, a performance review, and a 90-minute timesheet displayed as `1h 30m`. Records are clearly labeled `Staging` for audit visibility.
+- Added migration `202609030002_employee_notifications.sql` and a Workspace notification center: task, onboarding, KPI, and announcement inserts notify the affected active employee; users can mark only their own notifications read.
+- Private document upload could not be executed through Chrome because the ChatGPT extension lacks local-file access. The bucket, metadata RLS, signed URL UI, accepted MIME types, and size boundary exist, but upload/download remains an explicit Staging verification item.
+
 ### 2026-09-02 critical V1 implementation verification
 
 - `npm run check`: pass; 5 tests, TypeScript build, and Vite production build.
