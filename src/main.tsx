@@ -190,7 +190,7 @@ function Login({
     if (!supabase) return;
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${location.origin}/profile` },
+      options: { redirectTo: `${location.origin}/dashboard` },
     });
     if (error) setMessage(error.message);
   };
@@ -623,7 +623,9 @@ function Dashboard({
       people,
       leads,
       notices,
-      companyAccounts,
+      companyProfiles,
+      companyRoles,
+      companyControls,
     ] = await Promise.all([
       supabase
         .from("agents")
@@ -656,16 +658,34 @@ function Dashboard({
         .limit(8),
       supabase
         .from("profiles")
-        .select(
-          "id,full_name,email,department,position,user_roles(role),account_controls(status,reason)",
-        )
+        .select("id,full_name,email,department,position")
         .order("full_name"),
+      supabase.from("user_roles").select("user_id,role"),
+      supabase.from("account_controls").select("user_id,status,reason"),
     ]);
     setAgents((a.data || []) as Agent[]);
     setApps((p.data || []) as Application[]);
     setFailedInvites((failed.data || []) as Application[]);
     setNotifications((notices.data || []) as Notification[]);
-    setAccounts((companyAccounts.data || []) as unknown as CompanyAccount[]);
+    const roleRows = (companyRoles.data || []) as {
+      user_id: string;
+      role: string;
+    }[];
+    const controlRows = (companyControls.data || []) as {
+      user_id: string;
+      status: string;
+      reason: string | null;
+    }[];
+    setAccounts(
+      (companyProfiles.data || []).map((account) => ({
+        ...account,
+        user_roles: roleRows
+          .filter(({ user_id }) => user_id === account.id)
+          .map(({ role }) => ({ role })),
+        account_controls:
+          controlRows.find(({ user_id }) => user_id === account.id) || null,
+      })) as CompanyAccount[],
+    );
     setCounts([
       projects.count || 0,
       tasks.count || 0,
