@@ -9,4 +9,6 @@ Approved account → role-aware `/workspace` → employee directory/profile → 
 
 New task/onboarding/KPI/company announcement → database trigger → employee-owned notification → Realtime Workspace feed → employee marks read. Notification policies prevent one employee from reading or updating another employee's feed.
 
+Admin creates one of five project types → assigns manager and initial manager membership → manager adds members/client/budget/GitHub → Kanban tasks, milestones, meetings, KPIs and private files → project activity feed plus security audit. Archive hides the project from the active directory without deleting its history. Project membership gates all reads; file metadata and Storage independently enforce restricted-file grants.
+
 Agent goal → policy check → task/run → allow-listed tool → approval when required → audit → KPI/report. Weekly executive report is emailed; daily remains in the dashboard.

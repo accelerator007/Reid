@@ -1,5 +1,5 @@
 begin;
-select plan(22);
+select plan(28);
 select has_table('public', 'applications');
 select has_table('public', 'audit_logs');
 select has_table('public', 'notifications');
@@ -22,5 +22,11 @@ select has_column('public', 'profiles', 'employment_status');
 select results_eq($$select public.has_role('employee')$$, $$values(false)$$, 'anonymous caller has no employee role');
 select results_eq($$select public.is_account_active()$$, $$values(false)$$, 'anonymous caller is not an active employee');
 select results_eq($$select public from storage.buckets where id='employee-documents'$$, $$values(false)$$, 'employee documents bucket is private');
+select has_table('public', 'project_milestones');
+select has_table('public', 'project_meetings');
+select has_table('public', 'project_kpis');
+select has_table('public', 'project_files');
+select has_table('public', 'project_file_permissions');
+select has_table('public', 'project_activity');
 select * from finish();
 rollback;
