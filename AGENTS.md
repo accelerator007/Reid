@@ -280,6 +280,16 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - Employee V1 was released through owner Production PR `#36`; Cloudflare Worker version `d4b5b7fa-7896-4f11-8f74-b45d6fa0109e` is live. Authenticated Production verification at `/workspace` passed with the Owner identity, employee count, open-task count, 100% onboarding, `1h 30m` working hours, announcement, and calendar data.
 - Post-release notification verification passed on Staging: a bilingual company announcement generated an employee-owned notification, the Workspace displayed it, and mark-read reduced the unread counter. Test operational records are intentionally labeled `Staging` and remain auditable.
 
+### 2026-09-03 project workspace implementation
+
+- Work is active on `feature/project-workspace-v1`; do not present Projects V1 as Production-ready before migration, CI, authenticated Staging workflows, and the Production PR pass.
+- Migration `202609030003_project_workspace.sql` extends projects with lifecycle, client, budget/currency, dates, archive and GitHub fields; adds milestones, meetings, KPIs, private file metadata and explicit user/role file permissions, activity feed, RLS helpers, audit triggers, notifications-ready task assignments, Realtime, and the private `project-files` bucket.
+- Added bilingual `/projects` and `/projects/:id` routes. The project directory supports all five types and archived filtering; each project has its own dashboard, team/manager controls, settings, Kanban, milestones, meetings, files, KPIs, activity and GitHub link.
+- Project access is scoped by Admin, project manager/lead, or membership. Managers control the project and team; ordinary members can read project data and only use permissions granted by task/file policies. Restricted files require an explicit user/role grant in addition to project membership.
+- Restricted-file controls now let a project manager grant and revoke read or read/write access per user, or read access per company role, directly from the project dashboard. `/projects` was also added to the Worker SPA allow-list while unknown routes retain edge 404 behavior.
+- Validation caught and corrected two permission-model mismatches before migration: permission rows now have stable UUIDs for safe revocation, each grant records the authenticated granter, and role choices exactly match the database enum.
+- Local verification passed: 10 Vitest checks, the TypeScript/Vite Production build, and 7 Chromium workflows including anonymous denial for `/projects` and `/projects/:id`. The linked migration dry run lists only `202609030003`, remote schema lint reports no errors, and the migration has not yet been applied pending PR/CI validation.
+
 ### 2026-09-02 critical V1 implementation verification
 
 - `npm run check`: pass; 5 tests, TypeScript build, and Vite production build.
