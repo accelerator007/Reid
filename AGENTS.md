@@ -266,6 +266,13 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - Final authenticated browser verification passed on `https://reidpro.com/dashboard`: `Ali Alajmi / alialajmi524@gmail.com` appears as an active `owner`; Owner role removal, self-suspension, and role-add controls are disabled by design. The synthetic `Reid E2E Test` application remains pending for a deliberate decision test.
 - Remaining deployment gap: permanent GitHub-to-Production Worker automation needs a scoped Cloudflare API token stored as a GitHub Actions secret. Creating that persistent credential requires explicit action-time authorization; until then Production deployment is manual.
 
+### 2026-09-03 employee workspace implementation
+
+- Work is active on `feature/employee-workspace-v1`; do not present this module as Production-ready until migration, authenticated role tests, Staging, and the release PR pass.
+- Added migration `202609030001_employee_workspace.sql` for departments, profile employment fields, onboarding, calendar, announcements, private employee-document metadata/storage, KPIs, performance reviews, task writes, audit triggers, RLS, and Realtime feeds.
+- Added the bilingual `/workspace` application route with role-aware navigation, company directory and individual employee view, onboarding checklist, assigned tasks, calendar, announcements, secure documents, KPIs/reviews, and timesheets-derived working hours. Payroll, leave, expenses, and attendance clock-in/out remain excluded.
+- Owner/Admin/HR can manage employee operational records; an active employee can read the internal directory, update their assigned task state, complete their onboarding, manage their own calendar/documents/timesheets, and read only their own HR performance records.
+
 ### 2026-09-02 critical V1 implementation verification
 
 - `npm run check`: pass; 5 tests, TypeScript build, and Vite production build.
