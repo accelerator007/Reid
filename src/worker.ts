@@ -1,4 +1,4 @@
-const appRoutes = new Set(['/login', '/apply', '/profile', '/dashboard', '/privacy'])
+const appRoutes = new Set(['/login', '/apply', '/profile', '/dashboard', '/workspace', '/privacy'])
 
 type WorkerEnvironment = {
   ASSETS: { fetch(request: Request): Promise<Response> }

@@ -1,5 +1,5 @@
 begin;
-select plan(10);
+select plan(22);
 select has_table('public', 'applications');
 select has_table('public', 'audit_logs');
 select has_table('public', 'notifications');
@@ -10,5 +10,17 @@ select has_function('public', 'decide_application', array['uuid','application_st
 select results_eq($$select model from public.agents where id='ceo'$$, $$values('gemma4:12b'::text)$$);
 select results_eq($$select public.has_role('owner')$$, $$values(false)$$, 'anonymous caller has no owner role');
 select results_eq($$select public.is_admin()$$, $$values(false)$$, 'anonymous caller is not admin');
+select has_table('public', 'departments');
+select has_table('public', 'onboarding_items');
+select has_table('public', 'calendar_events');
+select has_table('public', 'announcements');
+select has_table('public', 'employee_documents');
+select has_table('public', 'employee_kpis');
+select has_table('public', 'performance_reviews');
+select has_column('public', 'profiles', 'department_id');
+select has_column('public', 'profiles', 'employment_status');
+select results_eq($$select public.has_role('employee')$$, $$values(false)$$, 'anonymous caller has no employee role');
+select results_eq($$select public.is_account_active()$$, $$values(false)$$, 'anonymous caller is not an active employee');
+select results_eq($$select public from storage.buckets where id='employee-documents'$$, $$values(false)$$, 'employee documents bucket is private');
 select * from finish();
 rollback;
