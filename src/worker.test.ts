@@ -48,6 +48,16 @@ describe('Cloudflare application routing', () => {
     expect(await response.text()).toContain('Reid')
   })
 
+  it('serves a dynamic project dashboard through the app shell', async () => {
+    const response = await worker.fetch(
+      new Request('https://reidpro.com/projects/00000000-0000-0000-0000-000000000001'),
+      { ASSETS: createAssets() },
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain('Reid')
+  })
+
   it('redirects the legacy privacy URL to the canonical route', async () => {
     const response = await worker.fetch(
       new Request('https://reidpro.com/privacy.html'),

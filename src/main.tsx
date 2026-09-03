@@ -4,6 +4,7 @@ import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { installIdleTimeout } from "./session";
 import { EmployeeWorkspace } from "./employee";
+import { ProjectWorkspace } from "./projects";
 import "./style.css";
 import "./auth.css";
 import "./profile.css";
@@ -17,6 +18,7 @@ type Page =
   | "login"
   | "profile"
   | "workspace"
+  | "projects"
   | "privacy"
   | "not-found";
 type ProfileData = {
@@ -91,6 +93,7 @@ const tr = {
     platform: "منصة عمل موحّدة",
     account: "حسابي",
     workspace: "مساحة العمل",
+    projects: "المشاريع",
   },
   en: {
     brand: "Reid",
@@ -106,6 +109,7 @@ const tr = {
     platform: "One unified workspace",
     account: "My profile",
     workspace: "Workspace",
+    projects: "Projects",
   },
 };
 const routes: Record<string, Page> = {
@@ -114,6 +118,7 @@ const routes: Record<string, Page> = {
   "/apply": "apply",
   "/profile": "profile",
   "/workspace": "workspace",
+  "/projects": "projects",
   "/dashboard": "dashboard",
   "/privacy": "privacy",
 };
@@ -123,19 +128,22 @@ const paths: Record<Page, string> = {
   apply: "/apply",
   profile: "/profile",
   workspace: "/workspace",
+  projects: "/projects",
   dashboard: "/dashboard",
   privacy: "/privacy",
   "not-found": "/404",
 };
+function resolvePage(pathname: string): Page {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  if (normalized.startsWith("/projects/")) return "projects";
+  return routes[normalized] || "not-found";
+}
 function useRoute() {
   const [page, setPage] = React.useState<Page>(
-    routes[location.pathname.replace(/\/+$/, "") || "/"] || "not-found",
+    resolvePage(location.pathname),
   );
   React.useEffect(() => {
-    const f = () =>
-      setPage(
-        routes[location.pathname.replace(/\/+$/, "") || "/"] || "not-found",
-      );
+    const f = () => setPage(resolvePage(location.pathname));
     addEventListener("popstate", f);
     return () => removeEventListener("popstate", f);
   }, []);
@@ -1347,6 +1355,9 @@ function App() {
           {session && (
             <button onClick={() => go("workspace")}>{t.workspace}</button>
           )}
+          {session && (
+            <button onClick={() => go("projects")}>{t.projects}</button>
+          )}
           <button
             className="pill"
             onClick={() => go(session ? "profile" : "login")}
@@ -1458,6 +1469,16 @@ function App() {
           <Login
             lang={lang}
             done={() => go("workspace")}
+            apply={() => go("apply")}
+          />
+        ))}{" "}
+      {page === "projects" &&
+        (session?.user ? (
+          <ProjectWorkspace lang={lang} user={session.user} />
+        ) : (
+          <Login
+            lang={lang}
+            done={() => go("projects")}
             apply={() => go("apply")}
           />
         ))}{" "}
