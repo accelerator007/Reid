@@ -280,6 +280,14 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - Employee V1 was released through owner Production PR `#36`; Cloudflare Worker version `d4b5b7fa-7896-4f11-8f74-b45d6fa0109e` is live. Authenticated Production verification at `/workspace` passed with the Owner identity, employee count, open-task count, 100% onboarding, `1h 30m` working hours, announcement, and calendar data.
 - Post-release notification verification passed on Staging: a bilingual company announcement generated an employee-owned notification, the Workspace displayed it, and mark-read reduced the unread counter. Test operational records are intentionally labeled `Staging` and remain auditable.
 
+### 2026-09-03 accounts and employees completion
+
+- Work is active on `feature/accounts-employees-completion`; do not claim final completion until separate Employee, HR, and department-manager sessions pass remote RLS tests and the release reaches Production.
+- Added migration `202609030005_department_manager_scope.sql`. Department managers gain operational access only to direct reports' onboarding, tasks, private calendar items, KPIs, performance reviews, and timesheet summaries. HR documents, account controls, roles, company announcements, and department administration remain Owner/Admin/HR-only.
+- The Workspace UI now derives manager authority from `departments.manager_id`, scopes rows to the selected direct report, exposes operational forms only for authorized staff/managers, and prevents ordinary employees from showing an upload form for another employee.
+- Current provider constraint: Cloudflare Email Sending Beta requires a paid Workers plan for arbitrary recipients; the free Email Routing path can send only to verified destination addresses. Supabase's default SMTP is non-production and restricts recipients, so reliable applicant Magic Links still require custom SMTP credentials or an approved paid sending service.
+- Local verification passed: 10 Vitest checks, the TypeScript/Vite Production build, 7 Chromium public workflows, `git diff --check`, and a linked Supabase dry run listing only migration `202609030005`.
+
 ### 2026-09-03 project workspace implementation
 
 - Work is active on `feature/project-workspace-v1`; do not present Projects V1 as Production-ready before migration, CI, authenticated Staging workflows, and the Production PR pass.
