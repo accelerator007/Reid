@@ -287,6 +287,9 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - The Workspace UI derives manager authority from `departments.manager_id`, scopes rows to the selected direct report, exposes operational forms only for authorized staff/managers, and prevents ordinary employees from showing an upload form for another employee.
 - Cloudflare Email Sending Beta requires a paid Workers plan for arbitrary recipients; the free Email Routing path can send only to verified destinations. Supabase default SMTP is restricted and non-production, so applicant Magic Links require custom SMTP credentials or an approved paid sending service.
 - Local verification passed on the first implementation: 10 Vitest checks, Production build, 7 Chromium public workflows, and linked migration dry run. The branch was rebuilt from current `develop` after resolving squash-history conflicts without replacing prior project work.
+- PR `#44` passed CI and Cloudflare Pages and was merged into `develop`; migration `202609030005` was applied to Production Supabase and the remote schema lint is clean.
+- Email authentication was found disabled in the live project and was explicitly enabled on 2026-09-03. Public self-signup remains disabled by design because accounts are issued only after an approved application; Email+Password and Magic Link are now available to issued users.
+- The first separate-role remote test passed employee sign-in/timesheet creation and manager direct-report timesheet visibility, then correctly stopped on a real RLS mismatch: PostgREST could not return a manager-created task because the task SELECT policy omitted department managers. Migration `202609030006_manager_task_visibility.sql` adds manager/HR task visibility; it must be applied and the complete remote suite repeated before completion is claimed.
 
 ### 2026-09-03 project workspace implementation
 
