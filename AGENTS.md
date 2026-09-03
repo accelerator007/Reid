@@ -255,6 +255,15 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - Approved accounts can request a Magic Link or password recovery without creating a new user (`shouldCreateUser: false`), and invited users can set an 8+ character password from their authenticated Profile.
 - Arabic source templates for invite, Magic Link, recovery and confirmation are stored under `supabase/templates/`. Supabase refused hosted template activation on the Free plan with its default provider; activation requires custom SMTP or a paid plan. Existing remote confirmation, OTP length, MFA, redirects and Storage settings were preserved during config synchronization.
 
+### 2026-09-03 Production account workflow release
+
+- Released secure application review and account lifecycle management to Production through owner-approved PR `#26`; CI, build, Playwright, and Cloudflare Staging checks passed before merge.
+- Production is served by the `reid` Worker rather than the `reid-staging` Pages project. The Git merge did not start a Worker build, so version `414f6037-1049-47c6-8690-521b5ff1980a` was deployed manually with the Supabase publishable client key and no service-role secret in the browser bundle.
+- Live Owner verification for `alialajmi524@gmail.com` passed: the session resolves the `owner` role, `/dashboard` opens the Company Command Center, one pending synthetic application is visible, and Admin/HR review data is protected behind authentication.
+- Corrected Google/Microsoft/GitHub OAuth return routing to `/dashboard`. Profile remains available through `حسابي / My profile`.
+- Corrected the Owner account directory loader to fetch profiles, roles, and account controls independently and join them client-side. This avoids a PostgREST embedded-relationship failure that silently rendered an empty account list.
+- Remaining deployment gap: permanent GitHub-to-Production Worker automation needs a scoped Cloudflare API token stored as a GitHub Actions secret. Creating that persistent credential requires explicit action-time authorization; until then Production deployment is manual.
+
 ### 2026-09-02 critical V1 implementation verification
 
 - `npm run check`: pass; 5 tests, TypeScript build, and Vite production build.
