@@ -277,6 +277,8 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - Live Staging writes passed for an onboarding item plus completion, an assigned task plus status update, a company calendar event, a bilingual announcement, a KPI, a performance review, and a 90-minute timesheet displayed as `1h 30m`. Records are clearly labeled `Staging` for audit visibility.
 - Added migration `202609030002_employee_notifications.sql` and a Workspace notification center: task, onboarding, KPI, and announcement inserts notify the affected active employee; users can mark only their own notifications read.
 - Private document upload could not be executed through Chrome because the ChatGPT extension lacks local-file access. The bucket, metadata RLS, signed URL UI, accepted MIME types, and size boundary exist, but upload/download remains an explicit Staging verification item.
+- Employee V1 was released through owner Production PR `#36`; Cloudflare Worker version `d4b5b7fa-7896-4f11-8f74-b45d6fa0109e` is live. Authenticated Production verification at `/workspace` passed with the Owner identity, employee count, open-task count, 100% onboarding, `1h 30m` working hours, announcement, and calendar data.
+- Post-release notification verification passed on Staging: a bilingual company announcement generated an employee-owned notification, the Workspace displayed it, and mark-read reduced the unread counter. Test operational records are intentionally labeled `Staging` and remain auditable.
 
 ### 2026-09-02 critical V1 implementation verification
 
