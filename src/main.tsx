@@ -606,6 +606,9 @@ function Dashboard({
     [counts, setCounts] = React.useState([0, 0, 0, 0, 0]),
     [message, setMessage] = React.useState(""),
     [reviewing, setReviewing] = React.useState<Application | null>(null),
+    [suggestedDecision, setSuggestedDecision] = React.useState<
+      "approved" | "rejected" | null
+    >(null),
     [rejectReason, setRejectReason] = React.useState(""),
     [busyDecision, setBusyDecision] = React.useState(false);
   const allowed = roles.some((x) =>
@@ -712,10 +715,19 @@ function Dashboard({
     refresh();
   }, [refresh]);
   React.useEffect(() => {
-    const requested = new URLSearchParams(location.search).get("review");
+    const params = new URLSearchParams(location.search);
+    const requested = params.get("review");
     if (!requested || reviewing) return;
     const application = apps.find(({ id }) => id === requested);
-    if (application) setReviewing(application);
+    if (application) {
+      const requestedDecision = params.get("decision");
+      setSuggestedDecision(
+        requestedDecision === "approved" || requestedDecision === "rejected"
+          ? requestedDecision
+          : null,
+      );
+      setReviewing(application);
+    }
   }, [apps, reviewing]);
   React.useEffect(() => {
     if (!supabase || !user || !allowed) return;
@@ -1093,6 +1105,13 @@ function Dashboard({
                 ×
               </button>
             </header>
+            {suggestedDecision && (
+              <p className="notice">
+                {lang === "ar"
+                  ? `فُتح هذا الطلب من رابط ${suggestedDecision === "approved" ? "القبول" : "الرفض"} في البريد. راجع البيانات ثم أكّد القرار يدويًا.`
+                  : `This request was opened from the email ${suggestedDecision === "approved" ? "approval" : "rejection"} link. Review it and confirm manually.`}
+              </p>
+            )}
             <dl>
               <div>
                 <dt>{lang === "ar" ? "البريد" : "Email"}</dt>
@@ -1177,12 +1196,14 @@ function Dashboard({
                 className="primary"
                 disabled={busyDecision}
                 onClick={() => decide(reviewing, "approved")}
+                data-email-suggestion={suggestedDecision === "approved"}
               >
                 {lang === "ar" ? "قبول وإرسال الدعوة" : "Approve and invite"}
               </button>
               <button
                 disabled={busyDecision || !rejectReason.trim()}
                 onClick={() => decide(reviewing, "rejected")}
+                data-email-suggestion={suggestedDecision === "rejected"}
               >
                 {lang === "ar" ? "رفض الطلب" : "Reject application"}
               </button>
