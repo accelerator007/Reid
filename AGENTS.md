@@ -219,6 +219,12 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 
 ## Verification log
 
+### 2026-09-04 Reid brand mark
+
+- Replaced the temporary header `R` tile and legacy COR-era triangular favicon with the Owner-provided Reid rising-bars brand mark.
+- Added a compact transparent SVG reproduction of the supplied artwork so the mark remains sharp at favicon, mobile-header, desktop, light-mode, and dark-mode sizes. The bilingual wordmark remains `ريّد` in Arabic and `Reid` in English.
+- The supplied PNG remains external source artwork and was not committed with its large transparent canvas; `assets/img/reid-logo.svg` is the web-ready canonical mark.
+
 ### 2026-09-02 Dashboard route hotfix
 
 - Confirmed the Production account `alialajmi524@gmail.com` already has the `Owner` role; the failure to open Admin was not an RBAC assignment problem.
