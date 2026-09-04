@@ -30,7 +30,8 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Production hosting: Cloudflare Worker `reid` with static assets, Git-connected to `main`, custom domain `reidpro.com`.
 - Staging hosting: Cloudflare Pages project `reid-staging`, Git-connected to `develop`, custom domain `staging.reidpro.com`.
 - Branches: `feature/*` -> PR to `develop` -> verified PR to `main`.
-- Local AI: Ollama on `ai-lap`, model name verified as `gemma4:12b`. The host was offline during the 2026-09-02 audit; never claim live AI integration until it is retested.
+- Model providers are rows in `llm_providers`, not hard-coded hosts. `ollama` (local, `ai-lap`) is the preferred provider and ships disabled; `gemini` (external, Google Gemini API) is enabled as the temporary substitute while `ai-lap` is offline.
+- Local AI: Ollama on `ai-lap`. The host was offline during the 2026-09-02 audit; never claim live AI integration until it is retested. The recorded model name `gemma4:12b` does not match any published Gemma release and must be re-verified on the host before the local provider is enabled.
 
 ## Critical paths
 
@@ -38,6 +39,8 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Supabase browser client: `src/supabase.ts`.
 - Authorization policy helpers: `src/policy.ts`.
 - UI styling: `src/style.css`, `src/auth.css`, `src/profile.css`.
+- Agent gateway Edge Function: `supabase/functions/llm-gateway/index.ts`.
+- Agent gateway client and policy: `src/agents.ts`, `src/agent-command.tsx`.
 - Database migrations: `supabase/migrations/`.
 - Database pgTAP draft: `supabase/tests/rls.sql`.
 - CI: `.github/workflows/ci.yml`.
@@ -52,6 +55,8 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Enable and test RLS before exposing a table to the client.
 - HR files/CVs are limited to authorized humans and the HR agent. CV scoring must be explainable.
 - Never expose Ollama or port `11434` directly to the internet.
+- Model provider credentials are Edge Function secrets only. Never place a provider key in a `VITE_*` variable, because those are compiled into the public browser bundle, and never commit one to this public repository.
+- An external model provider may only receive data at or below its `max_classification`. HR, CV, finance, and CRM data are `confidential` or `restricted` and must never leave company control while only an external provider is enabled.
 - Approval levels: L0 read/analyze; L1 drafts/tasks; L2 configurable approval for external publish/email; L3 human approval for hiring/contracts/finance; L4 Owner approval and future MFA for payments/critical deletion.
 - The first Admin/HR decision must atomically finalize an application. Rejection reasons remain internal. Approval sends a Magic Link.
 - Work on `feature/*`. Run checks before PR. Do not push directly to `main`.
@@ -77,11 +82,30 @@ The intended matrix exists in policy/schema form only. End-to-end enforcement is
 
 V1 agents: CEO/Orchestrator, Operations, Marketing, Content/Social, Sales/CRM, Analytics, Knowledge, HR, Finance, Customer Support, Competitor Intelligence. All use `gemma4:12b`, but require different prompts, tools, permissions, and memories. Memory scopes are User, Project, Department, Company, and Agent.
 
-The current Agent Map is a visual mock with hard-coded states. There is no live Ollama gateway, queue, agent execution, pause/replay, latency, token usage, or error stream yet.
+The Agent Map is no longer a visual mock. `supabase/functions/llm-gateway` is the private gateway: it verifies the session, applies `agents_admin_read` RLS, enforces approval levels L0-L4, refuses any run whose data classification exceeds the provider's clearance, rate-limits per caller, and records every attempt in `agent_runs` with latency, token usage, and errors. Prompts are stored only as a SHA-256 hash; answers are kept as a 280-character preview.
+
+Agents carry a data classification, and only those at or below the enabled provider's ceiling start enabled:
+
+| Classification | Agents | Status with Gemini enabled |
+| --- | --- | --- |
+| `public` | Marketing, Content/Social, Competitor Intelligence | enabled |
+| `internal` | Operations, Analytics, Knowledge, Support, CEO/Orchestrator | enabled |
+| `confidential` | Sales/CRM | disabled |
+| `restricted` | HR, Finance | disabled |
+
+The confidential and restricted agents stay disabled until the local `ollama` provider is enabled. This is enforced by the `agent_runs_clearance` trigger in the database, not only by the gateway.
 
 ## Implemented and verified
 
-Last verified: 2026-09-02, Asia/Muscat.
+Last verified: 2026-09-04, Asia/Muscat.
+
+### 2026-09-04 agent gateway (feature branch, not yet deployed)
+
+- Migration `202609040001_agent_gateway.sql` adds `llm_providers`, provider/classification/enabled columns on `agents`, run lifecycle and approval columns on `agent_runs`, the `provider_accepts` clearance function, the `agent_runs_clearance` trigger, the `approve_agent_run` RPC, Owner-only provider writes, and Realtime on `agent_runs`.
+- Edge Function `llm-gateway` dispatches to Gemini or Ollama behind one provider-agnostic interface, so restoring `ai-lap` is a provider row change rather than a rewrite.
+- The dashboard Agent Map is replaced by `AgentCommand`: provider clearance display, manual run, pause/resume, disable/enable, approval decisions for L2+ runs, and a run stream with latency, tokens, output preview, and errors.
+- 7 new unit tests cover the clearance and approval policy; `npm run check` passes with 17 unit tests, TypeScript, and the Vite production build.
+- Not deployed and not executed against a live provider. See the P0 list below.
 
 ### 2026-09-02 critical V1 implementation (feature branch)
 
@@ -158,6 +182,9 @@ Last verified: 2026-09-02, Asia/Muscat.
 12. Security headers are now emitted from `public/_headers`; Production header verification remains required because Worker static-asset handling may differ from Pages.
 13. Owner-only Production merging is not fully enforced. Collaborator `sheikhaalmamari4-cyber` currently has `write` permission, and main protection requires zero approvals; a writer could merge a passing PR.
 14. A Google OAuth client secret appeared in an automation tool transcript during setup. It is not committed to Git, but it should be rotated and the replacement stored only in Supabase after explicit credential-rotation confirmation.
+15. A Gemini API key was pasted into an assistant transcript on 2026-09-04. The Owner accepted the exposure and asked for it to be applied. It is stored only in the gitignored `.dev.vars` and was never committed. It must be rotated, and the replacement set with `supabase secrets set GEMINI_API_KEY=...` only.
+16. The Gemini account tier is unconfirmed. Free-tier Gemini API content may be reused to improve Google products, so `llm_providers.gemini.max_classification` must stay at `internal` until a paid tier is confirmed and the Owner records the decision.
+17. Migration `202609040001_agent_gateway.sql` and the `llm-gateway` function have not been applied or deployed to Staging or Production, and no agent run has executed against a live provider. Latency, token accounting, and the approval path are untested against real traffic.
 
 ### P1 — core modules are schema/mock only
 
@@ -168,10 +195,11 @@ Last verified: 2026-09-02, Asia/Muscat.
 - No working CRM UI, lead pipeline, Sales permissions E2E, or Sales agent.
 - CV Storage, three Realtime tables, and the decision Edge Function are deployed. Project, research, HR, and avatar buckets/policies are still missing.
 - RAG/Knowledge Agent, Google Drive synchronization, embeddings pipeline, and document ACL filtering are not implemented.
-- No Operations/HR/Finance/Marketing/Support/Analytics/Competitor agent execution.
+- Agent execution, admin controls, and the private gateway are implemented on the feature branch but not deployed, so no agent has completed a real run yet.
 - No daily/weekly executive report generation or weekly email delivery.
-- No live admin controls for pause, disable, manual run, failed-task replay, queues, logs, tools, memory, KPIs, latency, or token usage.
-- No private gateway between Cloudflare/Supabase and `ai-lap`; `ai-lap` was offline during the latest audit.
+- Tool allow-lists, per-agent system prompts, and memory-scope retrieval are not implemented; the gateway currently passes the caller's text straight through.
+- No queue worker: L2+ runs stop at `pending_approval` and an approved run is not automatically dispatched afterwards.
+- `ai-lap` was offline during the latest audit, so the local provider remains disabled and unverified.
 
 ### P2 — quality and operations
 
@@ -212,12 +240,23 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 
 ### Phase 3 — AI agents
 
-1. Resume only when `ai-lap` is online; re-verify GPU/RAM, Ollama health, network reachability, and the exact installed model. Do not expose Ollama publicly.
-2. Build a private authenticated gateway, queue, tool allow-lists, approval engine L0-L4, memory scopes, audit, pause/disable/manual run/replay, usage, latency, logs, and errors.
-3. Activate agents incrementally: Knowledge/RAG first, then Operations/HR/Sales/Analytics, then the remaining V1 agents and CEO orchestration.
-4. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
+1. Deploy the agent gateway to Staging, run the `public` and `internal` agents end to end, and verify audit rows, latency, token accounting, rate limiting, and the L2+ approval path with a real Owner session.
+2. Add the queue worker that dispatches an approved L2+ run, plus tool allow-lists, per-agent system prompts, and memory-scope retrieval.
+3. Enable the local provider only when `ai-lap` is online; re-verify GPU/RAM, Ollama health, network reachability, and the exact installed model, then raise the confidential and restricted agents onto it. Do not expose Ollama publicly.
+4. Activate agents incrementally: Knowledge/RAG first, then Operations/Analytics/Support, then Sales and HR once the local provider carries them, then CEO orchestration.
+5. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
 
 ## Verification log
+
+### 2026-09-04 agent gateway implementation
+
+- Implemented the Phase 3 gateway on `claude/agent-plan-7v3s5l` with Gemini as the temporary provider while `ai-lap` is offline.
+- `npm run check` passed locally: 17 unit tests across 4 files, `tsc -b`, and the Vite production build (256.41 kB JS, 22.03 kB CSS).
+- 7 Chromium E2E public-flow tests passed. The container's preinstalled browser build did not match the pinned Playwright version, so the run used a locally linked Chromium; GitHub CI installs its own and is unaffected.
+- `npm audit --audit-level=high` reported 0 vulnerabilities.
+- pgTAP grew from 28 to 36 checks, including `provider_accepts('gemini','restricted') = false` and the HR agent staying disabled. These checks are still not executed by GitHub CI, so they remain unverified against a real database.
+- Not verified: the migration was not applied, the Edge Function was not deployed, and no request reached Google. The Supabase CLI, Deno, and project credentials were unavailable in the working environment.
+- The Gemini key supplied by the Owner was written only to the gitignored `.dev.vars`. Nothing containing it was committed.
 
 ### 2026-09-04 Reid brand mark
 

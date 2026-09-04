@@ -5,11 +5,13 @@ import { supabase } from "./supabase";
 import { installIdleTimeout } from "./session";
 import { EmployeeWorkspace } from "./employee";
 import { ProjectWorkspace } from "./projects";
+import { AgentCommand } from "./agent-command";
 import "./style.css";
 import "./brand.css";
 import "./auth.css";
 import "./profile.css";
 import "./workflow.css";
+import "./agents.css";
 
 type Lang = "ar" | "en";
 type Page =
@@ -30,14 +32,6 @@ type ProfileData = {
   linkedin_url: string;
   github_url: string;
   bio: string;
-};
-type Agent = {
-  id: string;
-  name: string;
-  status: string;
-  model: string;
-  host: string;
-  approval_level: number;
 };
 type Application = {
   id: string;
@@ -598,7 +592,6 @@ function Dashboard({
   profile: () => void;
 }) {
   const [roles, setRoles] = React.useState<string[]>([]),
-    [agents, setAgents] = React.useState<Agent[]>([]),
     [apps, setApps] = React.useState<Application[]>([]),
     [failedInvites, setFailedInvites] = React.useState<Application[]>([]),
     [accounts, setAccounts] = React.useState<CompanyAccount[]>([]),
@@ -633,7 +626,6 @@ function Dashboard({
     if (!next.some((x) => ["owner", "super_admin", "admin", "hr"].includes(x)))
       return;
     const [
-      a,
       p,
       failed,
       projects,
@@ -645,9 +637,6 @@ function Dashboard({
       companyRoles,
       companyControls,
     ] = await Promise.all([
-      supabase
-        .from("agents")
-        .select("id,name,status,model,host,approval_level"),
       supabase
         .from("applications")
         .select(
@@ -681,7 +670,6 @@ function Dashboard({
       supabase.from("user_roles").select("user_id,role"),
       supabase.from("account_controls").select("user_id,status,reason"),
     ]);
-    setAgents((a.data || []) as Agent[]);
     setApps((p.data || []) as Application[]);
     setFailedInvites((failed.data || []) as Application[]);
     setNotifications((notices.data || []) as Notification[]);
@@ -1212,21 +1200,7 @@ function Dashboard({
           </section>
         </div>
       )}
-      <h2>{lang === "ar" ? "الوكلاء" : "Agents"}</h2>
-      <section className="grid">
-        {agents.map((a) => (
-          <article key={a.id} className={"agent " + a.status}>
-            <i>R</i>
-            <b>{a.name}</b>
-            <small>
-              {a.status} · {a.model}
-            </small>
-            <small>
-              L{a.approval_level} · {a.host}
-            </small>
-          </article>
-        ))}
-      </section>
+      <AgentCommand lang={lang} />
     </main>
   );
 }

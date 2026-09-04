@@ -1,0 +1,86 @@
+/* Agent Command: provider clearance, roster controls, and the run stream. */
+.agent-command h3 {
+  margin: 1.5rem 0 0.5rem;
+}
+.agent-command .provider-list,
+.agent-command .run-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.agent-command .provider-list li,
+.agent-command .run-list li {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line, rgba(128, 128, 128, 0.3));
+  border-radius: 12px;
+}
+.agent-command .provider-list li[data-enabled="false"] {
+  opacity: 0.55;
+}
+.agent-command .provider-list li[data-kind="external"] {
+  border-inline-start: 3px solid #b45309;
+}
+.agent-command .provider-list li[data-kind="local"] {
+  border-inline-start: 3px solid #15803d;
+}
+.agent-command .agent[data-enabled="false"] {
+  opacity: 0.6;
+}
+.agent-command .agent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+.agent-command .agent-actions button,
+.agent-command .agent-run button {
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.agent-command .agent-actions button:disabled,
+.agent-command .agent-run button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.agent-command .agent-run {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.agent-command .agent-run textarea {
+  width: 100%;
+  border-radius: 10px;
+  padding: 0.5rem;
+  font: inherit;
+}
+.agent-command .warn {
+  color: #b45309;
+}
+.agent-command .preview {
+  opacity: 0.8;
+  white-space: pre-wrap;
+}
+.agent-command .agent-output {
+  white-space: pre-wrap;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: rgba(124, 58, 237, 0.08);
+}
+.agent-command .run-list li[data-state="failed"] {
+  border-color: #b91c1c;
+}
+.agent-command .run-list li[data-state="pending_approval"] {
+  border-color: #b45309;
+}
+@media (max-width: 640px) {
+  .agent-command .agent-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
