@@ -31,7 +31,7 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Staging hosting: Cloudflare Pages project `reid-staging`, Git-connected to `develop`, custom domain `staging.reidpro.com`.
 - Branches: `feature/*` -> PR to `develop` -> verified PR to `main`.
 - Model providers are rows in `llm_providers`, not hard-coded hosts. `ollama` (local, `ai-lap`) is the preferred provider and ships disabled; `gemini` (external, Google Gemini API) is enabled as the temporary substitute while `ai-lap` is offline.
-- Local AI: Ollama on `ai-lap`. The host was offline during the 2026-09-02 audit; never claim live AI integration until it is retested. The recorded model name `gemma4:12b` does not match any published Gemma release and must be re-verified on the host before the local provider is enabled.
+- Local AI: Ollama on `ai-lap`. The host was offline during the 2026-09-02 audit; never claim live AI integration until it is retested. The Gemma 4 family exists (the Gemini API lists `gemma-4-26b-a4b-it` and `gemma-4-31b-it`), but the exact `gemma4:12b` Ollama tag must be confirmed on the host before the local provider is enabled.
 
 ## Critical paths
 
@@ -80,7 +80,7 @@ The intended matrix exists in policy/schema form only. End-to-end enforcement is
 
 ## Agents
 
-V1 agents: CEO/Orchestrator, Operations, Marketing, Content/Social, Sales/CRM, Analytics, Knowledge, HR, Finance, Customer Support, Competitor Intelligence. All use `gemma4:12b`, but require different prompts, tools, permissions, and memories. Memory scopes are User, Project, Department, Company, and Agent.
+V1 agents: CEO/Orchestrator, Operations, Marketing, Content/Social, Sales/CRM, Analytics, Knowledge, HR, Finance, Customer Support, Competitor Intelligence. Each resolves its model from its provider row rather than a hard-coded name, but they require different prompts, tools, permissions, and memories. Memory scopes are User, Project, Department, Company, and Agent.
 
 The Agent Map is no longer a visual mock. `supabase/functions/llm-gateway` is the private gateway: it verifies the session, applies `agents_admin_read` RLS, enforces approval levels L0-L4, refuses any run whose data classification exceeds the provider's clearance, rate-limits per caller, and records every attempt in `agent_runs` with latency, token usage, and errors. Prompts are stored only as a SHA-256 hash; answers are kept as a 280-character preview.
 
@@ -184,7 +184,8 @@ Last verified: 2026-09-04, Asia/Muscat.
 14. A Google OAuth client secret appeared in an automation tool transcript during setup. It is not committed to Git, but it should be rotated and the replacement stored only in Supabase after explicit credential-rotation confirmation.
 15. A Gemini API key was pasted into an assistant transcript on 2026-09-04. The Owner accepted the exposure and asked for it to be applied. It is stored only in the gitignored `.dev.vars` and was never committed. It must be rotated, and the replacement set with `supabase secrets set GEMINI_API_KEY=...` only.
 16. The Gemini account tier is unconfirmed. Free-tier Gemini API content may be reused to improve Google products, so `llm_providers.gemini.max_classification` must stay at `internal` until a paid tier is confirmed and the Owner records the decision.
-17. Migration `202609040001_agent_gateway.sql` and the `llm-gateway` function have not been applied or deployed to Staging or Production, and no agent run has executed against a live provider. Latency, token accounting, and the approval path are untested against real traffic.
+17. Migration `202609040001_agent_gateway.sql` and the `llm-gateway` function have not been applied or deployed to Staging or Production. The provider credential and models are verified live, but nothing has passed through the gateway itself, so RLS, the approval path, rate limiting, and audit rows remain untested end to end.
+18. Model availability on this key is narrower than the API's own model list. `gemini-2.5-flash` and `text-embedding-004` are listed by ListModels but rejected at call time, so a provider row must be verified by a real call, never by the listing.
 
 ### P1 — core modules are schema/mock only
 
@@ -247,6 +248,14 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 5. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
 
 ## Verification log
+
+### 2026-09-04 Gemini provider credential verified
+
+- `ListModels` returned HTTP 200 for the Owner-supplied key: 50 models, so the credential is a valid Gemini API key rather than a short-lived OAuth token.
+- `gemini-2.5-flash` and `text-embedding-004`, the models first written into the migration, are rejected at call time. Generation returns `no longer available to new users`; the embedding model is not found for `embedContent`.
+- Verified working by real calls: `gemini-3.6-flash` (HTTP 200, 92 tokens) and `gemini-3.8-flash` (HTTP 200, 111 tokens) for generation, and `gemini-embedding-001` with `outputDimensionality: 768` (HTTP 200, 768 values), which matches `memories.embedding vector(768)` exactly, so RAG needs no schema change.
+- The provider row now pins `gemini-3.6-flash`. Moving to `gemini-3.8-flash` is a single row update with no code change.
+- Still unverified: the account tier, and every path through the gateway itself.
 
 ### 2026-09-04 agent gateway implementation
 

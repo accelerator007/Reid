@@ -95,7 +95,8 @@ async function embed(provider: Provider, input: string) {
   const response = await fetch(`${provider.endpoint}/models/${provider.embedding_model}:embedContent`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({ content: { parts: [{ text: input }] } }),
+    // memories.embedding is vector(768); this model returns 3072 unless truncated.
+    body: JSON.stringify({ content: { parts: [{ text: input }] }, outputDimensionality: 768 }),
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload?.error?.message || `provider_http_${response.status}`);

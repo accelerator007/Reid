@@ -7,7 +7,7 @@ select col_is_pk('public', 'user_roles', array['user_id','role']);
 select policies_are('public', 'applications', array['applications_first_decision','applications_public_insert','applications_staff_read']);
 select policies_are('public', 'notifications', array['notifications_own_read','notifications_own_update']);
 select has_function('public', 'decide_application', array['uuid','application_status','text']);
-select results_eq($$select model from public.agents where id='ceo'$$, $$values('gemini-2.5-flash'::text)$$, 'agent model mirrors its provider');
+select results_eq($$select model from public.agents where id='ceo'$$, $$values('gemini-3.6-flash'::text)$$, 'agent model mirrors its provider');
 select results_eq($$select public.has_role('owner')$$, $$values(false)$$, 'anonymous caller has no owner role');
 select results_eq($$select public.is_admin()$$, $$values(false)$$, 'anonymous caller is not admin');
 select has_table('public', 'departments');

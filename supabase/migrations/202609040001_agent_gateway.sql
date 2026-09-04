@@ -52,8 +52,8 @@ create table public.llm_providers (
 -- therefore stay unroutable until a local provider is enabled.
 insert into public.llm_providers (id, name, kind, endpoint, chat_model, embedding_model, max_classification, retains_data, enabled, requests_per_hour, notes)
 values
-  ('gemini', 'Google Gemini API', 'external', 'https://generativelanguage.googleapis.com/v1beta', 'gemini-2.5-flash', 'text-embedding-004', 'internal', true, true, 60,
-   'Temporary substitute for ai-lap. Confirm the paid tier before raising max_classification above internal.'),
+  ('gemini', 'Google Gemini API', 'external', 'https://generativelanguage.googleapis.com/v1beta', 'gemini-3.6-flash', 'gemini-embedding-001', 'internal', true, true, 60,
+   'Temporary substitute for ai-lap. Models verified live on 2026-09-04; gemini-2.5-flash is listed by the API but refuses new callers. Confirm the paid tier before raising max_classification above internal.'),
   ('ollama', 'Ollama on ai-lap', 'local', 'http://ai-lap:11434', 'gemma3:12b', 'nomic-embed-text', 'restricted', false, false, 600,
    'Preferred provider. Enable only after the host is online and the installed model name is re-verified.');
 
