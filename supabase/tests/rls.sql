@@ -1,5 +1,5 @@
 begin;
-select plan(36);
+select plan(39);
 select has_table('public', 'applications');
 select has_table('public', 'audit_logs');
 select has_table('public', 'notifications');
@@ -34,7 +34,10 @@ select has_column('public', 'agent_runs', 'approval_state');
 select has_function('public', 'provider_accepts', array['text','data_class']);
 select has_function('public', 'approve_agent_run', array['uuid','approval_status','text']);
 select results_eq($$select public.provider_accepts('gemini','restricted')$$, $$values(false)$$, 'external provider is refused restricted data');
-select results_eq($$select public.provider_accepts('gemini','internal')$$, $$values(true)$$, 'external provider may handle internal data');
+select results_eq($$select public.provider_accepts('gemini','internal')$$, $$values(false)$$, 'free-tier external provider is refused internal data');
+select results_eq($$select public.provider_accepts('gemini','public')$$, $$values(true)$$, 'external provider may handle public data');
+select results_eq($$select enabled from public.agents where id='operations'$$, $$values(false)$$, 'internal agent stays disabled on the free tier');
+select results_eq($$select enabled from public.agents where id='marketing'$$, $$values(true)$$, 'public agent is enabled on the free tier');
 select results_eq($$select enabled from public.agents where id='hr'$$, $$values(false)$$, 'HR agent stays disabled while only an external provider is enabled');
 select * from finish();
 rollback;

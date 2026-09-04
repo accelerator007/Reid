@@ -47,13 +47,15 @@ create table public.llm_providers (
   created_at timestamptz not null default now()
 );
 
--- Gemini is the temporary provider while ai-lap is offline. It is capped at
--- `internal`: the HR, finance and CRM agents below sit above that ceiling and
--- therefore stay unroutable until a local provider is enabled.
+-- Gemini is the temporary provider while ai-lap is offline. The account is on
+-- the free tier, where submitted content may be reused to improve Google
+-- products, so the ceiling is `public`: nothing that is not already publishable
+-- may be sent. Raising it to `internal` is a deliberate Owner decision that
+-- requires a paid tier first.
 insert into public.llm_providers (id, name, kind, endpoint, chat_model, embedding_model, max_classification, retains_data, enabled, requests_per_hour, notes)
 values
-  ('gemini', 'Google Gemini API', 'external', 'https://generativelanguage.googleapis.com/v1beta', 'gemini-3.6-flash', 'gemini-embedding-001', 'internal', true, true, 60,
-   'Temporary substitute for ai-lap. Models verified live on 2026-09-04; gemini-2.5-flash is listed by the API but refuses new callers. Confirm the paid tier before raising max_classification above internal.'),
+  ('gemini', 'Google Gemini API', 'external', 'https://generativelanguage.googleapis.com/v1beta', 'gemini-3.6-flash', 'gemini-embedding-001', 'public', true, true, 20,
+   'Temporary substitute for ai-lap. Free tier confirmed by the Owner on 2026-09-04, so content may be reused by Google and the ceiling stays at public. Models verified live; gemini-2.5-flash is listed by the API but refuses new callers.'),
   ('ollama', 'Ollama on ai-lap', 'local', 'http://ai-lap:11434', 'gemma3:12b', 'nomic-embed-text', 'restricted', false, false, 600,
    'Preferred provider. Enable only after the host is online and the installed model name is re-verified.');
 
@@ -66,22 +68,42 @@ alter table public.agents
   add column disabled_reason text,
   add column updated_at timestamptz not null default now();
 
+-- A run may never be dispatched to a provider that is not cleared for its data.
+create or replace function public.provider_accepts(target_provider text, wanted public.data_class)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.llm_providers provider
+    where provider.id = target_provider
+      and provider.enabled
+      and public.data_class_rank(provider.max_classification) >= public.data_class_rank(wanted)
+  )
+$$;
+
+revoke all on function public.provider_accepts(text, public.data_class) from public, anon;
+grant execute on function public.provider_accepts(text, public.data_class) to authenticated;
+
 -- The V1 agent roster, mapped onto the data it actually touches.
 update public.agents set classification = 'public' where id in ('marketing', 'content', 'competitor');
 update public.agents set classification = 'internal' where id in ('operations', 'analytics', 'knowledge', 'support', 'ceo');
 update public.agents set classification = 'confidential' where id in ('sales');
 update public.agents set classification = 'restricted' where id in ('hr', 'finance');
 
--- Only agents whose classification fits inside Gemini's ceiling start enabled.
-update public.agents
-set enabled = true, status = 'idle'
-where public.data_class_rank(classification) <= public.data_class_rank('internal');
+-- An agent starts enabled only if its own provider is cleared for its data.
+update public.agents agent
+set enabled = true, status = 'idle', disabled_reason = null
+where public.provider_accepts(agent.provider_id, agent.classification);
 
-update public.agents
+update public.agents agent
 set enabled = false,
     status = 'disabled',
-    disabled_reason = 'Handles confidential or restricted data; blocked until a local provider is enabled.'
-where public.data_class_rank(classification) > public.data_class_rank('internal');
+    disabled_reason = 'Data classification exceeds the enabled provider''s clearance. Blocked until a cleared provider is enabled.'
+where not public.provider_accepts(agent.provider_id, agent.classification);
 
 -- `model` and `host` predate the provider registry. Keep them mirroring the
 -- resolved provider so the dashboard and pgTAP never read a stale model name.
@@ -108,26 +130,6 @@ update public.agents agent
 set model = provider.chat_model, host = provider.id
 from public.llm_providers provider
 where provider.id = agent.provider_id;
-
--- A run may never be dispatched to a provider that is not cleared for its data.
-create or replace function public.provider_accepts(target_provider text, wanted public.data_class)
-returns boolean
-language sql
-stable
-security definer
-set search_path = ''
-as $$
-  select exists (
-    select 1
-    from public.llm_providers provider
-    where provider.id = target_provider
-      and provider.enabled
-      and public.data_class_rank(provider.max_classification) >= public.data_class_rank(wanted)
-  )
-$$;
-
-revoke all on function public.provider_accepts(text, public.data_class) from public, anon;
-grant execute on function public.provider_accepts(text, public.data_class) to authenticated;
 
 alter table public.agent_runs
   add column provider_id text references public.llm_providers,

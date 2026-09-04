@@ -31,6 +31,7 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Staging hosting: Cloudflare Pages project `reid-staging`, Git-connected to `develop`, custom domain `staging.reidpro.com`.
 - Branches: `feature/*` -> PR to `develop` -> verified PR to `main`.
 - Model providers are rows in `llm_providers`, not hard-coded hosts. `ollama` (local, `ai-lap`) is the preferred provider and ships disabled; `gemini` (external, Google Gemini API) is enabled as the temporary substitute while `ai-lap` is offline.
+- The Gemini account is on the **free tier**, confirmed by the Owner on 2026-09-04. Free-tier content may be reused to improve Google products, so the provider is capped at `public` data: only material that is already publishable may be sent. Raising the cap requires a paid tier and a recorded Owner decision.
 - Local AI: Ollama on `ai-lap`. The host was offline during the 2026-09-02 audit; never claim live AI integration until it is retested. The Gemma 4 family exists (the Gemini API lists `gemma-4-26b-a4b-it` and `gemma-4-31b-it`), but the exact `gemma4:12b` Ollama tag must be confirmed on the host before the local provider is enabled.
 
 ## Critical paths
@@ -86,14 +87,14 @@ The Agent Map is no longer a visual mock. `supabase/functions/llm-gateway` is th
 
 Agents carry a data classification, and only those at or below the enabled provider's ceiling start enabled:
 
-| Classification | Agents | Status with Gemini enabled |
+| Classification | Agents | Status on the free-tier Gemini row |
 | --- | --- | --- |
 | `public` | Marketing, Content/Social, Competitor Intelligence | enabled |
-| `internal` | Operations, Analytics, Knowledge, Support, CEO/Orchestrator | enabled |
+| `internal` | Operations, Analytics, Knowledge, Support, CEO/Orchestrator | disabled |
 | `confidential` | Sales/CRM | disabled |
 | `restricted` | HR, Finance | disabled |
 
-The confidential and restricted agents stay disabled until the local `ollama` provider is enabled. This is enforced by the `agent_runs_clearance` trigger in the database, not only by the gateway.
+Only the three `public` agents run today. The `internal` five unlock by moving the Gemini account to a paid tier and raising `max_classification` to `internal`; the `confidential` and `restricted` agents unlock only on the local `ollama` provider. Enablement is derived from `provider_accepts`, and the `agent_runs_clearance` trigger enforces it in the database rather than in the gateway alone.
 
 ## Implemented and verified
 
@@ -104,7 +105,7 @@ Last verified: 2026-09-04, Asia/Muscat.
 - Migration `202609040001_agent_gateway.sql` adds `llm_providers`, provider/classification/enabled columns on `agents`, run lifecycle and approval columns on `agent_runs`, the `provider_accepts` clearance function, the `agent_runs_clearance` trigger, the `approve_agent_run` RPC, Owner-only provider writes, and Realtime on `agent_runs`.
 - Edge Function `llm-gateway` dispatches to Gemini or Ollama behind one provider-agnostic interface, so restoring `ai-lap` is a provider row change rather than a rewrite.
 - The dashboard Agent Map is replaced by `AgentCommand`: provider clearance display, manual run, pause/resume, disable/enable, approval decisions for L2+ runs, and a run stream with latency, tokens, output preview, and errors.
-- 7 new unit tests cover the clearance and approval policy; `npm run check` passes with 17 unit tests, TypeScript, and the Vite production build.
+- 8 new unit tests cover the clearance and approval policy; `npm run check` passes with 18 unit tests, TypeScript, and the Vite production build.
 - Not deployed and not executed against a live provider. See the P0 list below.
 
 ### 2026-09-02 critical V1 implementation (feature branch)
@@ -183,7 +184,7 @@ Last verified: 2026-09-04, Asia/Muscat.
 13. Owner-only Production merging is not fully enforced. Collaborator `sheikhaalmamari4-cyber` currently has `write` permission, and main protection requires zero approvals; a writer could merge a passing PR.
 14. A Google OAuth client secret appeared in an automation tool transcript during setup. It is not committed to Git, but it should be rotated and the replacement stored only in Supabase after explicit credential-rotation confirmation.
 15. A Gemini API key was pasted into an assistant transcript on 2026-09-04. The Owner accepted the exposure and asked for it to be applied. It is stored only in the gitignored `.dev.vars` and was never committed. It must be rotated, and the replacement set with `supabase secrets set GEMINI_API_KEY=...` only.
-16. The Gemini account tier is unconfirmed. Free-tier Gemini API content may be reused to improve Google products, so `llm_providers.gemini.max_classification` must stay at `internal` until a paid tier is confirmed and the Owner records the decision.
+16. The Gemini account is on the free tier, so the provider is capped at `public` and the five `internal` agents (Operations, Analytics, Knowledge, Support, CEO) are disabled. Moving to a paid tier and raising the cap to `internal` is the smallest change that activates them.
 17. Migration `202609040001_agent_gateway.sql` and the `llm-gateway` function have not been applied or deployed to Staging or Production. The provider credential and models are verified live, but nothing has passed through the gateway itself, so RLS, the approval path, rate limiting, and audit rows remain untested end to end.
 18. Model availability on this key is narrower than the API's own model list. `gemini-2.5-flash` and `text-embedding-004` are listed by ListModels but rejected at call time, so a provider row must be verified by a real call, never by the listing.
 
@@ -255,15 +256,16 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - `gemini-2.5-flash` and `text-embedding-004`, the models first written into the migration, are rejected at call time. Generation returns `no longer available to new users`; the embedding model is not found for `embedContent`.
 - Verified working by real calls: `gemini-3.6-flash` (HTTP 200, 92 tokens) and `gemini-3.8-flash` (HTTP 200, 111 tokens) for generation, and `gemini-embedding-001` with `outputDimensionality: 768` (HTTP 200, 768 values), which matches `memories.embedding vector(768)` exactly, so RAG needs no schema change.
 - The provider row now pins `gemini-3.6-flash`. Moving to `gemini-3.8-flash` is a single row update with no code change.
-- Still unverified: the account tier, and every path through the gateway itself.
+- The Owner confirmed the free tier, so `max_classification` was lowered from `internal` to `public` and `requests_per_hour` from 60 to 20. Agent enablement is now derived from `provider_accepts` instead of a hard-coded ceiling.
+- Still unverified: every path through the gateway itself, and the free tier's real request limits, which were not measured.
 
 ### 2026-09-04 agent gateway implementation
 
 - Implemented the Phase 3 gateway on `claude/agent-plan-7v3s5l` with Gemini as the temporary provider while `ai-lap` is offline.
-- `npm run check` passed locally: 17 unit tests across 4 files, `tsc -b`, and the Vite production build (256.41 kB JS, 22.03 kB CSS).
+- `npm run check` passed locally: 18 unit tests across 4 files, `tsc -b`, and the Vite production build.
 - 7 Chromium E2E public-flow tests passed. The container's preinstalled browser build did not match the pinned Playwright version, so the run used a locally linked Chromium; GitHub CI installs its own and is unaffected.
 - `npm audit --audit-level=high` reported 0 vulnerabilities.
-- pgTAP grew from 28 to 36 checks, including `provider_accepts('gemini','restricted') = false` and the HR agent staying disabled. These checks are still not executed by GitHub CI, so they remain unverified against a real database.
+- pgTAP grew from 28 to 39 checks, including `provider_accepts('gemini','internal') = false` on the free tier and the Operations agent staying disabled. These checks are still not executed by GitHub CI, so they remain unverified against a real database.
 - Not verified: the migration was not applied, the Edge Function was not deployed, and no request reached Google. The Supabase CLI, Deno, and project credentials were unavailable in the working environment.
 - The Gemini key supplied by the Owner was written only to the gitignored `.dev.vars`. Nothing containing it was committed.
 
