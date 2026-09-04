@@ -194,10 +194,38 @@ create policy agents_admin_write on public.agents for update to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
--- Requesters see their own runs; admins see the whole stream.
+-- Mirrors canApprove() in src/policy.ts: L0/L1 need nobody, L2 an admin,
+-- L3 an admin or HR, L4 the Owner alone.
+create or replace function public.can_approve_level(level int)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select case
+    when level < 2 then true
+    when level = 2 then public.is_admin()
+    when level = 3 then public.is_admin() or public.has_role('hr')
+    else public.has_role('owner')
+  end
+$$;
+
+revoke all on function public.can_approve_level(int) from public, anon;
+grant execute on function public.can_approve_level(int) to authenticated;
+
+-- Requesters see their own runs and admins see the whole stream. An approver
+-- also sees what is waiting on them, and what they themselves decided,
+-- otherwise HR could decide an L3 run it can neither read beforehand nor
+-- confirm afterwards.
 drop policy if exists runs_admin on public.agent_runs;
 create policy runs_scope_read on public.agent_runs for select to authenticated
-using (public.is_admin() or requested_by = auth.uid());
+using (
+  public.is_admin()
+  or requested_by = auth.uid()
+  or approved_by = auth.uid()
+  or (approval_state = 'pending' and public.can_approve_level(approval_level))
+);
 
 -- Approvals are recorded through the RPC below, never by direct table writes.
 create or replace function public.approve_agent_run(run_id uuid, decision public.approval_status, note text default null)
@@ -208,7 +236,6 @@ set search_path = ''
 as $$
 declare
   target public.agent_runs;
-  approver_roles public.app_role[];
 begin
   if decision not in ('approved', 'rejected') then
     raise exception 'invalid_decision';
@@ -222,14 +249,7 @@ begin
     raise exception 'run_not_pending';
   end if;
 
-  select array_agg(role) into approver_roles from public.user_roles where user_id = auth.uid();
-
-  -- Mirrors canApprove() in src/policy.ts: L2 admin, L3 admin or HR, L4 Owner.
-  if target.approval_level = 4 and not ('owner' = any(approver_roles)) then
-    raise exception 'owner_approval_required';
-  elsif target.approval_level = 3 and not (approver_roles && array['owner','super_admin','admin','hr']::public.app_role[]) then
-    raise exception 'approval_denied';
-  elsif target.approval_level = 2 and not (approver_roles && array['owner','super_admin','admin']::public.app_role[]) then
+  if not public.can_approve_level(target.approval_level) then
     raise exception 'approval_denied';
   end if;
 

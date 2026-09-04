@@ -44,6 +44,7 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Agent gateway client and policy: `src/agents.ts`, `src/agent-command.tsx`.
 - Database migrations: `supabase/migrations/`.
 - Database pgTAP draft: `supabase/tests/rls.sql`.
+- Executable RLS allow/deny harness: `scripts/rls-local.sh`, `supabase/tests/local/`.
 - CI: `.github/workflows/ci.yml`.
 - Backup workflow: `.github/workflows/weekly-backup.yml`.
 - Deployment documentation: `DEPLOYMENT.md`.
@@ -101,11 +102,11 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 Last verified: 2026-09-04, Asia/Muscat.
 
 ### 2026-09-04 agent gateway (feature branch, not yet deployed)
-
-- Migration `202609040001_agent_gateway.sql` adds `llm_providers`, provider/classification/enabled columns on `agents`, run lifecycle and approval columns on `agent_runs`, the `provider_accepts` clearance function, the `agent_runs_clearance` trigger, the `approve_agent_run` RPC, Owner-only provider writes, and Realtime on `agent_runs`.
+- Migration `202609040002_agent_gateway.sql` adds `llm_providers`, provider/classification/enabled columns on `agents`, run lifecycle and approval columns on `agent_runs`, the `provider_accepts` clearance function, the `agent_runs_clearance` trigger, the `approve_agent_run` RPC, Owner-only provider writes, and Realtime on `agent_runs`.
 - Edge Function `llm-gateway` dispatches to Gemini or Ollama behind one provider-agnostic interface, so restoring `ai-lap` is a provider row change rather than a rewrite.
 - The dashboard Agent Map is replaced by `AgentCommand`: provider clearance display, manual run, pause/resume, disable/enable, approval decisions for L2+ runs, and a run stream with latency, tokens, output preview, and errors.
-- 8 new unit tests cover the clearance and approval policy; `npm run check` passes with 18 unit tests, TypeScript, and the Vite production build.
+- `supabase/tests/local/rls_agents.sql` adds 30 executable allow/deny checks that CI runs against a real PostgreSQL 16 with every migration applied, so the clearance rule, the roster scoping, the admin controls and the approval engine are proven by the database rather than by the UI.
+- 8 new unit tests cover the clearance and approval policy.
 - Not deployed and not executed against a live provider. See the P0 list below.
 
 ### 2026-09-02 critical V1 implementation (feature branch)
@@ -185,7 +186,7 @@ Last verified: 2026-09-04, Asia/Muscat.
 14. A Google OAuth client secret appeared in an automation tool transcript during setup. It is not committed to Git, but it should be rotated and the replacement stored only in Supabase after explicit credential-rotation confirmation.
 15. A Gemini API key was pasted into an assistant transcript on 2026-09-04. The Owner accepted the exposure and asked for it to be applied. It is stored only in the gitignored `.dev.vars` and was never committed. It must be rotated, and the replacement set with `supabase secrets set GEMINI_API_KEY=...` only.
 16. The Gemini account is on the free tier, so the provider is capped at `public` and the five `internal` agents (Operations, Analytics, Knowledge, Support, CEO) are disabled. Moving to a paid tier and raising the cap to `internal` is the smallest change that activates them.
-17. Migration `202609040001_agent_gateway.sql` and the `llm-gateway` function have not been applied or deployed to Staging or Production. The provider credential and models are verified live, but nothing has passed through the gateway itself, so RLS, the approval path, rate limiting, and audit rows remain untested end to end.
+17. Migration `202609040002_agent_gateway.sql` and the `llm-gateway` function have not been applied or deployed to Staging or Production. The RLS policies, the clearance trigger and the approval engine are proven locally by `rls_agents`, but no request has passed through the Edge Function itself, so the gateway's session handling, rate limiting and provider dispatch remain untested against real traffic.
 18. Model availability on this key is narrower than the API's own model list. `gemini-2.5-flash` and `text-embedding-004` are listed by ListModels but rejected at call time, so a provider row must be verified by a real call, never by the listing.
 
 ### P1 — core modules are schema/mock only
@@ -193,9 +194,9 @@ Last verified: 2026-09-04, Asia/Muscat.
 - No authenticated application shell or URL router/deep links.
 - No real employee directory, departments, onboarding, announcements, calendar, documents, KPI/performance, notifications, or timesheet UI/API.
 - No working project dashboards, Kanban, milestones, meetings, budgets, file-level permissions, clients, GitHub integration, activity, or project agents.
-- No working research workflows, datasets, experiments, ethics/approvals, publication/DOI/conference tracking, or AI research assistant.
+- Research V1 (members, datasets, experiments, ethics/approvals, publications/DOI/conference tracking, private documents with per-user/per-role grants, tasks, activity) is merged to `develop` and proven by 79 local RLS allow/deny checks. Migration `202609040001` is **not applied to remote Supabase**, so the module cannot work against Staging or Production yet, and no authenticated browser session has verified it. The AI research assistant remains unimplemented.
 - No working CRM UI, lead pipeline, Sales permissions E2E, or Sales agent.
-- CV Storage, three Realtime tables, and the decision Edge Function are deployed. Project, research, HR, and avatar buckets/policies are still missing.
+- CV Storage, three Realtime tables, and the decision Edge Function are deployed. The `project-files` and `research-files` buckets and policies exist in migrations; the research bucket is not yet applied remotely. Avatar and general-document buckets are still missing.
 - RAG/Knowledge Agent, Google Drive synchronization, embeddings pipeline, and document ACL filtering are not implemented.
 - Agent execution, admin controls, and the private gateway are implemented on the feature branch but not deployed, so no agent has completed a real run yet.
 - No daily/weekly executive report generation or weekly email delivery.
@@ -205,8 +206,8 @@ Last verified: 2026-09-04, Asia/Muscat.
 
 ### P2 — quality and operations
 
-- Five unit tests and four public-browser E2E tests exist. Authenticated Auth/RLS/database/email/storage workflows still lack executable integration coverage.
-- `supabase/tests/rls.sql` has 5 schema checks but is not run by GitHub CI and does not impersonate roles to test allow/deny behavior.
+- Thirteen unit tests, eight public-browser E2E tests, and seventy-nine database RLS allow/deny checks exist. Authenticated Auth/email/storage workflows still lack executable integration coverage, and the RLS harness proves policy behaviour against a local database rather than against the remote Supabase project.
+- `supabase/tests/rls.sql` is still a schema-shape draft (38 checks) that CI does not run, because pgTAP is not installed in the harness. Role impersonation is now covered instead by `scripts/rls-local.sh`, which applies every migration to a throwaway PostgreSQL 16 database and runs 79 allow/deny checks as real `anon`/`authenticated` roles in its own CI job. Only the Research workspace has such a suite so far; Employee, Projects, Applications, and account-lifecycle suites are still missing.
 - A Chromium public-flow E2E suite exists; authenticated E2E, accessibility automation, mobile visual regression, performance budgets, error monitoring, and uptime alerts remain missing.
 - No tested recovery procedure, restore drill, staging data policy, retention policy, or disaster recovery evidence.
 - Legacy static files and COR-era assets remain in the repository and should be deliberately migrated or removed only after confirming which historical project pages are still required.
@@ -230,7 +231,7 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 2. Build the authenticated shell and role-aware navigation for Profile, People, Projects, Research, Tasks, Calendar, Documents, Announcements, KPIs, Notifications, Timesheets, CRM, Agents, Approvals, and Settings.
 3. Deliver Employees + departments + onboarding + announcements + timesheets as real workflows.
 4. Deliver Projects + members + Kanban tasks + milestones + files + meetings + activity + KPIs + GitHub repository link.
-5. Deliver Research + members + documents + datasets + experiments + ethics/approvals + publications/DOI/conference tracking.
+5. Deliver Research + members + documents + datasets + experiments + ethics/approvals + publications/DOI/conference tracking. Merged to `develop` and covered by 79 local RLS checks. The remote migration has not been applied and no authenticated Staging verification has run, so this is not complete.
 6. Deliver CRM contacts/leads/pipeline for Admin, HR, and Sales.
 
 ### Phase 2 — governance and integrations
@@ -251,23 +252,90 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 ## Verification log
 
 ### 2026-09-04 Gemini provider credential verified
-
 - `ListModels` returned HTTP 200 for the Owner-supplied key: 50 models, so the credential is a valid Gemini API key rather than a short-lived OAuth token.
 - `gemini-2.5-flash` and `text-embedding-004`, the models first written into the migration, are rejected at call time. Generation returns `no longer available to new users`; the embedding model is not found for `embedContent`.
 - Verified working by real calls: `gemini-3.6-flash` (HTTP 200, 92 tokens) and `gemini-3.8-flash` (HTTP 200, 111 tokens) for generation, and `gemini-embedding-001` with `outputDimensionality: 768` (HTTP 200, 768 values), which matches `memories.embedding vector(768)` exactly, so RAG needs no schema change.
 - The provider row now pins `gemini-3.6-flash`. Moving to `gemini-3.8-flash` is a single row update with no code change.
 - The Owner confirmed the free tier, so `max_classification` was lowered from `internal` to `public` and `requests_per_hour` from 60 to 20. Agent enablement is now derived from `provider_accepts` instead of a hard-coded ceiling.
 - Still unverified: every path through the gateway itself, and the free tier's real request limits, which were not measured.
-
 ### 2026-09-04 agent gateway implementation
-
 - Implemented the Phase 3 gateway on `claude/agent-plan-7v3s5l` with Gemini as the temporary provider while `ai-lap` is offline.
-- `npm run check` passed locally: 18 unit tests across 4 files, `tsc -b`, and the Vite production build.
-- 7 Chromium E2E public-flow tests passed. The container's preinstalled browser build did not match the pinned Playwright version, so the run used a locally linked Chromium; GitHub CI installs its own and is unaffected.
+- `scripts/rls-local.sh` passed with exit 0: **109 checks**, 30 in the new `rls_agents` suite and 79 in `rls_research`. Every Reid migration, the agent gateway included, applied cleanly to a throwaway PostgreSQL 16 instance.
+- The agent suite caught a real authorization defect before review: HR could approve an L3 run through the RPC but `runs_scope_read` did not let HR read it, so the approval panel would have been empty and the decision unconfirmable. The policy now also admits an approver to runs pending at their level and to runs they decided.
+- Merged `origin/develop` (Research V1, commit `3039e6d`). Conflicts resolved in favour of develop's production brand-mark fix; both status histories and both pgTAP suites were kept. The migration was renumbered to `202609040002_agent_gateway.sql` because develop had already taken `202609040001`.
+- `npm run check` passed after the merge: 21 unit tests across 5 files, `tsc -b`, and the Vite production build. 8 Chromium E2E tests passed.
 - `npm audit --audit-level=high` reported 0 vulnerabilities.
-- pgTAP grew from 28 to 39 checks, including `provider_accepts('gemini','internal') = false` on the free tier and the Operations agent staying disabled. These checks are still not executed by GitHub CI, so they remain unverified against a real database.
+- `supabase/tests/rls.sql` grew to 49 checks after merging develop's research suite, including `provider_accepts('gemini','internal') = false` on the free tier and the Operations agent staying disabled.
 - Not verified: the migration was not applied, the Edge Function was not deployed, and no request reached Google. The Supabase CLI, Deno, and project credentials were unavailable in the working environment.
 - The Gemini key supplied by the Owner was written only to the gitignored `.dev.vars`. Nothing containing it was committed.
+
+### 2026-09-04 Research V1 merged to develop; remote application blocked
+
+- The Owner verified the repaired brand mark on the Staging preview and it renders correctly. PR `#54` was merged into `develop` at commit `b10161e8`. CI passed all three checks on the head commit: `test`, the new `rls` job, and Cloudflare Pages.
+- Local RLS coverage was extended to the remaining items on the Owner's test list: research archive and unarchive as the supervisor, archive denial for an ordinary researcher, conference/event-date publication tracking, `research.conference` updates, and a re-check of the added researcher proving that gaining membership grants read access but never management authority. The suite now runs **79 checks, all passing**.
+
+**Blocked — the remote Supabase work could not be attempted from this environment.**
+
+The Owner asked for the migration to be applied to the live project, for a database lint and migration-history check, and for authenticated Staging testing with Owner, researcher, supervisor and HR accounts. None of that was executed, and none of it should be recorded as done. Two independent causes, both verified rather than assumed:
+
+1. No credentials. `supabase projects list` returns `Access token not provided`, and `supabase migration list --linked` returns `Cannot find project ref`. There is no `SUPABASE_ACCESS_TOKEN`, no `SUPABASE_DB_URL`, and no linked project in this session.
+2. No network path. The environment's egress proxy refuses `api.supabase.com` and `pkogchbrknwmzefjklkr.supabase.co` with `CONNECT tunnel failed, response 403`. Even with credentials the CLI could not reach the project from here.
+
+Credentials were deliberately not requested, because pasting them into this session would place secrets in the transcript and logs, which the Owner has forbidden. The remote steps require a session that already holds Supabase access.
+
+**Therefore the following remain open and must not be treated as complete:**
+
+- Migration `202609040001_research_workspace.sql` is **not applied** to the remote Supabase project. Until it is, `/research` will fail against Production and Staging because the tables, policies, helper functions and the `research-files` bucket do not exist remotely.
+- No remote `supabase db lint` and no remote migration-history reconciliation.
+- No authenticated Staging test with Owner, researcher, supervisor or HR identities: create/update/archive, members, datasets, experiments, ethics approvals, publications/DOI/conference, notifications, private-document upload and signed open, per-user and per-role grants, and unauthorized/suspended denial all remain unverified against the live project.
+- What the 79-check suite proves is the policy logic against a local PostgreSQL 16 database with the real migrations applied. It does not prove PostgREST response shapes, the React wiring, Realtime delivery, Storage signed URLs, or browser upload against the live project.
+- The `develop → main` release PR is open for review only. Research V1 must not reach Production before the remote migration is applied and the authenticated Staging suite passes, and only with explicit Owner approval.
+
+**Untouched by instruction:** `ai-lap`, Arabic SMTP, and Microsoft OAuth. No Production data was read or modified, and no credential was written to the repository, to GitHub, or to any log.
+
+### 2026-09-04 research workspace implementation and production brand-mark repair
+
+Work is active on `claude/reid-system-development-bcaz9n`, branched from `develop`. Do not present Research V1 as Production-ready before the migration is applied remotely, CI passes, and an authenticated Staging session verifies the workflows.
+
+**Production defect fixed — the header brand mark was broken on `reidpro.com`.**
+
+- The Owner reported a broken-image placeholder next to `ريّد` in the live header. Root cause: `src/main.tsx` referenced the mark as the literal string `/assets/img/reid-logo.svg`. Vite rewrites imported assets and copies `public/`, but leaves literal URLs untouched, and `assets/` sits outside `public/`. Nothing was emitted to `dist/`, so the tag returned 404 in Production while still resolving against the dev server — which is exactly why the existing E2E assertion passed and the bug shipped.
+- The mark is now imported, so Vite emits and content-hashes it. A production build confirms `dist/assets/reid-logo-CbVH3nq6.svg` exists and that both the bundle and the `index.html` favicon link point at it.
+- Two regressions were added. `src/assets.test.ts` fails the build if any file under `src/` references `/assets` through a bare string literal. The E2E assertion no longer matches a fixed URL but asserts the rendered image has a non-zero `naturalWidth`, which is the condition that actually broke.
+- The `/assets/fonts/*.woff2` URLs inside `src/style.css` were checked and are safe: Vite rewrites `url()` in processed CSS, and both font files appear in `dist/`.
+
+**Research workspace V1.**
+
+- Migration `202609040001_research_workspace.sql` extends `research` with field, dates, funding, archive, `created_by` and `updated_at`, and adds `research_datasets`, `research_experiments`, `research_ethics_approvals`, `research_publications`, `research_documents`, `research_document_permissions`, and `research_activity`, plus audit triggers, an activity trigger, membership/ethics notifications, Realtime publication entries, and the private `research-files` bucket.
+- `research_members` had RLS enabled since the core migration but carried no policy at all, so the table was unreadable and unwritable by every client. It now has scoped read and supervisor-only write policies.
+- Bilingual `/research` and `/research/:id` routes were added with overview, tasks, datasets, experiments, ethics, publications, documents, and activity tabs, role-aware controls, 60-second signed document URLs, and per-user/per-role grant management. `/research` and `/research/` deep links were added to the Worker SPA allow-list, and unknown routes keep their edge 404.
+- Two data-integrity rules are enforced in the database rather than the UI: a DOI must match `10.x/suffix`, and an ethics record moved to `approved` or `rejected` must carry `decided_by` and `decided_at`.
+
+**Permissions and RLS were tested against the database, not the interface.**
+
+- `scripts/rls-local.sh` applies every migration in `supabase/migrations` to a throwaway PostgreSQL 16 database and runs `supabase/tests/local/rls_research.sql` as real `anon` and `authenticated` roles with JWT claims. It needs no Docker, Supabase credentials, or network access. `supabase/tests/local/bootstrap.sql` supplies only the missing platform pieces (auth schema, `auth.uid()`, the anon/authenticated/service_role roles, storage schema, Realtime publication); every policy under test is the verbatim policy from the migrations. pgvector is unavailable locally, so the embedding column falls back to a shim domain — no policy reads it.
+- Result: **70/70 checks pass, 0 fail**, across six actors — anonymous, an unrelated active employee, a suspended member, an ordinary researcher, the supervisor, HR, and the Owner.
+- Denials proven, not assumed: anonymous sees no research at all; an unrelated employee sees only the public study and none of its datasets, documents, activity or unpublished papers; a **suspended** member loses every membership-derived permission even though the membership row still exists; an ordinary researcher cannot rename the study, add teammates, register datasets, file ethics approvals, record publications, upload files, grant themselves access to a restricted document, or create research tasks; a researcher cannot log an experiment under another author's name; a supervisor cannot create a new research record, attribute a dataset to someone else, forge the granter of a file permission, or upload into a research folder they do not manage; the Owner cannot attribute a new research record to someone else or create one without a supervisor.
+- Grants proven to work: a direct user grant and an additive-role grant each open a restricted document through `can_read_research_document`, and storage object visibility follows the document decision rather than bucket membership.
+- Side effects proven: membership inserts notify the researcher, an ethics decision notifies the supervisor, the activity feed attributes the supervisor's dataset, ethics changes reach `audit_logs`, the `research-files` bucket is private, and all eight research tables publish to Realtime.
+- One check initially failed and found a fault in the **test**, not the policy: the seed made the same person supervisor of both studies, so cross-research upload denial could never trigger. The second study was reassigned to a different supervisor and the denial then held.
+- The suite runs as its own `rls` CI job against a `postgres:16` service container, so this coverage is enforced on every PR rather than run by hand.
+
+**Local verification.**
+
+- `npm run check`: pass; 13 Vitest checks (TypeScript, Vite Production build included).
+- `npm run test:e2e`: pass; 8 Chromium public workflows, including anonymous denial for `/research` and `/research/:id`, and the new brand-mark render assertion.
+- `npm run test:rls`: pass; 70/70 RLS allow/deny checks.
+- `playwright.config.ts` now honours an optional `PLAYWRIGHT_CHROMIUM_PATH` so sandboxes with a preinstalled Chromium can run the suite; CI still installs its own pinned browser.
+- `@types/node` was added as a devDependency because the new asset regression test reads the filesystem.
+
+**Not done — remaining before Research V1 may be called complete.**
+
+- Migration `202609040001` has **not** been applied to remote Supabase. No Supabase credentials exist in this environment, so no remote migration, schema lint, or Edge Function deployment was attempted.
+- No Staging deployment and no authenticated Owner/supervisor/researcher browser verification. The RLS harness proves the policies against a local database; it does not prove PostgREST shapes, the UI wiring, or Realtime delivery against the live project.
+- Research document upload/download through a real browser is unverified, the same gap already recorded for employee and project files.
+- Equivalent local RLS suites for Employee, Projects, Applications, and account lifecycle are still missing; only Research is covered.
+- Untouched by instruction: `ai-lap` and any AI agent work, Arabic SMTP, and Microsoft OAuth. No Production data was read or modified, and no secret was added to the repository or to GitHub.
 
 ### 2026-09-04 Reid brand mark
 

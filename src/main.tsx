@@ -6,6 +6,11 @@ import { installIdleTimeout } from "./session";
 import { EmployeeWorkspace } from "./employee";
 import { ProjectWorkspace } from "./projects";
 import { AgentCommand } from "./agent-command";
+import { ResearchWorkspace } from "./research";
+// Imported rather than written as a literal URL. The assets directory sits
+// outside Vite's public directory, so a hard-coded path is never emitted to
+// dist and the header mark 404s in production while still resolving in dev.
+import reidLogo from "../assets/img/reid-logo.svg";
 import "./style.css";
 import "./brand.css";
 import "./auth.css";
@@ -22,6 +27,7 @@ type Page =
   | "profile"
   | "workspace"
   | "projects"
+  | "research"
   | "privacy"
   | "not-found";
 type ProfileData = {
@@ -89,6 +95,7 @@ const tr = {
     account: "حسابي",
     workspace: "مساحة العمل",
     projects: "المشاريع",
+    research: "الأبحاث",
   },
   en: {
     brand: "Reid",
@@ -105,6 +112,7 @@ const tr = {
     account: "My profile",
     workspace: "Workspace",
     projects: "Projects",
+    research: "Research",
   },
 };
 const routes: Record<string, Page> = {
@@ -114,6 +122,7 @@ const routes: Record<string, Page> = {
   "/profile": "profile",
   "/workspace": "workspace",
   "/projects": "projects",
+  "/research": "research",
   "/dashboard": "dashboard",
   "/privacy": "privacy",
 };
@@ -124,6 +133,7 @@ const paths: Record<Page, string> = {
   profile: "/profile",
   workspace: "/workspace",
   projects: "/projects",
+  research: "/research",
   dashboard: "/dashboard",
   privacy: "/privacy",
   "not-found": "/404",
@@ -131,6 +141,7 @@ const paths: Record<Page, string> = {
 function resolvePage(pathname: string): Page {
   const normalized = pathname.replace(/\/+$/, "") || "/";
   if (normalized.startsWith("/projects/")) return "projects";
+  if (normalized.startsWith("/research/")) return "research";
   return routes[normalized] || "not-found";
 }
 function useRoute() {
@@ -1335,7 +1346,7 @@ function App() {
     >
       <header>
         <button className="brand" onClick={() => go("home")}>
-          <img src="/assets/img/reid-logo.svg" alt="" aria-hidden="true" />
+          <img src={reidLogo} alt="" aria-hidden="true" />
           <strong>{t.brand}</strong>
         </button>
         <nav>
@@ -1353,6 +1364,9 @@ function App() {
           )}
           {session && (
             <button onClick={() => go("projects")}>{t.projects}</button>
+          )}
+          {session && (
+            <button onClick={() => go("research")}>{t.research}</button>
           )}
           <button
             className="pill"
@@ -1475,6 +1489,16 @@ function App() {
           <Login
             lang={lang}
             done={() => go("projects")}
+            apply={() => go("apply")}
+          />
+        ))}{" "}
+      {page === "research" &&
+        (session?.user ? (
+          <ResearchWorkspace lang={lang} user={session.user} />
+        ) : (
+          <Login
+            lang={lang}
+            done={() => go("research")}
             apply={() => go("apply")}
           />
         ))}{" "}

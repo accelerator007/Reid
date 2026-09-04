@@ -1,5 +1,5 @@
 begin;
-select plan(39);
+select plan(49);
 select has_table('public', 'applications');
 select has_table('public', 'audit_logs');
 select has_table('public', 'notifications');
@@ -39,5 +39,15 @@ select results_eq($$select public.provider_accepts('gemini','public')$$, $$value
 select results_eq($$select enabled from public.agents where id='operations'$$, $$values(false)$$, 'internal agent stays disabled on the free tier');
 select results_eq($$select enabled from public.agents where id='marketing'$$, $$values(true)$$, 'public agent is enabled on the free tier');
 select results_eq($$select enabled from public.agents where id='hr'$$, $$values(false)$$, 'HR agent stays disabled while only an external provider is enabled');
+select has_table('public', 'research_datasets');
+select has_table('public', 'research_experiments');
+select has_table('public', 'research_ethics_approvals');
+select has_table('public', 'research_publications');
+select has_table('public', 'research_documents');
+select has_table('public', 'research_document_permissions');
+select has_table('public', 'research_activity');
+select has_function('public', 'can_manage_research', array['uuid']);
+select has_function('public', 'can_read_research_document', array['uuid']);
+select results_eq($$select public from storage.buckets where id='research-files'$$, $$values(false)$$, 'research files bucket is private');
 select * from finish();
 rollback;
