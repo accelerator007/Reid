@@ -6,6 +6,7 @@ import { installIdleTimeout } from "./session";
 import { EmployeeWorkspace } from "./employee";
 import { ProjectWorkspace } from "./projects";
 import "./style.css";
+import "./brand.css";
 import "./auth.css";
 import "./profile.css";
 import "./workflow.css";
@@ -1360,7 +1361,7 @@ function App() {
     >
       <header>
         <button className="brand" onClick={() => go("home")}>
-          <i>R</i>
+          <img src="/assets/img/reid-logo.svg" alt="" aria-hidden="true" />
           <strong>{t.brand}</strong>
         </button>
         <nav>
