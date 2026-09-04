@@ -295,6 +295,7 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 - Google OAuth was rotated without downtime: a new secret was stored only in Supabase, a Staging Owner callback completed, and the old secret was disabled after the successful test. GitHub OAuth app `Reid Company Platform` was created with the exact Supabase callback, enabled in Supabase, and its Staging Owner callback also completed successfully.
 - Microsoft OAuth remains blocked because Microsoft Entra requires a signed-in company Microsoft account and no Microsoft session is available. Do not invent or create a company tenant without the Owner completing that login.
 - Custom SMTP and Arabic sender/template activation were explicitly deferred by the Owner. Supabase Free locks template editing while its default sender is used. Ready-to-activate Arabic invite, Magic Link, and secure review-link templates are stored in `docs/EMAIL_TEMPLATES.md`; evaluate Resend or Brevo later and keep credentials only in Supabase.
+- Production release PR `#47` passed CI and Cloudflare but exposed divergent squash ancestry between `main` and `develop`. Branch `chore/sync-production-history` merges the current Production ancestry into `develop` while retaining the fully tested `develop` state, so the Owner release can be merged cleanly without overwriting either branch history.
 
 ### 2026-09-03 project workspace implementation
 
