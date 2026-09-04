@@ -165,7 +165,7 @@ Last verified: 2026-09-04, Asia/Muscat.
 - No authenticated application shell or URL router/deep links.
 - No real employee directory, departments, onboarding, announcements, calendar, documents, KPI/performance, notifications, or timesheet UI/API.
 - No working project dashboards, Kanban, milestones, meetings, budgets, file-level permissions, clients, GitHub integration, activity, or project agents.
-- Research V1 (members, datasets, experiments, ethics/approvals, publications/DOI/conference tracking, private documents with per-user/per-role grants, tasks, activity) is implemented and proven by the executable RLS suite, but is not yet applied to remote Supabase, deployed to Staging, or verified through an authenticated browser session. The AI research assistant remains unimplemented.
+- Research V1 (members, datasets, experiments, ethics/approvals, publications/DOI/conference tracking, private documents with per-user/per-role grants, tasks, activity) is merged to `develop` and proven by 79 local RLS allow/deny checks. Migration `202609040001` is **not applied to remote Supabase**, so the module cannot work against Staging or Production yet, and no authenticated browser session has verified it. The AI research assistant remains unimplemented.
 - No working CRM UI, lead pipeline, Sales permissions E2E, or Sales agent.
 - CV Storage, three Realtime tables, and the decision Edge Function are deployed. The `project-files` and `research-files` buckets and policies exist in migrations; the research bucket is not yet applied remotely. Avatar and general-document buckets are still missing.
 - RAG/Knowledge Agent, Google Drive synchronization, embeddings pipeline, and document ACL filtering are not implemented.
@@ -176,8 +176,8 @@ Last verified: 2026-09-04, Asia/Muscat.
 
 ### P2 — quality and operations
 
-- Thirteen unit tests, eight public-browser E2E tests, and seventy database RLS allow/deny checks exist. Authenticated Auth/email/storage workflows still lack executable integration coverage, and the RLS harness proves policy behaviour against a local database rather than against the remote Supabase project.
-- `supabase/tests/rls.sql` is still a schema-shape draft (38 checks) that CI does not run, because pgTAP is not installed in the harness. Role impersonation is now covered instead by `scripts/rls-local.sh`, which applies every migration to a throwaway PostgreSQL 16 database and runs 70 allow/deny checks as real `anon`/`authenticated` roles in its own CI job. Only the Research workspace has such a suite so far; Employee, Projects, Applications, and account-lifecycle suites are still missing.
+- Thirteen unit tests, eight public-browser E2E tests, and seventy-nine database RLS allow/deny checks exist. Authenticated Auth/email/storage workflows still lack executable integration coverage, and the RLS harness proves policy behaviour against a local database rather than against the remote Supabase project.
+- `supabase/tests/rls.sql` is still a schema-shape draft (38 checks) that CI does not run, because pgTAP is not installed in the harness. Role impersonation is now covered instead by `scripts/rls-local.sh`, which applies every migration to a throwaway PostgreSQL 16 database and runs 79 allow/deny checks as real `anon`/`authenticated` roles in its own CI job. Only the Research workspace has such a suite so far; Employee, Projects, Applications, and account-lifecycle suites are still missing.
 - A Chromium public-flow E2E suite exists; authenticated E2E, accessibility automation, mobile visual regression, performance budgets, error monitoring, and uptime alerts remain missing.
 - No tested recovery procedure, restore drill, staging data policy, retention policy, or disaster recovery evidence.
 - Legacy static files and COR-era assets remain in the repository and should be deliberately migrated or removed only after confirming which historical project pages are still required.
@@ -201,7 +201,7 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 2. Build the authenticated shell and role-aware navigation for Profile, People, Projects, Research, Tasks, Calendar, Documents, Announcements, KPIs, Notifications, Timesheets, CRM, Agents, Approvals, and Settings.
 3. Deliver Employees + departments + onboarding + announcements + timesheets as real workflows.
 4. Deliver Projects + members + Kanban tasks + milestones + files + meetings + activity + KPIs + GitHub repository link.
-5. Deliver Research + members + documents + datasets + experiments + ethics/approvals + publications/DOI/conference tracking. Implemented and covered by the RLS harness; remote migration, Staging deployment, and authenticated verification remain.
+5. Deliver Research + members + documents + datasets + experiments + ethics/approvals + publications/DOI/conference tracking. Merged to `develop` and covered by 79 local RLS checks. The remote migration has not been applied and no authenticated Staging verification has run, so this is not complete.
 6. Deliver CRM contacts/leads/pipeline for Admin, HR, and Sales.
 
 ### Phase 2 — governance and integrations
@@ -219,6 +219,30 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 4. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
 
 ## Verification log
+
+### 2026-09-04 Research V1 merged to develop; remote application blocked
+
+- The Owner verified the repaired brand mark on the Staging preview and it renders correctly. PR `#54` was merged into `develop` at commit `b10161e8`. CI passed all three checks on the head commit: `test`, the new `rls` job, and Cloudflare Pages.
+- Local RLS coverage was extended to the remaining items on the Owner's test list: research archive and unarchive as the supervisor, archive denial for an ordinary researcher, conference/event-date publication tracking, `research.conference` updates, and a re-check of the added researcher proving that gaining membership grants read access but never management authority. The suite now runs **79 checks, all passing**.
+
+**Blocked — the remote Supabase work could not be attempted from this environment.**
+
+The Owner asked for the migration to be applied to the live project, for a database lint and migration-history check, and for authenticated Staging testing with Owner, researcher, supervisor and HR accounts. None of that was executed, and none of it should be recorded as done. Two independent causes, both verified rather than assumed:
+
+1. No credentials. `supabase projects list` returns `Access token not provided`, and `supabase migration list --linked` returns `Cannot find project ref`. There is no `SUPABASE_ACCESS_TOKEN`, no `SUPABASE_DB_URL`, and no linked project in this session.
+2. No network path. The environment's egress proxy refuses `api.supabase.com` and `pkogchbrknwmzefjklkr.supabase.co` with `CONNECT tunnel failed, response 403`. Even with credentials the CLI could not reach the project from here.
+
+Credentials were deliberately not requested, because pasting them into this session would place secrets in the transcript and logs, which the Owner has forbidden. The remote steps require a session that already holds Supabase access.
+
+**Therefore the following remain open and must not be treated as complete:**
+
+- Migration `202609040001_research_workspace.sql` is **not applied** to the remote Supabase project. Until it is, `/research` will fail against Production and Staging because the tables, policies, helper functions and the `research-files` bucket do not exist remotely.
+- No remote `supabase db lint` and no remote migration-history reconciliation.
+- No authenticated Staging test with Owner, researcher, supervisor or HR identities: create/update/archive, members, datasets, experiments, ethics approvals, publications/DOI/conference, notifications, private-document upload and signed open, per-user and per-role grants, and unauthorized/suspended denial all remain unverified against the live project.
+- What the 79-check suite proves is the policy logic against a local PostgreSQL 16 database with the real migrations applied. It does not prove PostgREST response shapes, the React wiring, Realtime delivery, Storage signed URLs, or browser upload against the live project.
+- The `develop → main` release PR is open for review only. Research V1 must not reach Production before the remote migration is applied and the authenticated Staging suite passes, and only with explicit Owner approval.
+
+**Untouched by instruction:** `ai-lap`, Arabic SMTP, and Microsoft OAuth. No Production data was read or modified, and no credential was written to the repository, to GitHub, or to any log.
 
 ### 2026-09-04 research workspace implementation and production brand-mark repair
 

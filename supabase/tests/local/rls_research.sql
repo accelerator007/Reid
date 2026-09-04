@@ -135,6 +135,8 @@ select t_rejected(:'suite', 'member cannot upload a research file',
   format('insert into storage.objects(bucket_id, name) values (%L, %L)', 'research-files', :'research_a' || '/member.pdf'));
 select t_rejected(:'suite', 'member cannot grant themselves file access',
   format('insert into public.research_document_permissions(document_id, user_id, granted_by) values (%L, %L, %L)', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', :'member_id', :'member_id'));
+select t_changed(:'suite', 'member cannot archive the research',
+  format('update public.research set archived_at = now() where id = %L', :'research_a'), 0);
 select t_rejected(:'suite', 'member cannot create a research task',
   format('insert into public.tasks(title, research_id, created_by) values (%L, %L, %L)', 'Member task', :'research_a', :'member_id'));
 reset role;
@@ -174,6 +176,14 @@ select t_allowed(:'suite', 'supervisor can upload into their own research folder
   format('insert into storage.objects(bucket_id, name) values (%L, %L)', 'research-files', :'research_a' || '/protocol.pdf'));
 select t_rejected(:'suite', 'supervisor cannot upload into an unrelated research folder',
   format('insert into storage.objects(bucket_id, name) values (%L, %L)', 'research-files', :'research_b' || '/leak.pdf'));
+select t_changed(:'suite', 'supervisor can archive the research',
+  format('update public.research set archived_at = now(), updated_at = now() where id = %L', :'research_a'), 1);
+select t_changed(:'suite', 'supervisor can unarchive the research',
+  format('update public.research set archived_at = null, updated_at = now() where id = %L', :'research_a'), 1);
+select t_allowed(:'suite', 'supervisor can track a conference paper with an event date',
+  format('insert into public.research_publications(research_id, title, venue_type, venue_name, event_date, status, created_by) values (%L, %L, %L, %L, %L, %L, %L)', :'research_a', 'Reid conference paper', 'conference', 'Muscat AI Summit', '2026-11-02', 'accepted', :'super_id'));
+select t_changed(:'suite', 'supervisor can record the conference on the research record',
+  format('update public.research set conference = %L, updated_at = now() where id = %L', 'Muscat AI Summit 2026', :'research_a'), 1);
 select t_allowed(:'suite', 'supervisor can create a research task',
   format('insert into public.tasks(id, title, research_id, assignee_id, created_by) values (%L, %L, %L, %L, %L)', '0a111111-1111-4111-8111-111111111111', 'Run the pilot', :'research_a', :'member_id', :'super_id'));
 select t_visible(:'suite', 'supervisor sees the research activity feed', 'select 1 from public.research_activity', null);
@@ -209,6 +219,19 @@ select t_rejected(:'suite', 'research must always name a supervisor',
   format('insert into public.research(title, supervisor_id, created_by) values (%L, null, %L)', 'Orphan study', :'owner_id'));
 reset role;
 
+-- ── the unrelated employee is re-checked after every supervisor write ───────
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"44444444-4444-4444-8444-444444444444","role":"authenticated"}';
+-- The supervisor added this outsider to the team mid-suite, so membership is
+-- now expected; what must still be denied is management authority.
+select t_visible(:'suite', 'the added researcher sees no conference paper of a study they may read only',
+  format($$select 1 from public.research_publications where research_id = %L and venue_type = 'conference'$$, :'research_b'), 0);
+select t_changed(:'suite', 'the added researcher cannot archive the research',
+  format('update public.research set archived_at = now() where id = %L', :'research_a'), 0);
+select t_rejected(:'suite', 'the added researcher cannot record a conference paper',
+  format('insert into public.research_publications(research_id, title, venue_type, created_by) values (%L, %L, %L, %L)', :'research_a', 'Outsider paper', 'conference', :'outsider_id'));
+reset role;
+
 -- ── audit, activity and notification side effects ───────────────────────────
 select t_visible(:'suite', 'membership changes notify the researcher',
   format('select 1 from public.notifications where kind = %L and user_id = %L', 'research_membership', :'member_id'), 1);
@@ -218,6 +241,8 @@ select t_visible(:'suite', 'the research activity feed recorded the supervisor d
   format('select 1 from public.research_activity where entity_type = %L and actor_id = %L', 'research_datasets', :'super_id'), 1);
 select t_visible(:'suite', 'ethics approvals are written to the audit log',
   format('select 1 from public.audit_logs where table_name = %L', 'research_ethics_approvals'), null);
+select t_visible(:'suite', 'the conference paper is stored against the private research',
+  format($$select 1 from public.research_publications where research_id = %L and venue_type = 'conference' and event_date = '2026-11-02'$$, :'research_a'), 1);
 select t_true(:'suite', 'the research bucket is private',
   format('select not public from storage.buckets where id = %L', 'research-files'), true);
 select t_visible(:'suite', 'every research table publishes to Realtime',
