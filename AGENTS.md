@@ -40,6 +40,7 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - UI styling: `src/style.css`, `src/auth.css`, `src/profile.css`.
 - Database migrations: `supabase/migrations/`.
 - Database pgTAP draft: `supabase/tests/rls.sql`.
+- Executable RLS allow/deny harness: `scripts/rls-local.sh`, `supabase/tests/local/`.
 - CI: `.github/workflows/ci.yml`.
 - Backup workflow: `.github/workflows/weekly-backup.yml`.
 - Deployment documentation: `DEPLOYMENT.md`.
@@ -81,7 +82,7 @@ The current Agent Map is a visual mock with hard-coded states. There is no live 
 
 ## Implemented and verified
 
-Last verified: 2026-09-02, Asia/Muscat.
+Last verified: 2026-09-04, Asia/Muscat.
 
 ### 2026-09-02 critical V1 implementation (feature branch)
 
@@ -164,9 +165,9 @@ Last verified: 2026-09-02, Asia/Muscat.
 - No authenticated application shell or URL router/deep links.
 - No real employee directory, departments, onboarding, announcements, calendar, documents, KPI/performance, notifications, or timesheet UI/API.
 - No working project dashboards, Kanban, milestones, meetings, budgets, file-level permissions, clients, GitHub integration, activity, or project agents.
-- No working research workflows, datasets, experiments, ethics/approvals, publication/DOI/conference tracking, or AI research assistant.
+- Research V1 (members, datasets, experiments, ethics/approvals, publications/DOI/conference tracking, private documents with per-user/per-role grants, tasks, activity) is implemented and proven by the executable RLS suite, but is not yet applied to remote Supabase, deployed to Staging, or verified through an authenticated browser session. The AI research assistant remains unimplemented.
 - No working CRM UI, lead pipeline, Sales permissions E2E, or Sales agent.
-- CV Storage, three Realtime tables, and the decision Edge Function are deployed. Project, research, HR, and avatar buckets/policies are still missing.
+- CV Storage, three Realtime tables, and the decision Edge Function are deployed. The `project-files` and `research-files` buckets and policies exist in migrations; the research bucket is not yet applied remotely. Avatar and general-document buckets are still missing.
 - RAG/Knowledge Agent, Google Drive synchronization, embeddings pipeline, and document ACL filtering are not implemented.
 - No Operations/HR/Finance/Marketing/Support/Analytics/Competitor agent execution.
 - No daily/weekly executive report generation or weekly email delivery.
@@ -175,8 +176,8 @@ Last verified: 2026-09-02, Asia/Muscat.
 
 ### P2 — quality and operations
 
-- Five unit tests and four public-browser E2E tests exist. Authenticated Auth/RLS/database/email/storage workflows still lack executable integration coverage.
-- `supabase/tests/rls.sql` has 5 schema checks but is not run by GitHub CI and does not impersonate roles to test allow/deny behavior.
+- Thirteen unit tests, eight public-browser E2E tests, and seventy database RLS allow/deny checks exist. Authenticated Auth/email/storage workflows still lack executable integration coverage, and the RLS harness proves policy behaviour against a local database rather than against the remote Supabase project.
+- `supabase/tests/rls.sql` is still a schema-shape draft (38 checks) that CI does not run, because pgTAP is not installed in the harness. Role impersonation is now covered instead by `scripts/rls-local.sh`, which applies every migration to a throwaway PostgreSQL 16 database and runs 70 allow/deny checks as real `anon`/`authenticated` roles in its own CI job. Only the Research workspace has such a suite so far; Employee, Projects, Applications, and account-lifecycle suites are still missing.
 - A Chromium public-flow E2E suite exists; authenticated E2E, accessibility automation, mobile visual regression, performance budgets, error monitoring, and uptime alerts remain missing.
 - No tested recovery procedure, restore drill, staging data policy, retention policy, or disaster recovery evidence.
 - Legacy static files and COR-era assets remain in the repository and should be deliberately migrated or removed only after confirming which historical project pages are still required.
@@ -200,7 +201,7 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 2. Build the authenticated shell and role-aware navigation for Profile, People, Projects, Research, Tasks, Calendar, Documents, Announcements, KPIs, Notifications, Timesheets, CRM, Agents, Approvals, and Settings.
 3. Deliver Employees + departments + onboarding + announcements + timesheets as real workflows.
 4. Deliver Projects + members + Kanban tasks + milestones + files + meetings + activity + KPIs + GitHub repository link.
-5. Deliver Research + members + documents + datasets + experiments + ethics/approvals + publications/DOI/conference tracking.
+5. Deliver Research + members + documents + datasets + experiments + ethics/approvals + publications/DOI/conference tracking. Implemented and covered by the RLS harness; remote migration, Staging deployment, and authenticated verification remain.
 6. Deliver CRM contacts/leads/pipeline for Admin, HR, and Sales.
 
 ### Phase 2 — governance and integrations
@@ -218,6 +219,50 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 4. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
 
 ## Verification log
+
+### 2026-09-04 research workspace implementation and production brand-mark repair
+
+Work is active on `claude/reid-system-development-bcaz9n`, branched from `develop`. Do not present Research V1 as Production-ready before the migration is applied remotely, CI passes, and an authenticated Staging session verifies the workflows.
+
+**Production defect fixed — the header brand mark was broken on `reidpro.com`.**
+
+- The Owner reported a broken-image placeholder next to `ريّد` in the live header. Root cause: `src/main.tsx` referenced the mark as the literal string `/assets/img/reid-logo.svg`. Vite rewrites imported assets and copies `public/`, but leaves literal URLs untouched, and `assets/` sits outside `public/`. Nothing was emitted to `dist/`, so the tag returned 404 in Production while still resolving against the dev server — which is exactly why the existing E2E assertion passed and the bug shipped.
+- The mark is now imported, so Vite emits and content-hashes it. A production build confirms `dist/assets/reid-logo-CbVH3nq6.svg` exists and that both the bundle and the `index.html` favicon link point at it.
+- Two regressions were added. `src/assets.test.ts` fails the build if any file under `src/` references `/assets` through a bare string literal. The E2E assertion no longer matches a fixed URL but asserts the rendered image has a non-zero `naturalWidth`, which is the condition that actually broke.
+- The `/assets/fonts/*.woff2` URLs inside `src/style.css` were checked and are safe: Vite rewrites `url()` in processed CSS, and both font files appear in `dist/`.
+
+**Research workspace V1.**
+
+- Migration `202609040001_research_workspace.sql` extends `research` with field, dates, funding, archive, `created_by` and `updated_at`, and adds `research_datasets`, `research_experiments`, `research_ethics_approvals`, `research_publications`, `research_documents`, `research_document_permissions`, and `research_activity`, plus audit triggers, an activity trigger, membership/ethics notifications, Realtime publication entries, and the private `research-files` bucket.
+- `research_members` had RLS enabled since the core migration but carried no policy at all, so the table was unreadable and unwritable by every client. It now has scoped read and supervisor-only write policies.
+- Bilingual `/research` and `/research/:id` routes were added with overview, tasks, datasets, experiments, ethics, publications, documents, and activity tabs, role-aware controls, 60-second signed document URLs, and per-user/per-role grant management. `/research` and `/research/` deep links were added to the Worker SPA allow-list, and unknown routes keep their edge 404.
+- Two data-integrity rules are enforced in the database rather than the UI: a DOI must match `10.x/suffix`, and an ethics record moved to `approved` or `rejected` must carry `decided_by` and `decided_at`.
+
+**Permissions and RLS were tested against the database, not the interface.**
+
+- `scripts/rls-local.sh` applies every migration in `supabase/migrations` to a throwaway PostgreSQL 16 database and runs `supabase/tests/local/rls_research.sql` as real `anon` and `authenticated` roles with JWT claims. It needs no Docker, Supabase credentials, or network access. `supabase/tests/local/bootstrap.sql` supplies only the missing platform pieces (auth schema, `auth.uid()`, the anon/authenticated/service_role roles, storage schema, Realtime publication); every policy under test is the verbatim policy from the migrations. pgvector is unavailable locally, so the embedding column falls back to a shim domain — no policy reads it.
+- Result: **70/70 checks pass, 0 fail**, across six actors — anonymous, an unrelated active employee, a suspended member, an ordinary researcher, the supervisor, HR, and the Owner.
+- Denials proven, not assumed: anonymous sees no research at all; an unrelated employee sees only the public study and none of its datasets, documents, activity or unpublished papers; a **suspended** member loses every membership-derived permission even though the membership row still exists; an ordinary researcher cannot rename the study, add teammates, register datasets, file ethics approvals, record publications, upload files, grant themselves access to a restricted document, or create research tasks; a researcher cannot log an experiment under another author's name; a supervisor cannot create a new research record, attribute a dataset to someone else, forge the granter of a file permission, or upload into a research folder they do not manage; the Owner cannot attribute a new research record to someone else or create one without a supervisor.
+- Grants proven to work: a direct user grant and an additive-role grant each open a restricted document through `can_read_research_document`, and storage object visibility follows the document decision rather than bucket membership.
+- Side effects proven: membership inserts notify the researcher, an ethics decision notifies the supervisor, the activity feed attributes the supervisor's dataset, ethics changes reach `audit_logs`, the `research-files` bucket is private, and all eight research tables publish to Realtime.
+- One check initially failed and found a fault in the **test**, not the policy: the seed made the same person supervisor of both studies, so cross-research upload denial could never trigger. The second study was reassigned to a different supervisor and the denial then held.
+- The suite runs as its own `rls` CI job against a `postgres:16` service container, so this coverage is enforced on every PR rather than run by hand.
+
+**Local verification.**
+
+- `npm run check`: pass; 13 Vitest checks (TypeScript, Vite Production build included).
+- `npm run test:e2e`: pass; 8 Chromium public workflows, including anonymous denial for `/research` and `/research/:id`, and the new brand-mark render assertion.
+- `npm run test:rls`: pass; 70/70 RLS allow/deny checks.
+- `playwright.config.ts` now honours an optional `PLAYWRIGHT_CHROMIUM_PATH` so sandboxes with a preinstalled Chromium can run the suite; CI still installs its own pinned browser.
+- `@types/node` was added as a devDependency because the new asset regression test reads the filesystem.
+
+**Not done — remaining before Research V1 may be called complete.**
+
+- Migration `202609040001` has **not** been applied to remote Supabase. No Supabase credentials exist in this environment, so no remote migration, schema lint, or Edge Function deployment was attempted.
+- No Staging deployment and no authenticated Owner/supervisor/researcher browser verification. The RLS harness proves the policies against a local database; it does not prove PostgREST shapes, the UI wiring, or Realtime delivery against the live project.
+- Research document upload/download through a real browser is unverified, the same gap already recorded for employee and project files.
+- Equivalent local RLS suites for Employee, Projects, Applications, and account lifecycle are still missing; only Research is covered.
+- Untouched by instruction: `ai-lap` and any AI agent work, Arabic SMTP, and Microsoft OAuth. No Production data was read or modified, and no secret was added to the repository or to GitHub.
 
 ### 2026-09-04 Reid brand mark
 

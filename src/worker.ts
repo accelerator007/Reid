@@ -1,4 +1,6 @@
-const appRoutes = new Set(['/login', '/apply', '/profile', '/dashboard', '/workspace', '/projects', '/privacy'])
+const appRoutes = new Set(['/login', '/apply', '/profile', '/dashboard', '/workspace', '/projects', '/research', '/privacy'])
+// Routes whose children are application-owned deep links (/projects/:id).
+const appRoutePrefixes = ['/projects/', '/research/']
 
 type WorkerEnvironment = {
   ASSETS: { fetch(request: Request): Promise<Response> }
@@ -14,7 +16,11 @@ export default {
 
     const canRenderApp = request.method === 'GET' || request.method === 'HEAD'
 
-    if (canRenderApp && (appRoutes.has(url.pathname) || url.pathname.startsWith('/projects/'))) {
+    if (
+      canRenderApp &&
+      (appRoutes.has(url.pathname) ||
+        appRoutePrefixes.some(prefix => url.pathname.startsWith(prefix)))
+    ) {
       const indexUrl = new URL('/', url)
       return env.ASSETS.fetch(new Request(indexUrl, request))
     }

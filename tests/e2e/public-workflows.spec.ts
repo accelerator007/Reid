@@ -3,7 +3,13 @@ import { expect, test } from '@playwright/test';
 test('renders Reid bilingually and opens WhatsApp assistant', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('ريّد', { exact: true }).first()).toBeVisible();
-  await expect(page.locator('header .brand img')).toHaveAttribute('src', '/assets/img/reid-logo.svg');
+  // Vite may inline the mark as a data URI or emit a hashed file depending on the
+  // build, so assert what actually broke in production: that the image renders.
+  const brandMark = page.locator('header .brand img');
+  await expect(brandMark).toBeVisible();
+  await expect
+    .poll(() => brandMark.evaluate((el: HTMLImageElement) => el.naturalWidth))
+    .toBeGreaterThan(0);
   await page.getByRole('button', { name: 'EN' }).click();
   await expect(page.getByText('Building the future intelligently.')).toBeVisible();
   await page.getByRole('button', { name: 'Chat' }).click();
@@ -26,6 +32,14 @@ test('protects project routes for anonymous visitors', async ({ page }) => {
   await page.goto('/projects');
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
   await page.goto('/projects/00000000-0000-0000-0000-000000000001');
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+});
+
+test('protects research routes for anonymous visitors', async ({ page }) => {
+  await page.goto('/research');
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+  await expect(page.getByText('الأبحاث')).toHaveCount(0);
+  await page.goto('/research/00000000-0000-0000-0000-000000000002');
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
 });
 
