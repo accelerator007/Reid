@@ -42,6 +42,7 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - UI styling: `src/style.css`, `src/auth.css`, `src/profile.css`.
 - Agent gateway Edge Function: `supabase/functions/llm-gateway/index.ts`.
 - Agent gateway client and policy: `src/agents.ts`, `src/agent-command.tsx`.
+- Route manifest shared by the app and the Worker: `src/routes.ts`.
 - Database migrations: `supabase/migrations/`.
 - Database pgTAP draft: `supabase/tests/rls.sql`.
 - Executable RLS allow/deny harness: `scripts/rls-local.sh`, `supabase/tests/local/`.
@@ -64,6 +65,7 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Work on `feature/*`. Run checks before PR. Do not push directly to `main`.
 - Preserve the public website identity and bilingual behavior. Do not rename the company to COR.
 - When changing schema, add a migration; do not edit an already-applied migration.
+- Add a route only in `src/routes.ts`. Both `src/main.tsx` and `src/worker.ts` derive from it, and `src/routes.contract.test.ts` fails if a path the app renders is not served by the edge.
 - Use accessible labels, keyboard behavior, loading/error states, and mobile QA for every new UI workflow.
 
 ## Roles and intended permissions
@@ -191,7 +193,7 @@ Last verified: 2026-09-04, Asia/Muscat.
 
 ### P1 — core modules are schema/mock only
 
-- No authenticated application shell or URL router/deep links.
+- The route manifest and deep links are in place; the authenticated application shell and role-aware navigation are still missing, so each feature module re-implements its own gate.
 - No real employee directory, departments, onboarding, announcements, calendar, documents, KPI/performance, notifications, or timesheet UI/API.
 - No working project dashboards, Kanban, milestones, meetings, budgets, file-level permissions, clients, GitHub integration, activity, or project agents.
 - Research V1 (members, datasets, experiments, ethics/approvals, publications/DOI/conference tracking, private documents with per-user/per-role grants, tasks, activity) is merged to `develop` and proven by 79 local RLS allow/deny checks. Migration `202609040001` is **not applied to remote Supabase**, so the module cannot work against Staging or Production yet, and no authenticated browser session has verified it. The AI research assistant remains unimplemented.
@@ -250,6 +252,13 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 5. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
 
 ## Verification log
+
+### 2026-09-04 shared route manifest (feature branch)
+
+- Routing lived in five places: the `Page` union, a path-to-page map, a page-to-path map, prefix rules inside `resolvePage`, and a second hand-written list in `src/worker.ts`. Adding a route meant editing all five, and missing the Worker shipped a page that worked locally and returned 404 in production, which had already happened once.
+- `src/routes.ts` is now the single manifest. It declares each route's page, path, deep-link ownership and whether it needs a session, and stays free of React and DOM APIs so the Worker can import it. `main.tsx` and `worker.ts` both derive from it.
+- `src/routes.contract.test.ts` iterates the manifest, so a new route is covered the moment it is declared. It asserts the edge serves the shell for every declared path, that deep links resolve to their parent, that an undeclared path 404s at both layers, that pages round-trip through their paths, and that no authenticated route appears in the public sitemap.
+- Verified by adding a temporary `/crm` route to the manifest alone: the Worker served it with no edit, and the contract suite grew from 18 to 19 cases by itself. The route was then removed.
 
 ### 2026-09-04 Gemini provider credential verified
 - `ListModels` returned HTTP 200 for the Owner-supplied key: 50 models, so the credential is a valid Gemini API key rather than a short-lived OAuth token.

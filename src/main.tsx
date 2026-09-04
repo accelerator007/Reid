@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { installIdleTimeout } from "./session";
+import { pathFor, resolvePage } from "./routes";
+import type { Page } from "./routes";
 import { EmployeeWorkspace } from "./employee";
 import { ProjectWorkspace } from "./projects";
 import { AgentCommand } from "./agent-command";
@@ -19,17 +21,6 @@ import "./workflow.css";
 import "./agents.css";
 
 type Lang = "ar" | "en";
-type Page =
-  | "home"
-  | "dashboard"
-  | "apply"
-  | "login"
-  | "profile"
-  | "workspace"
-  | "projects"
-  | "research"
-  | "privacy"
-  | "not-found";
 type ProfileData = {
   full_name: string;
   phone: string;
@@ -115,35 +106,6 @@ const tr = {
     research: "Research",
   },
 };
-const routes: Record<string, Page> = {
-  "/": "home",
-  "/login": "login",
-  "/apply": "apply",
-  "/profile": "profile",
-  "/workspace": "workspace",
-  "/projects": "projects",
-  "/research": "research",
-  "/dashboard": "dashboard",
-  "/privacy": "privacy",
-};
-const paths: Record<Page, string> = {
-  home: "/",
-  login: "/login",
-  apply: "/apply",
-  profile: "/profile",
-  workspace: "/workspace",
-  projects: "/projects",
-  research: "/research",
-  dashboard: "/dashboard",
-  privacy: "/privacy",
-  "not-found": "/404",
-};
-function resolvePage(pathname: string): Page {
-  const normalized = pathname.replace(/\/+$/, "") || "/";
-  if (normalized.startsWith("/projects/")) return "projects";
-  if (normalized.startsWith("/research/")) return "research";
-  return routes[normalized] || "not-found";
-}
 function useRoute() {
   const [page, setPage] = React.useState<Page>(
     resolvePage(location.pathname),
@@ -156,7 +118,7 @@ function useRoute() {
   return [
     page,
     (p: Page) => {
-      history.pushState({}, "", paths[p]);
+      history.pushState({}, "", pathFor(p));
       setPage(p);
       scrollTo(0, 0);
     },
