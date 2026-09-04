@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 test('renders Reid bilingually and opens WhatsApp assistant', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('ريّد', { exact: true }).first()).toBeVisible();
+  await expect(page.locator('header .brand img')).toHaveAttribute('src', '/assets/img/reid-logo.svg');
   await page.getByRole('button', { name: 'EN' }).click();
   await expect(page.getByText('Building the future intelligently.')).toBeVisible();
   await page.getByRole('button', { name: 'Chat' }).click();
