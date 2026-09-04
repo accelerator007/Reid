@@ -198,7 +198,7 @@ Last verified: 2026-09-04, Asia/Muscat.
 - No working CRM UI, lead pipeline, Sales permissions E2E, or Sales agent.
 - CV Storage, three Realtime tables, and the decision Edge Function are deployed. The `project-files` and `research-files` buckets and policies exist in migrations; the research bucket is not yet applied remotely. Avatar and general-document buckets are still missing.
 - RAG/Knowledge Agent, Google Drive synchronization, embeddings pipeline, and document ACL filtering are not implemented.
-- Agent execution, admin controls, and the private gateway are implemented on the feature branch but not deployed, so no agent has completed a real run yet.
+- Agent execution, admin controls, and the private gateway are implemented on `claude/agent-plan-7v3s5l` and proposed in PR #58, but not deployed, so no agent has completed a real run yet.
 - No daily/weekly executive report generation or weekly email delivery.
 - Tool allow-lists, per-agent system prompts, and memory-scope retrieval are not implemented; the gateway currently passes the caller's text straight through.
 - No queue worker: L2+ runs stop at `pending_approval` and an approved run is not automatically dispatched afterwards.
@@ -206,8 +206,8 @@ Last verified: 2026-09-04, Asia/Muscat.
 
 ### P2 — quality and operations
 
-- Thirteen unit tests, eight public-browser E2E tests, and seventy-nine database RLS allow/deny checks exist. Authenticated Auth/email/storage workflows still lack executable integration coverage, and the RLS harness proves policy behaviour against a local database rather than against the remote Supabase project.
-- `supabase/tests/rls.sql` is still a schema-shape draft (38 checks) that CI does not run, because pgTAP is not installed in the harness. Role impersonation is now covered instead by `scripts/rls-local.sh`, which applies every migration to a throwaway PostgreSQL 16 database and runs 79 allow/deny checks as real `anon`/`authenticated` roles in its own CI job. Only the Research workspace has such a suite so far; Employee, Projects, Applications, and account-lifecycle suites are still missing.
+- Twenty-one unit tests, eight public-browser E2E tests, and 109 database RLS allow/deny checks exist (79 research, 30 agent gateway). Authenticated Auth/email/storage workflows still lack executable integration coverage, and the RLS harness proves policy behaviour against a local database rather than against the remote Supabase project.
+- `supabase/tests/rls.sql` is still a schema-shape draft (38 checks) that CI does not run, because pgTAP is not installed in the harness. Role impersonation is now covered instead by `scripts/rls-local.sh`, which applies every migration to a throwaway PostgreSQL 16 database and runs 79 allow/deny checks as real `anon`/`authenticated` roles in its own CI job. The Research workspace and the agent gateway have such suites; Employee, Projects, Applications, and account-lifecycle suites are still missing.
 - A Chromium public-flow E2E suite exists; authenticated E2E, accessibility automation, mobile visual regression, performance budgets, error monitoring, and uptime alerts remain missing.
 - No tested recovery procedure, restore drill, staging data policy, retention policy, or disaster recovery evidence.
 - Legacy static files and COR-era assets remain in the repository and should be deliberately migrated or removed only after confirming which historical project pages are still required.
