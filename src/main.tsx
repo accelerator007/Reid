@@ -4,6 +4,8 @@ import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { installIdleTimeout } from "./session";
 import { pathFor, resolvePage } from "./routes";
+import { firstError, list, messageFor, run, toAppError } from "./db";
+import type { AppError } from "./db";
 import type { Page } from "./routes";
 import { EmployeeWorkspace } from "./employee";
 import { ProjectWorkspace } from "./projects";
@@ -577,25 +579,37 @@ function Dashboard({
       "approved" | "rejected" | null
     >(null),
     [rejectReason, setRejectReason] = React.useState(""),
-    [busyDecision, setBusyDecision] = React.useState(false);
+    [busyDecision, setBusyDecision] = React.useState(false),
+    [loadError, setLoadError] = React.useState<AppError | null>(null);
   const allowed = roles.some((x) =>
     ["owner", "super_admin", "admin", "hr"].includes(x),
   );
   const refresh = React.useCallback(async () => {
     if (!supabase || !user) return;
-    const r = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id),
-      next = r.data?.map((x) => x.role) || [];
+    setLoadError(null);
+
+    const roleRows = await list<{ role: string }>(
+      supabase.from("user_roles").select("role").eq("user_id", user.id),
+    );
+    if (!roleRows.ok) return setLoadError(roleRows.error);
+    const next = roleRows.data.map((x) => x.role);
     setRoles(next);
-    const control = await supabase
-      .from("account_controls")
-      .select("status")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    setAccountStatus(control.data?.status || "active");
-    if (control.data?.status && control.data.status !== "active") return;
+
+    // This lookup decides whether a suspended account may act, so a failed
+    // read must never be read as "active". It previously fell back to
+    // "active" on any error, which let a failed request open the workspace.
+    const control = await run<{ status: string }>(
+      supabase
+        .from("account_controls")
+        .select("status")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    );
+    if (!control.ok) return setLoadError(control.error);
+    const status = control.data?.status || "active";
+    setAccountStatus(status);
+    if (status !== "active") return;
+
     if (!next.some((x) => ["owner", "super_admin", "admin", "hr"].includes(x)))
       return;
     const [
@@ -643,10 +657,16 @@ function Dashboard({
       supabase.from("user_roles").select("user_id,role"),
       supabase.from("account_controls").select("user_id,status,reason"),
     ]);
+    // A panel that loads in parallel reports one outcome. Without this the
+    // first denied query rendered as an empty section with no explanation.
+    const failure = firstError([p, failed, notices, companyProfiles, companyRoles, companyControls]
+      .map((r) => (r.error ? { ok: false as const, error: toAppError(r.error) } : { ok: true as const, data: null })));
+    if (failure) setLoadError(failure);
+
     setApps((p.data || []) as Application[]);
     setFailedInvites((failed.data || []) as Application[]);
     setNotifications((notices.data || []) as Notification[]);
-    const roleRows = (companyRoles.data || []) as {
+    const memberRoles = (companyRoles.data || []) as {
       user_id: string;
       role: string;
     }[];
@@ -658,7 +678,7 @@ function Dashboard({
     setAccounts(
       (companyProfiles.data || []).map((account) => ({
         ...account,
-        user_roles: roleRows
+        user_roles: memberRoles
           .filter(({ user_id }) => user_id === account.id)
           .map(({ role }) => ({ role })),
         account_controls:
@@ -810,11 +830,31 @@ function Dashboard({
       />
     );
   if (!allowed)
-    return <Gate title={lang === "ar" ? "لا توجد صلاحية" : "Access denied"} />;
+    return (
+      <Gate
+        title={
+          loadError
+            ? messageFor(loadError, lang)
+            : lang === "ar"
+              ? "لا توجد صلاحية"
+              : "Access denied"
+        }
+        action={loadError ? () => void refresh() : undefined}
+        label={loadError ? (lang === "ar" ? "أعد المحاولة" : "Try again") : undefined}
+      />
+    );
   return (
     <main className="dashboard">
       <span>REID COMMAND CENTER</span>
       <h1>{lang === "ar" ? "لوحة الشركة الحية" : "Live company dashboard"}</h1>
+      {loadError && (
+        <p className="load-error" role="alert" data-kind={loadError.kind}>
+          {messageFor(loadError, lang)}
+          <button type="button" onClick={() => void refresh()}>
+            {lang === "ar" ? "أعد المحاولة" : "Try again"}
+          </button>
+        </p>
+      )}
       <section className="kpis">
         {[
           "Active Projects",

@@ -43,6 +43,8 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Agent gateway Edge Function: `supabase/functions/llm-gateway/index.ts`.
 - Agent gateway client and policy: `src/agents.ts`, `src/agent-command.tsx`.
 - Route manifest shared by the app and the Worker: `src/routes.ts`.
+- Typed data boundary and bilingual error mapping: `src/db.ts`.
+- Archived pre-React marketing content: `content/legacy/` (built by nothing, served by nothing).
 - Database migrations: `supabase/migrations/`.
 - Database pgTAP draft: `supabase/tests/rls.sql`.
 - Executable RLS allow/deny harness: `scripts/rls-local.sh`, `supabase/tests/local/`.
@@ -65,6 +67,7 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Work on `feature/*`. Run checks before PR. Do not push directly to `main`.
 - Preserve the public website identity and bilingual behavior. Do not rename the company to COR.
 - When changing schema, add a migration; do not edit an already-applied migration.
+- Read Supabase through `src/db.ts`. Never write `(result.data || [])`: it discards the error object, so an expired session, a network drop and an empty table all render as the same blank panel.
 - Add a route only in `src/routes.ts`. Both `src/main.tsx` and `src/worker.ts` derive from it, and `src/routes.contract.test.ts` fails if a path the app renders is not served by the edge.
 - Use accessible labels, keyboard behavior, loading/error states, and mobile QA for every new UI workflow.
 
@@ -212,7 +215,7 @@ Last verified: 2026-09-04, Asia/Muscat.
 - `supabase/tests/rls.sql` is still a schema-shape draft (38 checks) that CI does not run, because pgTAP is not installed in the harness. Role impersonation is now covered instead by `scripts/rls-local.sh`, which applies every migration to a throwaway PostgreSQL 16 database and runs 79 allow/deny checks as real `anon`/`authenticated` roles in its own CI job. The Research workspace and the agent gateway have such suites; Employee, Projects, Applications, and account-lifecycle suites are still missing.
 - A Chromium public-flow E2E suite exists; authenticated E2E, accessibility automation, mobile visual regression, performance budgets, error monitoring, and uptime alerts remain missing.
 - No tested recovery procedure, restore drill, staging data policy, retention policy, or disaster recovery evidence.
-- Legacy static files and COR-era assets remain in the repository and should be deliberately migrated or removed only after confirming which historical project pages are still required.
+- Legacy COR-era pages are archived under `content/legacy/` with a README. Their titles still read "| COR" and they are not reachable; they need to become real bilingual routes before the directory is deleted.
 - Documentation files other than this status have stale claims, including hosting details and OAuth progress. Update them alongside implementation.
 
 ## Ordered delivery plan
@@ -252,6 +255,20 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 5. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
 
 ## Verification log
+
+### 2026-09-04 typed data boundary (feature branch)
+
+- `src/db.ts` returns a discriminated `Result` and maps PostgREST and Postgres codes to seven outcomes a user can act on, each with an Arabic and an English message. It covers `42501` RLS refusals, `PGRST301` expired sessions, `PGRST116` missing rows, constraint violations, network failures, and the `P0001` refusals our own RPCs raise, including `approval_denied` and `provider_not_cleared_for_classification`.
+- It deliberately does not guess about SELECT: row-level security filters rather than raising, so a denied read and an empty table are identical over the wire. The layer keeps them distinct as outcomes so the interface can say "nothing visible to you" instead of rendering a void.
+- **Security fix.** The dashboard read `account_controls` with `setAccountStatus(control.data?.status || "active")`. Any failure of that read — expired JWT, dropped connection — produced `null` and was treated as an active account, so the suspension gate failed open. A failed read is now an error state, and the workspace stays closed.
+- A failed load also no longer masquerades as a permission problem: roles come back empty when their query fails, which is exactly what the "Access denied" gate tested for. The gate now shows the real cause and a retry.
+- The dashboard's eleven parallel queries report one outcome through `firstError`, which puts an expired session ahead of the failures it caused.
+- 19 unit tests cover the mapping. Migration is incremental: the dashboard gate and its parallel loads are converted; roughly sixty direct calls remain in the four feature modules and move as each is brought into the shell.
+
+### 2026-09-04 archived the pre-React site
+
+- `en/`, `blog/`, `projects/`, `styles.css`, `script.js` and `fonts.css` moved to `content/legacy/`. None of it was ever built or served — Vite builds `index.html` and `src/`, and the Worker serves `dist/` — but the three content pages hold real Arabic writing about كور COR, رتق RATQ and predictive maintenance, so they are archived rather than deleted, with a README recording what must happen before they go.
+- Deleted outright as dead duplicates of the deployed `public/` copies: root `sitemap.xml`, `robots.txt`, `_headers`, `site.webmanifest`, `404.html` and `privacy.html`. The root sitemap advertised ten COR-era URLs; the deployed one lists four real routes.
 
 ### 2026-09-04 shared route manifest (feature branch)
 
