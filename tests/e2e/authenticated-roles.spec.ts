@@ -85,5 +85,7 @@ test.describe('authenticated employee role journeys', () => {
     await expect(page.getByText('Reid manager', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Reid employee', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Reid hr', { exact: true }).first()).toBeVisible();
+    await page.goto('/crm');
+    await expect(page.getByRole('heading', { name: 'إدارة العملاء والمبيعات' })).toBeVisible();
   });
 });

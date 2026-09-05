@@ -118,6 +118,15 @@ Last verified: 2026-09-05, Asia/Muscat.
 - Local pre-PR verification passed: 3/3 authenticated Chromium role journeys (Employee, direct-report Manager, HR), 114/114 Vitest checks, the TypeScript/Vite Production build, and the Production/Staging/Supabase uptime probe. The authenticated job must also pass with repository secrets on the pull request before merge.
 - Weekly database backup remains blocked only on `SUPABASE_DB_URL`, which requires the database password. Never paste it into chat; add the complete connection URL directly as a GitHub Actions secret.
 
+### 2026-09-05 CRM and executive reports implementation
+
+- Work is active on `feature/crm-executive-reports`; do not present it as Production-ready before remote migration, authenticated role verification, CI, Staging, and the protected Production release pass.
+- Migration `202609050003_crm_reports.sql` adds companies, expanded contacts, leads, deals, follow-up activities, daily/weekly executive reports, audit triggers, Realtime and a database-generated metrics snapshot. CRM data is limited to Owner/Super Admin/Admin/HR/Sales; ordinary employees and anonymous users receive no rows. Sales cannot read executive reports.
+- Added the bilingual `/crm` workspace with pipeline KPIs, lead board, company/contact/lead/deal/follow-up creation, stage controls and report generation/history. Route visibility is role-aware and database RLS remains the security boundary.
+- Added the service-role-only `executive-reports` Edge Function and scheduled GitHub workflow: a daily snapshot is stored every day and a weekly snapshot is stored each Sunday. Weekly Arabic email delivery activates only when `RESEND_API_KEY` and a verified `REPORT_FROM_EMAIL` are configured in Supabase; without them the report remains stored and records `email_provider_not_configured` instead of pretending delivery.
+- Local application verification passes 127/127 Vitest checks, the TypeScript/Vite Production build and 10/10 public Chromium journeys; three remote authenticated journeys are intentionally CI-only. The linked migration dry run lists only `202609050003`. Local database RLS execution is unavailable on this Mac because PostgreSQL client binaries are absent, so the PR's PostgreSQL 16 RLS job is mandatory before remote migration.
+- The weekly backup secret still did not update after the latest browser handoff: GitHub reports the original update timestamp and the repeated manual backup failed. Treat the value as invalid until a complete percent-encoded pooler DSN is saved and a run succeeds.
+
 ### 2026-09-05 Production ownership enforcement
 
 - GitHub `main` enforces administrators, current-branch status checks, pull requests, linear history, resolved conversations, and blocks force-push/deletion. Direct collaborator downgrade still reports `write`, so `.github/CODEOWNERS` assigns the whole repository to `@accelerator007`; branch protection now requires one approving CODEOWNER review and applies to administrators. Production cannot merge without the Owner's explicit GitHub review.

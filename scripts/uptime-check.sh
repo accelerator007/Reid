@@ -14,6 +14,7 @@ check_status 'https://reidpro.com/dashboard' 200
 check_status 'https://reidpro.com/workspace' 200
 check_status 'https://reidpro.com/projects' 200
 check_status 'https://reidpro.com/research' 200
+check_status 'https://reidpro.com/crm' 200
 check_status 'https://reidpro.com/privacy' 200
 check_status 'https://reidpro.com/assets/img/reid-logo.svg' 200
 check_status 'https://reidpro.com/this-route-must-not-exist' 404
