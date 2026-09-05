@@ -58,6 +58,18 @@ describe('Cloudflare application routing', () => {
     expect(await response.text()).toContain('Reid')
   })
 
+  it('serves the research workspace and its deep links through the app shell', async () => {
+    for (const path of ['/research', '/research/00000000-0000-0000-0000-000000000002']) {
+      const response = await worker.fetch(
+        new Request(`https://reidpro.com${path}`),
+        { ASSETS: createAssets() },
+      )
+
+      expect(response.status).toBe(200)
+      expect(await response.text()).toContain('Reid')
+    }
+  })
+
   it('redirects the legacy privacy URL to the canonical route', async () => {
     const response = await worker.fetch(
       new Request('https://reidpro.com/privacy.html'),

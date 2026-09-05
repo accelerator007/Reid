@@ -1,5 +1,9 @@
 # Decisions
 1. Vite React preserves the simple Pages deployment; server concerns use Supabase Edge Functions.
 2. Supabase is source of truth; Workers are only for a narrow authenticated Ollama gateway if free allowance suffices.
-3. Requested model is verified as `gemma4:12b`. `ai-lap`: RTX 3080 Ti 12GB, RAM 32GB, Ryzen 9 5950X.
+3. Requested model is recorded as `gemma4:12b`. `ai-lap`: RTX 3080 Ti 12GB, RAM 32GB, Ryzen 9 5950X. Gemma 4 is a real family, but the exact Ollama tag must be re-verified on the host.
 4. Supabase free requires a separate weekly logical backup.
+5. Model providers are data, not code. `llm_providers` holds the endpoint, model, and clearance ceiling; the gateway dispatches on `kind`. Restoring `ai-lap` is a row update, not a rewrite.
+6. Google Gemini is a temporary external provider while `ai-lap` is offline. The account is on the free tier, where content may be reused by Google, so it is capped at `public` data: only the three publishable agents run, and everything internal or above stays disabled. The cap is enforced by a database trigger so the gateway cannot be the only guard.
+7. Prompts are stored as a SHA-256 hash and answers as a 280-character preview. A run stays auditable without the database accumulating company text.
+8. Provider rows pin an explicit model, never a moving alias such as `gemini-flash-latest`. A model change is then a recorded decision rather than a silent shift in behaviour and cost.

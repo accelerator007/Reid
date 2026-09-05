@@ -1,6 +1,8 @@
 import React from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { firstError, messageFor, toAppError } from "./db";
+import { useSession } from "./shell";
 import "./projects.css";
 import "./project-permissions.css";
 
@@ -121,8 +123,9 @@ const copy = {
 };
 
 export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
+  // Roles come from the shell, which resolved them once for the session.
+  const { roles } = useSession();
   const t = copy[lang],
-    [roles, setRoles] = React.useState<string[]>([]),
     [projects, setProjects] = React.useState<Project[]>([]),
     [people, setPeople] = React.useState<Person[]>([]),
     [selected, setSelected] = React.useState<string | null>(
@@ -157,11 +160,10 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
     people.find((p) => p.id === id)?.full_name || "—";
   const loadProjects = React.useCallback(async () => {
     if (!supabase) return;
-    const [r, p] = await Promise.all([
-      supabase.from("user_roles").select("role").eq("user_id", user.id),
-      supabase.from("profiles").select("id,full_name,email").order("full_name"),
-    ]);
-    setRoles(r.data?.map((x) => x.role) || []);
+    const p = await supabase
+      .from("profiles")
+      .select("id,full_name,email")
+      .order("full_name");
     setPeople((p.data || []) as Person[]);
     const q = await supabase
       .from("projects")
@@ -170,8 +172,15 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
       )
       .order("updated_at", { ascending: false });
     setProjects((q.data || []) as Project[]);
-    if (q.error) setMessage(q.error.message);
-  }, [user.id]);
+    const failure = firstError(
+      [p, q].map((x) =>
+        x.error
+          ? { ok: false as const, error: toAppError(x.error) }
+          : { ok: true as const, data: null },
+      ),
+    );
+    setMessage(failure ? messageFor(failure, lang) : "");
+  }, [user.id, lang]);
   const loadProject = React.useCallback(async () => {
     if (!supabase || !selected) return;
     const [m, ta, mi, me, f, fp, k, a] = await Promise.all([
@@ -223,9 +232,16 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
     setFilePermissions((fp.data || []) as FilePermission[]);
     setKpis((k.data || []) as Kpi[]);
     setActivity((a.data || []) as Activity[]);
-    const err = [m, ta, mi, me, f, fp, k, a].find((x) => x.error)?.error;
-    if (err) setMessage(err.message);
-  }, [selected]);
+    // A raw Postgres string is not something a reader can act on.
+    const failure = firstError(
+      [m, ta, mi, me, f, fp, k, a].map((x) =>
+        x.error
+          ? { ok: false as const, error: toAppError(x.error) }
+          : { ok: true as const, data: null },
+      ),
+    );
+    setMessage(failure ? messageFor(failure, lang) : "");
+  }, [selected, lang]);
   React.useEffect(() => {
     void loadProjects();
   }, [loadProjects]);

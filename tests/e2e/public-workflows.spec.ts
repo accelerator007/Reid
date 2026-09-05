@@ -3,7 +3,13 @@ import { expect, test } from '@playwright/test';
 test('renders Reid bilingually and opens WhatsApp assistant', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('ريّد', { exact: true }).first()).toBeVisible();
-  await expect(page.locator('header .brand img')).toHaveAttribute('src', '/assets/img/reid-logo.svg');
+  // Vite may inline the mark as a data URI or emit a hashed file depending on the
+  // build, so assert what actually broke in production: that the image renders.
+  const brandMark = page.locator('header .brand img');
+  await expect(brandMark).toBeVisible();
+  await expect
+    .poll(() => brandMark.evaluate((el: HTMLImageElement) => el.naturalWidth))
+    .toBeGreaterThan(0);
   await page.getByRole('button', { name: 'EN' }).click();
   await expect(page.getByText('Building the future intelligently.')).toBeVisible();
   await page.getByRole('button', { name: 'Chat' }).click();
@@ -12,7 +18,10 @@ test('renders Reid bilingually and opens WhatsApp assistant', async ({ page }) =
 
 test('protects the dashboard for anonymous visitors', async ({ page }) => {
   await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: 'تسجيل الدخول مطلوب' })).toBeVisible();
+  // Every guarded route now offers sign-in inline and keeps the destination,
+  // rather than a dead-end gate that forgets where the visitor was going.
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'G Google' })).toBeVisible();
   await expect(page.getByText('Pending Approvals')).toHaveCount(0);
 });
 
@@ -26,6 +35,14 @@ test('protects project routes for anonymous visitors', async ({ page }) => {
   await page.goto('/projects');
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
   await page.goto('/projects/00000000-0000-0000-0000-000000000001');
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+});
+
+test('protects research routes for anonymous visitors', async ({ page }) => {
+  await page.goto('/research');
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+  await expect(page.getByText('الأبحاث')).toHaveCount(0);
+  await page.goto('/research/00000000-0000-0000-0000-000000000002');
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
 });
 
@@ -50,4 +67,18 @@ test('renders privacy and in-app 404 routes', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'سياسة الخصوصية' })).toBeVisible();
   await page.goto('/does-not-exist');
   await expect(page.getByRole('heading', { name: '404' })).toBeVisible();
+});
+
+test('dark mode actually darkens inherited text', async ({ page }) => {
+  // The hero headline sets no colour of its own. It once kept the light theme's
+  // near-black ink on a dark ground because `body` resolved --ink against
+  // :root while `.dark` redefined it on a descendant.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/');
+  const heading = page.getByRole('heading', { level: 1 }).first();
+  const [r, g, b] = await heading.evaluate(el =>
+    getComputedStyle(el).color.match(/\d+/g)!.map(Number),
+  );
+  // Perceived luminance: light text on a dark ground, not the inherited ink.
+  expect(0.2126 * r + 0.7152 * g + 0.0722 * b).toBeGreaterThan(140);
 });

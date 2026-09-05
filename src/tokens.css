@@ -1,0 +1,122 @@
+/* Reid's design tokens: the only file in the application that names a colour.
+ *
+ * Before this existed there were six variables and eighty-five hard-coded
+ * hexes: roughly seventeen shades of purple doing the work of three, plus six
+ * greens, five reds and two ambers. Worse, the dark theme was defined in one
+ * file, so every one of those eighty-five literals stayed frozen at its light
+ * value when the theme flipped.
+ *
+ * Two rules keep it that way, and tokens.test.ts enforces the first:
+ *   1. No component stylesheet writes a colour literal. It uses a token.
+ *   2. Every token defined here has a dark counterpart below.
+ *
+ * The brand ramp is built around #55418b, the value already in the
+ * `theme-color` meta tag, so the browser chrome and the interface agree.
+ */
+
+:root {
+  /* ---- brand ramp: one hue, seven steps, no near-duplicates ------------ */
+  --brand-700: #483172;
+  /* Canonical Reid purple. Mirrored by the `theme-color` meta tag in
+     index.html, so the browser chrome matches the interface. */
+  --brand-600: #55418b;
+  --brand-500: #6b51a8;
+  --brand-400: #8069bd;
+  --brand-300: #8d76d0;
+
+  /* Kept: the original variable name, now pointing at the ramp. */
+  --purple: var(--brand-500);
+
+  /* ---- surfaces and text ---------------------------------------------- */
+  --bg: #f6f4f8;
+  --card: #ffffffbd;
+  --ink: #241c30;
+  --muted: #71677e;
+  --line: #55418b20;
+  --line-strong: #55418b40;
+  /* A brand-tinted wash for selected rows and highlighted panels. */
+  --brand-fill: #55418b14;
+
+  /* ---- semantic state, deliberately separate from the brand ----------- */
+  /* Brand purple says "Reid". These say "this went well" or "look here".
+     Mixing them makes a warning and a button indistinguishable. */
+  --good: #237a51;
+  --good-strong: #2f8a5e;
+  --good-line: #42bd8255;
+  --good-fill: #42bd8214;
+
+  --warn: #8a5f12;
+  --warn-line: #b4882a66;
+  --warn-fill: #b4882a1f;
+
+  --risk: #a52f2f;
+  --risk-strong: #b74d5c;
+  --risk-line: #b74d5c55;
+  --risk-fill: #b74d5c14;
+
+  /* ---- elevation ------------------------------------------------------- */
+  --shadow-sm: 0 15px 35px #3d276522;
+  --shadow-md: 0 25px 80px #21152f2b;
+  --shadow-lg: 0 30px 90px #39265f18;
+
+  /* The 500 and 700 steps are fills that carry --on-brand white text, so they
+     stay deep in both themes. Only the foreground steps, 300 and 400, lift on
+     a dark ground; tokens.test.ts holds them to that. */
+
+  /* ---- gradients: one definition, used everywhere --------------------- */
+  --brand-gradient: linear-gradient(135deg, var(--brand-300), var(--brand-700));
+  /* Text on a brand-filled surface stays light in both themes: the fill is
+     dark purple either way, so this does not flip. */
+  --on-brand: #ffffff;
+  --scrim: #160f2c99;
+  /* Structural surfaces: the ambient page glow and the sticky header. */
+  --glow: #e1d6f2;
+  --header-bg: #f7f4f6bd;
+
+  /* ---- radii: twelve values collapsed onto six ------------------------ */
+  --radius-xs: 10px;
+  --radius-sm: 12px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+}
+
+/* The dark theme is a class on the application root, seeded in src/main.tsx
+ * from the reader's system preference and then owned by the toggle. One
+ * mechanism, not two, so the toggle and the OS can never disagree. */
+.dark {
+  --bg: #110d19;
+  --card: #20192bd9;
+  --ink: #f5f0fb;
+  --muted: #b9afc4;
+  --line: #bba7ef24;
+  --line-strong: #bba7ef45;
+  --brand-fill: #a48ede1f;
+
+  /* The accent lifts on a dark ground; the deep steps would vanish. */
+  --brand-400: #a48ede;
+  --brand-300: #b9a6ea;
+  --purple: var(--brand-300);
+
+  --good: #6cc79a;
+  --good-strong: #42bd82;
+  --good-line: #42bd8266;
+  --good-fill: #42bd821f;
+
+  --warn: #dfae5f;
+  --warn-line: #dfae5f66;
+  --warn-fill: #dfae5f1f;
+
+  --risk: #e59a9a;
+  --risk-strong: #d47f7f;
+  --risk-line: #d47f7f66;
+  --risk-fill: #d47f7f1f;
+
+  --glow: #2c2046;
+  --header-bg: #110d19c9;
+
+  --shadow-sm: 0 15px 35px #00000066;
+  --shadow-md: 0 25px 80px #00000073;
+  --shadow-lg: 0 30px 90px #0000008c;
+}

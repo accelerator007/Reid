@@ -9,15 +9,15 @@
   width: min(480px, 100%);
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 30px;
+  border-radius: var(--radius-xl);
   padding: 38px;
-  box-shadow: 0 30px 90px #39265f18;
+  box-shadow: var(--shadow-lg);
 }
 .auth-card > span,
 .profile > span {
   font-size: 11px;
   letter-spacing: 0.18em;
-  color: #8069bd;
+  color: var(--brand-400);
   font-weight: 700;
 }
 .auth h1,
@@ -41,12 +41,12 @@
 .auth em {
   font-style: normal;
   font-size: 10px;
-  color: #8069bd;
+  color: var(--brand-400);
 }
 .auth input {
   padding: 13px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius:var(--radius-sm);
   background: var(--bg);
   color: var(--ink);
 }
@@ -59,7 +59,7 @@
 .oauth button {
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius:var(--radius-sm);
   background: var(--bg);
 }
 .or {
@@ -78,12 +78,12 @@
 .text-link {
   display: block;
   margin: 17px auto 0;
-  color: #745eb1;
+  color: var(--brand-400);
 }
 .form-message {
   padding: 10px;
-  border-radius: 10px;
-  background: #735bac13;
+  border-radius:var(--radius-xs);
+  background: var(--brand-fill);
 }
 .auth-links {
   display: flex;
@@ -106,7 +106,7 @@
   background: var(--card);
   border: 1px solid var(--line);
   padding: 28px;
-  border-radius: 24px;
+  border-radius:var(--radius-xl);
   margin-bottom: 20px;
 }
 .avatar {
@@ -114,8 +114,8 @@
   height: 75px;
   display: grid;
   place-items: center;
-  border-radius: 24px;
-  background: linear-gradient(135deg, #8d76d0, #483172);
+  border-radius:var(--radius-xl);
+  background: linear-gradient(135deg, var(--brand-300), var(--brand-700));
   font: 700 28px a;
   color: white;
 }
@@ -135,10 +135,10 @@
   width: 58px;
   height: 58px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #8065cb, #4a3179);
+  background: linear-gradient(135deg, var(--brand-300), var(--brand-700));
   color: white;
   font-size: 23px;
-  box-shadow: 0 15px 35px #3d276555;
+  box-shadow: var(--shadow-sm);
 }
 .chat-panel {
   position: absolute;
@@ -147,15 +147,15 @@
   width: min(365px, calc(100vw - 36px));
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 23px;
+  border-radius: var(--radius-xl);
   overflow: hidden;
-  box-shadow: 0 25px 80px #21152f47;
+  box-shadow: var(--shadow-md);
 }
 .chat-panel header {
   position: static;
   height: auto;
   padding: 17px 19px;
-  background: linear-gradient(135deg, #745ab4, #4b3376);
+  background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
   color: white;
   border: 0;
 }
@@ -180,7 +180,7 @@
 .chat-body p {
   max-width: 82%;
   padding: 10px 12px;
-  border-radius: 14px;
+  border-radius:var(--radius-md);
   margin: 0;
 }
 .bot {
@@ -188,7 +188,7 @@
   align-self: flex-start;
 }
 .user {
-  background: #6b51a8;
+  background: var(--brand-500);
   color: white;
   align-self: flex-end;
 }
@@ -208,15 +208,15 @@
   width: 35px;
   height: 35px;
   border-radius: 50%;
-  background: #6b51a8;
+  background: var(--brand-500);
   color: white;
 }
 .whatsapp {
   display: block;
   margin: 0 14px 6px;
   padding: 10px;
-  border-radius: 11px;
-  background: #20aa63;
+  border-radius:var(--radius-xs);
+  background: var(--good-strong);
   color: white;
   text-decoration: none;
   text-align: center;
