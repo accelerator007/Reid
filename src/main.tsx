@@ -19,7 +19,7 @@ import { ProjectWorkspace } from "./projects";
 import { AgentCommand } from "./agent-command";
 import { ResearchWorkspace } from "./research";
 import { CrmWorkspace } from "./crm";
-import { Building2, FolderKanban, FlaskConical, Handshake, LayoutDashboard, LogOut, Menu, UserRound, UsersRound, X } from "lucide-react";
+import { Building2, FolderKanban, FlaskConical, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X } from "lucide-react";
 // Imported rather than written as a literal URL. The assets directory sits
 // outside Vite's public directory, so a hard-coded path is never emitted to
 // dist and the header mark 404s in production while still resolving in dev.
@@ -1194,61 +1194,113 @@ function Dashboard({
 }
 
 function Chat({ lang }: { lang: Lang }) {
-  const [open, setOpen] = React.useState(false),
-    [msgs, setMsgs] = React.useState<string[]>([]),
-    [v, setV] = React.useState("");
-  const send = () => {
-    const q = v.trim();
-    if (!q) return;
-    setMsgs([
-      ...msgs,
-      q,
-      /واتس|whatsapp/i.test(q)
-        ? lang === "ar"
-          ? "اضغط زر واتساب للتواصل مع فريق ريّد."
-          : "Use WhatsApp to reach Reid."
-        : lang === "ar"
-          ? "أساعدك بالخدمات والمشاريع وطلبات الانضمام."
-          : "I help with services, projects, and applications.",
-    ]);
+  type PublicMessage = { role: "user" | "model"; text: string };
+  const [open, setOpen] = React.useState(false);
+  const [msgs, setMsgs] = React.useState<PublicMessage[]>([]);
+  const [v, setV] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [handoff, setHandoff] = React.useState(false);
+  const bottom = React.useRef<HTMLDivElement>(null);
+  const welcome = lang === "ar"
+    ? "مرحبًا، أنا مساعد ريّد الذكي. كيف أقدر أساعدك اليوم؟"
+    : "Hi, I’m Reid’s AI assistant. How can I help today?";
+  React.useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [msgs, busy, handoff]);
+  const send = async (suggestion?: string) => {
+    const q = (suggestion ?? v).trim();
+    if (!q || busy) return;
+    const next = [...msgs, { role: "user" as const, text: q }];
+    setMsgs(next);
     setV("");
+    setHandoff(false);
+    if (/(?:\b(?:human|person|agent|staff|team|contact|whats(?:app)?)\b|موظف|شخص|إنسان|احد|أحد|الفريق|اتواصل|تواصل|اتحدث|أتحدث|اكلم|أكلم|واتس|واتساب)/i.test(q)) {
+      setMsgs([...next, {
+        role: "model",
+        text: lang === "ar" ? "أكيد، تقدر تتحدث الآن مع فريق ريّد." : "Of course. You can speak with the Reid team now.",
+      }]);
+      setHandoff(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      if (!supabase) throw new Error("assistant_unavailable");
+      const { data, error } = await supabase.functions.invoke("public-assistant", {
+        body: { message: q, lang, history: msgs.slice(-6) },
+      });
+      if (error || !data?.reply) throw error || new Error("assistant_unavailable");
+      setMsgs([...next, { role: "model", text: data.reply }]);
+      setHandoff(Boolean(data.handoff));
+    } catch {
+      setMsgs([...next, {
+        role: "model",
+        text: lang === "ar" ? "تعذر الرد مؤقتًا. حاول مرة أخرى بعد قليل." : "I couldn’t respond just now. Please try again shortly.",
+      }]);
+    } finally {
+      setBusy(false);
+    }
   };
   const n = import.meta.env.VITE_WHATSAPP_NUMBER || "96897308003",
-    url = `https://wa.me/${n}?text=${encodeURIComponent("Hello Reid")}`;
+    url = `https://wa.me/${n}?text=${encodeURIComponent(lang === "ar" ? "مرحبًا فريق ريّد، أريد التحدث مع أحد من الفريق." : "Hello Reid team, I would like to speak with someone.")}`;
+  const suggestions = lang === "ar"
+    ? ["ما خدماتكم؟", "كيف أنضم؟", "أريد التحدث مع شخص"]
+    : ["What are your services?", "How can I join?", "Talk to a person"];
   return (
     <div className="chat">
       <button
         className="chat-launch"
-        aria-label="Chat"
+        aria-label={lang === "ar" ? "افتح مساعد ريّد" : "Open Reid Assistant"}
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        ✦
+        {open ? <X size={23} /> : <MessageCircle size={25} />}
+        {!open && <span className="chat-online" />}
       </button>
       {open && (
-        <section className="chat-panel">
+        <section className="chat-panel" aria-label={lang === "ar" ? "مساعد ريّد" : "Reid Assistant"}>
           <header>
-            <b>{lang === "ar" ? "مساعد ريّد" : "Reid Assistant"}</b>
-            <button onClick={() => setOpen(false)}>×</button>
+            <div className="chat-identity">
+              <span className="chat-avatar"><Sparkles size={20} /></span>
+              <div>
+                <b>{lang === "ar" ? "مساعد ريّد" : "Reid Assistant"}</b>
+                <small><span />{lang === "ar" ? "مدعوم بالذكاء الاصطناعي" : "AI powered"}</small>
+              </div>
+            </div>
+            <button aria-label={lang === "ar" ? "إغلاق" : "Close"} onClick={() => setOpen(false)}><X size={20} /></button>
           </header>
           <div className="chat-body">
+            <p className="bot">{welcome}</p>
+            {!msgs.length && <div className="chat-suggestions">
+              {suggestions.map(item => <button key={item} onClick={() => void send(item)}>{item}</button>)}
+            </div>}
             {msgs.map((m, i) => (
-              <p key={i} className={i % 2 ? "bot" : "user"}>
-                {m}
+              <p key={`${m.role}-${i}`} className={m.role === "model" ? "bot" : "user"}>
+                {m.text}
               </p>
             ))}
+            {busy && <p className="bot chat-typing"><i /><i /><i /></p>}
+            {handoff && <a className="chat-handoff" href={url} target="_blank" rel="noreferrer">
+              <Headphones size={18} />
+              <span>{lang === "ar" ? "تحدث مع فريق ريّد عبر واتساب" : "Chat with the Reid team on WhatsApp"}</span>
+            </a>}
+            <div ref={bottom} />
           </div>
-          <a className="whatsapp" href={url} target="_blank" rel="noreferrer">
-            WhatsApp ↗
-          </a>
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              send();
+              void send();
             }}
           >
-            <input value={v} onChange={(e) => setV(e.target.value)} />
-            <button>↑</button>
+            <input
+              value={v}
+              onChange={(e) => setV(e.target.value)}
+              maxLength={800}
+              aria-label={lang === "ar" ? "اكتب رسالتك" : "Type your message"}
+              placeholder={lang === "ar" ? "اكتب رسالتك هنا…" : "Type your message…"}
+            />
+            <button aria-label={lang === "ar" ? "إرسال" : "Send"} disabled={busy || !v.trim()}>
+              {busy ? <LoaderCircle className="chat-spinner" size={18} /> : <Send size={18} />}
+            </button>
           </form>
+          <small className="chat-privacy">{lang === "ar" ? "لا ترسل بيانات شخصية أو سرية" : "Don’t share personal or confidential data"}</small>
         </section>
       )}
     </div>
