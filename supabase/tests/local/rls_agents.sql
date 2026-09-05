@@ -34,6 +34,9 @@ insert into public.user_roles(user_id, role) values
 select t_true(:'suite', 'the Owner-approved Gemini runtime accepts all classifications',
   $q$select max_classification = 'restricted' and kind = 'external' and enabled
      from public.llm_providers where id = 'gemini'$q$, true);
+select t_true(:'suite', 'the temporary free tier uses 3.8 with a protected reserve',
+  $q$select chat_model = 'gemini-3.8-flash' and requests_per_hour = 5 and requests_per_day = 18
+     from public.llm_providers where id = 'gemini'$q$, true);
 select t_true(:'suite', 'the local provider ships disabled',
   $q$select not enabled and kind = 'local' from public.llm_providers where id = 'ollama'$q$, true);
 select t_true(:'suite', 'a public agent is enabled on the free tier',
@@ -88,6 +91,8 @@ select t_visible(:'suite', 'an admin cannot read transient payloads',
 select test_sign_out();
 select t_visible(:'suite', 'an anonymous visitor sees no agents',
   'select 1 from public.agents', 0);
+select t_visible(:'suite', 'an anonymous visitor cannot read assistant quota counters',
+  'select 1 from public.public_assistant_daily_usage', 0);
 select t_visible(:'suite', 'an anonymous visitor sees no runs',
   'select 1 from public.agent_runs', 0);
 select t_visible(:'suite', 'an anonymous visitor sees no transient payloads',

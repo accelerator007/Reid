@@ -19,6 +19,7 @@ type Provider = {
   max_classification: string;
   enabled: boolean;
   requests_per_hour: number;
+  requests_per_day: number;
 };
 
 type Agent = {
@@ -228,7 +229,7 @@ Deno.serve(async (request) => {
 
       const [{ data: resumedAgent, error: resumedAgentError }, { data: resumedProvider, error: resumedProviderError }, { data: payload, error: payloadError }] = await Promise.all([
         admin.from('agents').select('id,name,status,enabled,provider_id,classification,approval_level,system_prompt').eq('id', approved.agent_id).single(),
-        admin.from('llm_providers').select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour').eq('id', approved.provider_id).single(),
+        admin.from('llm_providers').select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day').eq('id', approved.provider_id).single(),
         admin.from('agent_run_payloads').select('action,input').eq('run_id', approved.id).single(),
       ]);
       if (resumedAgentError) throw resumedAgentError;
@@ -256,7 +257,7 @@ Deno.serve(async (request) => {
 
     const { data: providerRow, error: providerError } = await admin
       .from('llm_providers')
-      .select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour')
+      .select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day')
       .eq('id', agent.provider_id)
       .maybeSingle();
     if (providerError) throw providerError;
@@ -279,6 +280,14 @@ Deno.serve(async (request) => {
       .eq('requested_by', auth.user.id)
       .gte('created_at', since);
     if ((count ?? 0) >= provider.requests_per_hour) throw new Error('rate_limit_exceeded');
+
+    const sinceDay = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { count: dailyCount } = await admin
+      .from('agent_runs')
+      .select('id', { count: 'exact', head: true })
+      .eq('provider_id', provider.id)
+      .gte('created_at', sinceDay);
+    if ((dailyCount ?? 0) >= provider.requests_per_day) throw new Error('daily_quota_exceeded');
 
     const promptHash = await hash(`${agent.id}:${input}`);
     const needsApproval = agent.approval_level >= 2;
