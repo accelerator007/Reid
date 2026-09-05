@@ -2,11 +2,10 @@
 
 -- Stable identities for the complete CRM permission matrix.
 insert into auth.users(id,email) values
-  ('10000000-0000-0000-0000-000000000001','admin@reid.test'),
-  ('10000000-0000-0000-0000-000000000002','hr@reid.test'),
-  ('10000000-0000-0000-0000-000000000003','sales@reid.test'),
-  ('10000000-0000-0000-0000-000000000004','employee@reid.test');
-insert into public.profiles(id,full_name,email) select id,email,email from auth.users;
+  ('10000000-0000-0000-0000-000000000001','crm-admin@reid.test'),
+  ('10000000-0000-0000-0000-000000000002','crm-hr@reid.test'),
+  ('10000000-0000-0000-0000-000000000003','crm-sales@reid.test'),
+  ('10000000-0000-0000-0000-000000000004','crm-employee@reid.test');
 insert into public.user_roles(user_id,role) values
   ('10000000-0000-0000-0000-000000000001','admin'),
   ('10000000-0000-0000-0000-000000000002','hr'),
