@@ -33,13 +33,20 @@ grant select on public.whatsapp_events, public.whatsapp_commands to authenticate
 create function public.audit_whatsapp_command() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
-  insert into public.audit_logs(actor_id, action, table_name, record_id, old_data, new_data)
-  values (
-    auth.uid(), tg_op, 'whatsapp_commands', coalesce(new.id, old.id)::text,
-    case when tg_op in ('UPDATE','DELETE') then jsonb_build_object('status', old.status, 'agent_run_id', old.agent_run_id) end,
-    case when tg_op in ('INSERT','UPDATE') then jsonb_build_object('status', new.status, 'agent_run_id', new.agent_run_id) end
-  );
-  return case when tg_op = 'DELETE' then old else new end;
+  if tg_op = 'INSERT' then
+    insert into public.audit_logs(actor_id, action, table_name, record_id, new_data)
+    values (null, tg_op, 'whatsapp_commands', new.id::text, jsonb_build_object('status', new.status));
+    return new;
+  elsif tg_op = 'UPDATE' then
+    insert into public.audit_logs(actor_id, action, table_name, record_id, old_data, new_data)
+    values (null, tg_op, 'whatsapp_commands', new.id::text,
+      jsonb_build_object('status', old.status), jsonb_build_object('status', new.status));
+    return new;
+  else
+    insert into public.audit_logs(actor_id, action, table_name, record_id, old_data)
+    values (null, tg_op, 'whatsapp_commands', old.id::text, jsonb_build_object('status', old.status));
+    return old;
+  end if;
 end $$;
 
 create trigger audit_whatsapp_commands after insert or update or delete on public.whatsapp_commands
