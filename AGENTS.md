@@ -109,7 +109,14 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 ## Implemented and verified
 
-Last verified: 2026-09-04, Asia/Muscat.
+Last verified: 2026-09-05, Asia/Muscat.
+
+### 2026-09-05 remote Research verification and granted-file correction
+
+- Remote migration `202609040001_research_workspace.sql` was applied to Supabase project `pkogchbrknwmzefjklkr`; the linked migration history matches through that version and remote database lint reports no schema errors.
+- A synthetic authenticated suite exercised Owner, supervisor, researcher, HR, outsider, suspended-member, and anonymous sessions against the live PostgREST/Auth/Storage services. The first pass completed 36/39 assertions and cleaned up its users, research rows, and objects.
+- That pass exposed a real nested-RLS defect: a role grant made `can_read_research_document()` true for HR, but the Storage policy's lookup of `research_documents` was filtered before it could evaluate the grant, so a signed URL returned `Object not found`. Migration `202609050001_research_granted_storage_read.sql` makes granted document metadata visible to the same authorized reader. A local RLS regression now requires an HR role grant to expose the matching private Storage object.
+- Do not release Research to Production until the corrective migration is applied remotely and the complete authenticated suite passes, including the signed URL returning the expected file bytes.
 
 ### 2026-09-04 agent gateway (feature branch, not yet deployed)
 - Migration `202609040002_agent_gateway.sql` adds `llm_providers`, provider/classification/enabled columns on `agents`, run lifecycle and approval columns on `agent_runs`, the `provider_accepts` clearance function, the `agent_runs_clearance` trigger, the `approve_agent_run` RPC, Owner-only provider writes, and Realtime on `agent_runs`.
