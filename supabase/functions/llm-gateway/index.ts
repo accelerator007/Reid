@@ -44,6 +44,14 @@ type Run = {
   run_state: string;
 };
 
+type AgentTool = {
+  id: string;
+  operation: 'read' | 'create' | 'update' | 'publish';
+  approval_level: number;
+  input_schema: { required?: string[] };
+  enabled: boolean;
+};
+
 const rank: Record<string, number> = { public: 0, internal: 1, confidential: 2, restricted: 3 };
 
 // Prompts are correlated by hash so a run is auditable without storing the
@@ -125,7 +133,19 @@ async function rows(admin: ReturnType<typeof createClient>, table: string, colum
 // Real, bounded company tools. The model never receives a database credential
 // and cannot choose arbitrary tables or columns: each agent has a fixed server-
 // side allow-list. Write actions remain behind the existing L2/L3 approval path.
-async function buildAgentContext(admin: ReturnType<typeof createClient>, agentId: string) {
+async function scopedMemories(admin: ReturnType<typeof createClient>, agentId: string, requesterId: string, args: Record<string, unknown> = {}) {
+  const allowed = new Map<string, Set<string>>([
+    ['agent', new Set([agentId])], ['company', new Set(['reid'])], ['user', new Set([requesterId])],
+  ]);
+  if (typeof args.project_id === 'string') allowed.set('project', new Set([args.project_id]));
+  if (typeof args.department_id === 'string') allowed.set('department', new Set([args.department_id]));
+  const { data, error } = await admin.from('memories')
+    .select('scope,scope_id,title,content,classification,created_at').order('created_at', { ascending: false }).limit(120);
+  if (error) throw new Error('tool_memories_failed');
+  return (data || []).filter(memory => allowed.get(memory.scope)?.has(memory.scope_id)).slice(0, 24);
+}
+
+async function buildAgentContext(admin: ReturnType<typeof createClient>, agentId: string, requesterId: string, args: Record<string, unknown> = {}) {
   const context: Record<string, unknown> = {};
   if (['ceo', 'operations', 'analytics'].includes(agentId)) {
     context.projects = await rows(admin, 'projects', 'id,name,type,status,budget,currency,start_date,target_date,manager_id', 'updated_at');
@@ -153,8 +173,83 @@ async function buildAgentContext(admin: ReturnType<typeof createClient>, agentId
     context.projectDocuments = await rows(admin, 'project_files', 'id,project_id,title,category,restricted,created_at');
     context.researchDocuments = await rows(admin, 'research_documents', 'id,research_id,title,category,restricted,created_at');
   }
-  context.memory = await rows(admin, 'memories', 'scope,scope_id,content,classification,created_at');
+  context.memory = await scopedMemories(admin, agentId, requesterId, args);
   return JSON.stringify(context).slice(0, 50000);
+}
+
+function requireArguments(tool: AgentTool, args: Record<string, unknown>) {
+  for (const field of tool.input_schema?.required || []) {
+    if (args[field] === undefined || args[field] === null || args[field] === '') throw new Error(`tool_argument_missing:${field}`);
+  }
+}
+
+async function executeTool(admin: ReturnType<typeof createClient>, tool: AgentTool, args: Record<string, unknown>, requesterId: string) {
+  requireArguments(tool, args);
+  const text = (value: unknown, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : null;
+  const uuid = (value: unknown) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value) ? value : null;
+  switch (tool.id) {
+    case 'projects.list': return rows(admin, 'projects', 'id,name,type,status,budget,currency,start_date,target_date,manager_id', 'updated_at');
+    case 'tasks.list': return rows(admin, 'tasks', 'id,title,status,priority,due_at,project_id,research_id,assignee_id');
+    case 'crm.pipeline': return {
+      leads: await rows(admin, 'crm_leads', 'id,title,stage,estimated_value,probability,next_follow_up_at,owner_id', 'updated_at'),
+      deals: await rows(admin, 'crm_deals', 'id,title,stage,value,currency,expected_close_date,owner_id', 'updated_at'),
+      followUps: await rows(admin, 'crm_activities', 'id,activity_type,subject,due_at,completed_at,owner_id'),
+    };
+    case 'people.list': return rows(admin, 'profiles', 'id,full_name,email,department,position,employment_status,hire_date', 'updated_at');
+    case 'applications.list': return rows(admin, 'applications', 'id,full_name,email,organization,title,account_type,join_reason,cover_letter,status,cv_path');
+    case 'finance.budgets': return {
+      projects: await rows(admin, 'projects', 'id,name,status,budget,currency,client_name,target_date', 'updated_at'),
+      deals: await rows(admin, 'crm_deals', 'id,title,stage,value,currency,expected_close_date', 'updated_at'),
+    };
+    case 'content.context': return {
+      announcements: await rows(admin, 'announcements', 'id,title_ar,title_en,body_ar,body_en,published_at,expires_at'),
+      publicProjects: (await rows(admin, 'projects', 'id,name,type,status,visibility,start_date,target_date', 'updated_at'))
+        .filter((project: Record<string, unknown>) => project.visibility === 'public'),
+    };
+    case 'knowledge.search': {
+      const query = text(args.query, 120)?.toLowerCase() || '';
+      const [projectDocuments, researchDocuments, memory] = await Promise.all([
+        rows(admin, 'project_files', 'id,project_id,title,category,restricted,created_at'),
+        rows(admin, 'research_documents', 'id,research_id,title,category,restricted,created_at'),
+        scopedMemories(admin, 'knowledge', requesterId, args),
+      ]);
+      const match = (row: Record<string, unknown>) => JSON.stringify(row).toLowerCase().includes(query);
+      return { projectDocuments: projectDocuments.filter(match).slice(0, 12), researchDocuments: researchDocuments.filter(match).slice(0, 12), memory: memory.filter(match).slice(0, 12) };
+    }
+    case 'tasks.create': {
+      const payload = { title: text(args.title, 200), description: text(args.description, 2000), project_id: uuid(args.project_id), research_id: uuid(args.research_id), assignee_id: uuid(args.assignee_id), priority: Math.max(0, Math.min(4, Number(args.priority ?? 2))), due_at: text(args.due_at, 40), created_by: requesterId };
+      if (!payload.project_id && !payload.research_id) throw new Error('tool_argument_missing:project_id_or_research_id');
+      const result = await admin.from('tasks').insert(payload).select('id,title,status,priority,due_at,project_id,research_id,assignee_id').single();
+      if (result.error) throw new Error('tool_tasks_create_failed'); return result.data;
+    }
+    case 'crm.follow_up.create': {
+      const payload = { activity_type: 'task', subject: text(args.subject, 200), company_id: uuid(args.company_id), contact_id: uuid(args.contact_id), lead_id: uuid(args.lead_id), deal_id: uuid(args.deal_id), owner_id: uuid(args.owner_id), due_at: text(args.due_at, 40), notes: text(args.notes, 2000), created_by: requesterId };
+      if (![payload.company_id,payload.contact_id,payload.lead_id,payload.deal_id].some(Boolean)) throw new Error('tool_argument_missing:crm_record_id');
+      const result = await admin.from('crm_activities').insert(payload).select('id,subject,due_at,owner_id').single();
+      if (result.error) throw new Error('tool_crm_follow_up_create_failed'); return result.data;
+    }
+    case 'onboarding.create': {
+      const result = await admin.from('onboarding_items').insert({ user_id: uuid(args.user_id), title_ar: text(args.title_ar, 200), title_en: text(args.title_en, 200), due_date: text(args.due_date, 20), assigned_by: requesterId }).select('id,user_id,title_ar,title_en,due_date,completed').single();
+      if (result.error) throw new Error('tool_onboarding_create_failed'); return result.data;
+    }
+    case 'projects.budget.update': {
+      const result = await admin.from('projects').update({ budget: Number(args.budget), ...(text(args.currency, 6) ? { currency: text(args.currency, 6) } : {}) }).eq('id', uuid(args.project_id)).select('id,name,budget,currency').single();
+      if (result.error) throw new Error('tool_project_budget_update_failed'); return result.data;
+    }
+    case 'content.draft.create': {
+      const result = await admin.from('content_drafts').insert({ title_ar: text(args.title_ar, 200), title_en: text(args.title_en, 200), body_ar: text(args.body_ar, 5000), body_en: text(args.body_en, 5000), created_by: requesterId }).select('id,status,title_ar,title_en').single();
+      if (result.error) throw new Error('tool_content_draft_create_failed'); return result.data;
+    }
+    case 'content.publish': {
+      const draft = await admin.from('content_drafts').select('*').eq('id', uuid(args.draft_id)).eq('status','draft').single();
+      if (draft.error) throw new Error('tool_content_draft_not_found');
+      const published = await admin.from('announcements').insert({ title_ar:draft.data.title_ar,title_en:draft.data.title_en,body_ar:draft.data.body_ar,body_en:draft.data.body_en,created_by:requesterId }).select('id,published_at').single();
+      if (published.error) throw new Error('tool_content_publish_failed');
+      await admin.from('content_drafts').update({status:'published',published_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',draft.data.id);
+      return published.data;
+    }
+    default: throw new Error('tool_not_implemented');
+  }
 }
 
 async function executeRun(admin: ReturnType<typeof createClient>, run: Run, agent: Agent, provider: Provider, action: string, input: string) {
@@ -172,7 +267,19 @@ async function executeRun(admin: ReturnType<typeof createClient>, run: Run, agen
     return { runId: run.id, embedding: vector, dimensions: vector?.length ?? 0 };
   }
 
-  const companyContext = await buildAgentContext(admin, agent.id);
+  if (action === 'tool') {
+    const request = JSON.parse(input) as { toolName: string; arguments?: Record<string, unknown> };
+    const assigned = await admin.from('agent_tool_assignments').select('tool:agent_tools(id,operation,approval_level,input_schema,enabled)').eq('agent_id', agent.id).eq('tool_id', request.toolName).single();
+    const tool = assigned.data?.tool as unknown as AgentTool | undefined;
+    if (assigned.error || !tool?.enabled) throw new Error('tool_not_assigned_or_disabled');
+    const result = await executeTool(admin, tool, request.arguments || {}, run.requested_by);
+    const resultText = JSON.stringify(result);
+    await admin.from('agent_tool_executions').insert({ run_id:run.id,agent_id:agent.id,tool_id:tool.id,requested_by:run.requested_by,arguments_hash:await hash(input),status:'succeeded',result_preview:resultText.slice(0,PREVIEW_LIMIT) });
+    await admin.from('agent_runs').update({run_state:'succeeded',status:'succeeded',latency_ms:Date.now()-startedAt,output_preview:resultText.slice(0,PREVIEW_LIMIT),finished_at:new Date().toISOString()}).eq('id',run.id);
+    return { runId: run.id, tool: tool.id, result };
+  }
+
+  const companyContext = await buildAgentContext(admin, agent.id, run.requested_by);
   const governedInput = `USER REQUEST:\n${input}\n\nAUTHORIZED COMPANY CONTEXT (read-only, bounded for this agent):\n${companyContext}\n\nUse only this context. Never claim an external action was completed. Clearly label recommendations and any action that still needs approval.`;
   const result = provider.kind === 'local'
     ? await callOllama(provider, agent.system_prompt, governedInput)
@@ -188,8 +295,8 @@ async function executeRun(admin: ReturnType<typeof createClient>, run: Run, agen
   try {
     const vector = await embed(provider, result.text.slice(0, 4000));
     await admin.from('memories').insert({
-      scope: 'agent', scope_id: agent.id, content: result.text.slice(0, 4000),
-      embedding: vector, classification: run.classification,
+      scope: 'agent', scope_id: agent.id, content: result.text.slice(0, 4000), title: `Run ${run.id}`,
+      embedding: vector, classification: run.classification, created_by: run.requested_by, source_run_id: run.id,
     });
   } catch (_) { /* run output remains authoritative */ }
   return { runId: run.id, output: result.text, latencyMs: latency, tokenUsage: result.tokens, provider: provider.id };
@@ -214,7 +321,9 @@ Deno.serve(async (request) => {
 
     const body = await request.json();
     const action: string = body.action || 'run';
-    const input: string = (body.input || '').toString();
+    const input: string = action === 'tool'
+      ? JSON.stringify({ toolName: body.toolName || '', arguments: body.arguments || {} })
+      : (body.input || '').toString();
 
     if (action === 'approve' || action === 'reject') {
       const decision = action === 'approve' ? 'approved' : 'rejected';
@@ -289,8 +398,16 @@ Deno.serve(async (request) => {
       .gte('created_at', sinceDay);
     if ((dailyCount ?? 0) >= provider.requests_per_day) throw new Error('daily_quota_exceeded');
 
+    let effectiveApproval = agent.approval_level;
+    if (action === 'tool') {
+      const requestedTool = body.toolName?.toString() || '';
+      const assignment = await admin.from('agent_tool_assignments').select('tool:agent_tools(id,approval_level,enabled)').eq('agent_id',agent.id).eq('tool_id',requestedTool).single();
+      const tool = assignment.data?.tool as unknown as Pick<AgentTool,'id'|'approval_level'|'enabled'> | undefined;
+      if (assignment.error || !tool?.enabled) throw new Error('tool_not_assigned_or_disabled');
+      effectiveApproval = Math.max(effectiveApproval, tool.approval_level);
+    }
     const promptHash = await hash(`${agent.id}:${input}`);
-    const needsApproval = agent.approval_level >= 2;
+    const needsApproval = effectiveApproval >= 2;
     const { data: created, error: createError } = await admin
       .from('agent_runs')
       .insert({
@@ -299,7 +416,7 @@ Deno.serve(async (request) => {
         provider_id: provider.id,
         requested_by: auth.user.id,
         classification,
-        approval_level: agent.approval_level,
+        approval_level: effectiveApproval,
         approval_state: needsApproval ? 'pending' : 'not_required',
         run_state: needsApproval ? 'pending_approval' : 'running',
         status: needsApproval ? 'pending_approval' : 'running',
@@ -317,7 +434,7 @@ Deno.serve(async (request) => {
     if (needsApproval) {
       const payload = await admin.from('agent_run_payloads').insert({ run_id: created.id, action, input });
       if (payload.error) throw payload.error;
-      return Response.json({ run: created, status: 'pending_approval', approvalLevel: agent.approval_level }, { headers: cors });
+      return Response.json({ run: created, status: 'pending_approval', approvalLevel: effectiveApproval }, { headers: cors });
     }
 
     const result = await executeRun(admin, created as Run, agent, provider, action, input);

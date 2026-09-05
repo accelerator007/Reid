@@ -91,6 +91,7 @@ test.describe('authenticated employee role journeys', () => {
   });
 
   test('Owner runs Operations against real governed company context through Gemini', async ({ page }) => {
+    test.skip(process.env.LIVE_GEMINI_E2E !== '1', 'Live provider verification runs on its dedicated daily/manual workflow.');
     test.setTimeout(90_000);
     await page.goto('/dashboard');
     await page.locator('input[name="email"]').fill(users.owner.email);
