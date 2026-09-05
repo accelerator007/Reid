@@ -91,6 +91,7 @@ test.describe('authenticated employee role journeys', () => {
   });
 
   test('Owner runs Operations against real governed company context through Gemini', async ({ page }) => {
+    test.setTimeout(90_000);
     await page.goto('/dashboard');
     await page.locator('input[name="email"]').fill(users.owner.email);
     await page.locator('input[name="password"]').fill(password);
