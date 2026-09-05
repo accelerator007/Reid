@@ -15,7 +15,7 @@ test.describe('authenticated employee role journeys', () => {
   const users: Record<string, { id: string; email: string }> = {};
   let departmentId: string | undefined;
 
-  const createUser = async (label: string, role: 'employee' | 'hr') => {
+  const createUser = async (label: string, role: 'employee' | 'hr' | 'owner') => {
     const email = `reid-browser-${label}-${stamp}@example.com`;
     const created = await admin.auth.admin.createUser({
       email,
@@ -50,6 +50,7 @@ test.describe('authenticated employee role journeys', () => {
     await createUser('manager', 'employee');
     await createUser('employee', 'employee');
     await createUser('hr', 'hr');
+    await createUser('owner', 'owner');
     const department = await admin.from('departments').insert({
       name_ar: `ضمان الجودة ${stamp}`,
       name_en: `Quality Assurance ${stamp}`,
@@ -87,5 +88,33 @@ test.describe('authenticated employee role journeys', () => {
     await expect(page.getByText('Reid hr', { exact: true }).first()).toBeVisible();
     await page.goto('/crm');
     await expect(page.getByRole('heading', { name: 'إدارة العملاء والمبيعات' })).toBeVisible();
+  });
+
+  test('Owner runs Operations against real governed company context through Gemini', async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.goto('/dashboard');
+    await page.locator('input[name="email"]').fill(users.owner.email);
+    await page.locator('input[name="password"]').fill(password);
+    await page.locator('form button.primary').click();
+    await expect(page.getByRole('heading', { name: 'خريطة قيادة الوكلاء' })).toBeVisible();
+    await page.getByRole('button', { name: /Operations:/ }).click();
+    await expect(page.getByRole('button', { name: 'تشغيل يدوي' })).toBeVisible();
+    const caller = createClient(url!, publishableKey!, { auth: { persistSession: false } });
+    const signed = await caller.auth.signInWithPassword({ email: users.owner.email, password });
+    if (signed.error) throw signed.error;
+    const invoked = await caller.functions.invoke('llm-gateway', { body: {
+      action: 'run', agentId: 'operations', classification: 'internal',
+      input: 'أعطني ملخصًا قصيرًا لحالة المشاريع والمهام الموجودة في السياق المصرح به فقط.',
+    }});
+    if (invoked.error) throw invoked.error;
+    const gateway = invoked.data;
+    expect(gateway.error, JSON.stringify(gateway)).toBeFalsy();
+    expect(gateway.runId).toBeTruthy();
+    const run = await admin.from('agent_runs').select('provider_id,classification,run_state,latency_ms,token_usage').eq('id', gateway.runId).single();
+    if (run.error) throw run.error;
+    expect(run.data.provider_id).toBe('gemini');
+    expect(run.data.classification).toBe('internal');
+    expect(run.data.run_state).toBe('succeeded');
+    expect(run.data.latency_ms).toBeGreaterThan(0);
   });
 });
