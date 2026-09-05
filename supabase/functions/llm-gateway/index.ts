@@ -114,6 +114,48 @@ async function embed(provider: Provider, input: string) {
   return payload?.embedding?.values as number[];
 }
 
+async function rows(admin: ReturnType<typeof createClient>, table: string, columns: string, order = 'created_at') {
+  const query = admin.from(table).select(columns).order(order, { ascending: false }).limit(30);
+  const { data, error } = await query;
+  if (error) throw new Error(`tool_${table}_failed`);
+  return data || [];
+}
+
+// Real, bounded company tools. The model never receives a database credential
+// and cannot choose arbitrary tables or columns: each agent has a fixed server-
+// side allow-list. Write actions remain behind the existing L2/L3 approval path.
+async function buildAgentContext(admin: ReturnType<typeof createClient>, agentId: string) {
+  const context: Record<string, unknown> = {};
+  if (['ceo', 'operations', 'analytics'].includes(agentId)) {
+    context.projects = await rows(admin, 'projects', 'id,name,type,status,budget,currency,start_date,target_date,manager_id', 'updated_at');
+    context.tasks = await rows(admin, 'tasks', 'id,title,status,priority,due_at,project_id,research_id,assignee_id');
+  }
+  if (['ceo', 'sales', 'support'].includes(agentId)) {
+    context.leads = await rows(admin, 'crm_leads', 'id,title,stage,estimated_value,probability,next_follow_up_at,owner_id', 'updated_at');
+    context.deals = await rows(admin, 'crm_deals', 'id,title,stage,value,currency,expected_close_date,owner_id', 'updated_at');
+    context.followUps = await rows(admin, 'crm_activities', 'id,activity_type,subject,due_at,completed_at,owner_id');
+  }
+  if (agentId === 'hr') {
+    context.people = await rows(admin, 'profiles', 'id,full_name,email,department,position,employment_status,hire_date', 'updated_at');
+    context.applications = await rows(admin, 'applications', 'id,full_name,email,organization,title,account_type,join_reason,cover_letter,status,cv_path');
+    context.documents = await rows(admin, 'employee_documents', 'id,owner_id,title,category,storage_path');
+  }
+  if (agentId === 'finance') {
+    context.budgets = await rows(admin, 'projects', 'id,name,type,status,budget,currency,client_name,start_date,target_date', 'updated_at');
+    context.pipeline = await rows(admin, 'crm_deals', 'id,title,stage,value,currency,expected_close_date', 'updated_at');
+  }
+  if (['marketing', 'content', 'competitor'].includes(agentId)) {
+    context.announcements = await rows(admin, 'announcements', 'id,title_ar,title_en,body_ar,body_en,published_at,expires_at');
+    context.publicProjects = (await rows(admin, 'projects', 'id,name,type,status,visibility,start_date,target_date', 'updated_at')).filter((project: Record<string, unknown>) => project.visibility === 'public');
+  }
+  if (agentId === 'knowledge') {
+    context.projectDocuments = await rows(admin, 'project_files', 'id,project_id,title,category,restricted,created_at');
+    context.researchDocuments = await rows(admin, 'research_documents', 'id,research_id,title,category,restricted,created_at');
+  }
+  context.memory = await rows(admin, 'memories', 'scope,scope_id,content,classification,created_at');
+  return JSON.stringify(context).slice(0, 50000);
+}
+
 async function executeRun(admin: ReturnType<typeof createClient>, run: Run, agent: Agent, provider: Provider, action: string, input: string) {
   const startedAt = Date.now();
   await admin.from('agent_runs').update({
@@ -129,15 +171,26 @@ async function executeRun(admin: ReturnType<typeof createClient>, run: Run, agen
     return { runId: run.id, embedding: vector, dimensions: vector?.length ?? 0 };
   }
 
+  const companyContext = await buildAgentContext(admin, agent.id);
+  const governedInput = `USER REQUEST:\n${input}\n\nAUTHORIZED COMPANY CONTEXT (read-only, bounded for this agent):\n${companyContext}\n\nUse only this context. Never claim an external action was completed. Clearly label recommendations and any action that still needs approval.`;
   const result = provider.kind === 'local'
-    ? await callOllama(provider, agent.system_prompt, input)
-    : await callGemini(provider, agent.system_prompt, input);
+    ? await callOllama(provider, agent.system_prompt, governedInput)
+    : await callGemini(provider, agent.system_prompt, governedInput);
   const latency = Date.now() - startedAt;
   await admin.from('agent_runs').update({
     run_state: 'succeeded', status: 'succeeded', latency_ms: latency,
     token_usage: result.tokens, output_preview: result.text.slice(0, PREVIEW_LIMIT),
     finished_at: new Date().toISOString(),
   }).eq('id', run.id);
+  // Agent memory is durable and scoped. A memory failure must not turn a
+  // completed model run into a false failure, so it is recorded best-effort.
+  try {
+    const vector = await embed(provider, result.text.slice(0, 4000));
+    await admin.from('memories').insert({
+      scope: 'agent', scope_id: agent.id, content: result.text.slice(0, 4000),
+      embedding: vector, classification: run.classification,
+    });
+  } catch (_) { /* run output remains authoritative */ }
   return { runId: run.id, output: result.text, latencyMs: latency, tokenUsage: result.tokens, provider: provider.id };
 }
 

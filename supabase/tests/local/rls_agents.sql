@@ -31,17 +31,17 @@ insert into public.user_roles(user_id, role) values
   (:'employee_id', 'employee'), (:'hr_id', 'hr');
 
 -- ---------------------------------------------------------------- seeded state
-select t_true(:'suite', 'the free-tier external provider is capped at public data',
-  $q$select max_classification = 'public' and kind = 'external' and enabled
+select t_true(:'suite', 'the Owner-approved Gemini runtime accepts all classifications',
+  $q$select max_classification = 'restricted' and kind = 'external' and enabled
      from public.llm_providers where id = 'gemini'$q$, true);
 select t_true(:'suite', 'the local provider ships disabled',
   $q$select not enabled and kind = 'local' from public.llm_providers where id = 'ollama'$q$, true);
 select t_true(:'suite', 'a public agent is enabled on the free tier',
   $q$select enabled and status = 'idle' from public.agents where id = 'marketing'$q$, true);
-select t_true(:'suite', 'an internal agent is disabled on the free tier',
-  $q$select not enabled and status = 'disabled' from public.agents where id = 'operations'$q$, true);
-select t_true(:'suite', 'the HR agent is disabled and carries a reason',
-  $q$select not enabled and disabled_reason is not null from public.agents where id = 'hr'$q$, true);
+select t_true(:'suite', 'Operations is enabled on the temporary Gemini runtime',
+  $q$select enabled and status = 'idle' and provider_id = 'gemini' from public.agents where id = 'operations'$q$, true);
+select t_true(:'suite', 'HR keeps restricted classification while using Gemini',
+  $q$select enabled and classification = 'restricted' and provider_id = 'gemini' from public.agents where id = 'hr'$q$, true);
 select t_true(:'suite', 'each agent mirrors its provider model',
   $q$select a.model = p.chat_model and a.host = p.id
      from public.agents a join public.llm_providers p on p.id = a.provider_id where a.id = 'marketing'$q$, true);
@@ -49,12 +49,12 @@ select t_true(:'suite', 'each agent mirrors its provider model',
 -- --------------------------------------------------------- clearance enforcement
 -- The whole safety story: the trigger refuses the write, so a compromised
 -- gateway still cannot route restricted data to an external provider.
-select t_rejected(:'suite', 'restricted data cannot be written against the external provider',
+select t_allowed(:'suite', 'Owner-approved Gemini accepts a restricted HR run',
   format($$insert into public.agent_runs(agent_id, provider_id, classification, requested_by, status, run_state)
-           values ('hr', 'gemini', 'restricted', %L, 'queued', 'queued')$$, :'owner_id'), 'P0001');
-select t_rejected(:'suite', 'internal data cannot be written against the free-tier provider',
+           values ('hr', 'gemini', 'restricted', %L, 'queued', 'queued')$$, :'owner_id'));
+select t_allowed(:'suite', 'Owner-approved Gemini accepts internal Operations data',
   format($$insert into public.agent_runs(agent_id, provider_id, classification, requested_by, status, run_state)
-           values ('operations', 'gemini', 'internal', %L, 'queued', 'queued')$$, :'owner_id'), 'P0001');
+           values ('operations', 'gemini', 'internal', %L, 'queued', 'queued')$$, :'owner_id'));
 select t_rejected(:'suite', 'a disabled provider is refused even within its ceiling',
   format($$insert into public.agent_runs(agent_id, provider_id, classification, requested_by, status, run_state)
            values ('hr', 'ollama', 'restricted', %L, 'queued', 'queued')$$, :'owner_id'), 'P0001');
@@ -81,7 +81,7 @@ select test_sign_in(:'admin_id');
 select t_visible(:'suite', 'an admin reads the whole agent roster',
   'select 1 from public.agents', 11);
 select t_visible(:'suite', 'an admin reads the whole run stream',
-  'select 1 from public.agent_runs', 2);
+  'select 1 from public.agent_runs', 4);
 select t_visible(:'suite', 'an admin cannot read transient payloads',
   'select 1 from public.agent_run_payloads', 0);
 
@@ -105,10 +105,10 @@ select t_changed(:'suite', 'an employee cannot pause an agent',
   $q$update public.agents set status = 'paused' where id = 'content'$q$, 0);
 
 select test_sign_in(:'owner_id');
-select t_changed(:'suite', 'the Owner can raise a provider ceiling',
+select t_changed(:'suite', 'the Owner can lower a provider ceiling',
   $q$update public.llm_providers set max_classification = 'internal' where id = 'gemini'$q$, 1);
-select t_changed(:'suite', 'the Owner can restore the free-tier ceiling',
-  $q$update public.llm_providers set max_classification = 'public' where id = 'gemini'$q$, 1);
+select t_changed(:'suite', 'the Owner can restore the approved restricted ceiling',
+  $q$update public.llm_providers set max_classification = 'restricted' where id = 'gemini'$q$, 1);
 
 -- ---------------------------------------------------------------- approval engine
 select test_sign_in(:'employee_id');
