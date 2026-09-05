@@ -118,4 +118,42 @@ test.describe('authenticated employee role journeys', () => {
     expect(run.data.run_state).toBe('succeeded');
     expect(run.data.latency_ms).toBeGreaterThan(0);
   });
+
+  test('Owner executes governed read and approved content tools', async () => {
+    test.skip(process.env.LIVE_TOOL_E2E !== '1', 'Live tool verification runs after deployment.');
+    const caller = createClient(url!, publishableKey!, { auth: { persistSession: false } });
+    const signed = await caller.auth.signInWithPassword({ email: users.owner.email, password });
+    if (signed.error) throw signed.error;
+
+    const read = await caller.functions.invoke('llm-gateway', { body: {
+      action: 'tool', agentId: 'operations', toolName: 'projects.list', arguments: {}, classification: 'internal',
+    }});
+    if (read.error) throw read.error;
+    expect(read.data.error, JSON.stringify(read.data)).toBeFalsy();
+    expect(read.data.tool).toBe('projects.list');
+    expect(Array.isArray(read.data.result)).toBe(true);
+
+    let runId: string | undefined;
+    let draftId: string | undefined;
+    try {
+      const queued = await caller.functions.invoke('llm-gateway', { body: {
+        action: 'tool', agentId: 'content', toolName: 'content.draft.create', classification: 'public',
+        arguments: { title_ar: `مسودة تحقق ${stamp}`, title_en: `Verification draft ${stamp}`, body_ar: 'مسودة اختبار تحذف تلقائيًا.', body_en: 'Disposable verification draft.' },
+      }});
+      if (queued.error) throw queued.error;
+      expect(queued.data.status).toBe('pending_approval');
+      runId = queued.data.run.id;
+      const approved = await caller.functions.invoke('llm-gateway', { body: { action: 'approve', runId }});
+      if (approved.error) throw approved.error;
+      expect(approved.data.tool).toBe('content.draft.create');
+      draftId = approved.data.result.id;
+      const receipt = await admin.from('agent_tool_executions').select('tool_id,status').eq('run_id',runId).single();
+      if (receipt.error) throw receipt.error;
+      expect(receipt.data).toEqual({ tool_id:'content.draft.create', status:'succeeded' });
+    } finally {
+      if (draftId) await admin.from('content_drafts').delete().eq('id',draftId);
+      if (runId) await admin.from('agent_runs').delete().eq('id',runId);
+      if (read.data?.runId) await admin.from('agent_runs').delete().eq('id',read.data.runId);
+    }
+  });
 });
