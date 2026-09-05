@@ -111,9 +111,29 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-05, Asia/Muscat.
 
+### 2026-09-05 reliability task 1 implementation
+
+- GitHub Actions now holds the Supabase URL, publishable key and service-role key as encrypted repository secrets; no value is committed. A separate authenticated-browser CI job creates disposable Employee, department Manager and HR identities, exercises their real `/workspace` sessions against remote RLS, and deletes every identity/department afterwards.
+- `scripts/uptime-check.sh` verifies Production and Staging, all declared application routes, real edge 404 behavior, the Reid SVG, six security headers, and Supabase API availability. `.github/workflows/uptime.yml` runs it every 15 minutes and may be dispatched manually.
+- Local pre-PR verification passed: 3/3 authenticated Chromium role journeys (Employee, direct-report Manager, HR), 114/114 Vitest checks, the TypeScript/Vite Production build, and the Production/Staging/Supabase uptime probe. The authenticated job must also pass with repository secrets on the pull request before merge.
+- Weekly database backup remains blocked only on `SUPABASE_DB_URL`, which requires the database password. Never paste it into chat; add the complete connection URL directly as a GitHub Actions secret.
+
+### 2026-09-05 CRM and executive reports implementation
+
+- Work is active on `feature/crm-executive-reports`; do not present it as Production-ready before remote migration, authenticated role verification, CI, Staging, and the protected Production release pass.
+- Migration `202609050003_crm_reports.sql` adds companies, expanded contacts, leads, deals, follow-up activities, daily/weekly executive reports, audit triggers, Realtime and a database-generated metrics snapshot. CRM data is limited to Owner/Super Admin/Admin/HR/Sales; ordinary employees and anonymous users receive no rows. Sales cannot read executive reports.
+- Added the bilingual `/crm` workspace with pipeline KPIs, lead board, company/contact/lead/deal/follow-up creation, stage controls and report generation/history. Route visibility is role-aware and database RLS remains the security boundary.
+- Added the service-role-only `executive-reports` Edge Function and scheduled GitHub workflow: a daily snapshot is stored every day and a weekly snapshot is stored each Sunday. Weekly Arabic email delivery activates only when `RESEND_API_KEY` and a verified `REPORT_FROM_EMAIL` are configured in Supabase; without them the report remains stored and records `email_provider_not_configured` instead of pretending delivery.
+- Local application verification passes 127/127 Vitest checks, the TypeScript/Vite Production build and 10/10 public Chromium journeys; three remote authenticated journeys are intentionally CI-only. The linked migration dry run lists only `202609050003`. Local database RLS execution is unavailable on this Mac because PostgreSQL client binaries are absent, so the PR's PostgreSQL 16 RLS job is mandatory before remote migration.
+- The first PR RLS run correctly rejected test-fixture collisions with existing suites; CRM fixtures now use dedicated emails and rely on the real auth-profile trigger instead of inserting duplicate profiles. Repeat CI is required before remote migration.
+- The second RLS run exposed that the new suite lacked a transaction, so `set local` JWT impersonation ended before each assertion. The suite now follows the established begin/rollback isolation contract; repeat CI remains mandatory.
+- PR `#72` subsequently passed both PostgreSQL 16 RLS jobs, both application jobs, the authenticated HR CRM route journey and Cloudflare Staging. Migration `202609050003` is applied remotely. A live disposable-role suite passed Sales CRUD/stage/activity, HR client/report access and Employee denial, then removed its synthetic users and CRM rows.
+- The report function uses a dedicated `REPORT_CRON_SECRET` shared only between Supabase and GitHub rather than exposing a database/service key to the scheduler. Supabase platform JWT verification is disabled only for this function; the function itself rejects every request whose bearer value does not exactly match that dedicated secret.
+- The weekly backup secret still did not update after the latest browser handoff: GitHub reports the original update timestamp and the repeated manual backup failed. Treat the value as invalid until a complete percent-encoded pooler DSN is saved and a run succeeds.
+
 ### 2026-09-05 Production ownership enforcement
 
-- GitHub `main` enforces administrators, current-branch status checks, pull requests, linear history, resolved conversations, and blocks force-push/deletion. Direct collaborator downgrade still reports `write`, so `.github/CODEOWNERS` assigns the whole repository to `@accelerator007`; branch protection must require one CODEOWNER approval before this control is complete.
+- GitHub `main` enforces administrators, current-branch status checks, pull requests, linear history, resolved conversations, and blocks force-push/deletion. Direct collaborator downgrade still reports `write`, so `.github/CODEOWNERS` assigns the whole repository to `@accelerator007`; branch protection now requires one approving CODEOWNER review and applies to administrators. Production cannot merge without the Owner's explicit GitHub review.
 
 ### 2026-09-05 approved-agent dispatch implementation
 
