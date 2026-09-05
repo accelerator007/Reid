@@ -6,8 +6,9 @@ Deno.serve(async request => {
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const cronSecret = Deno.env.get("REPORT_CRON_SECRET");
   const authorization = request.headers.get("authorization") || "";
-  if (!url || !serviceKey || authorization !== `Bearer ${serviceKey}`) return json({ error: "unauthorized" }, 401);
+  if (!url || !serviceKey || !cronSecret || authorization !== `Bearer ${cronSecret}`) return json({ error: "unauthorized" }, 401);
 
   const input = await request.json().catch(() => ({})) as { period?: string; end?: string };
   const period = input.period === "weekly" ? "weekly" : input.period === "daily" ? "daily" : null;

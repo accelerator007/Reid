@@ -19,14 +19,14 @@ jobs:
       - name: Generate report
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REPORT_CRON_SECRET: ${{ secrets.REPORT_CRON_SECRET }}
           MANUAL_PERIOD: ${{ inputs.period }}
           SCHEDULE: ${{ github.event.schedule }}
         run: |
           period="${MANUAL_PERIOD:-daily}"
           if [ "$SCHEDULE" = "30 2 * * 0" ]; then period=weekly; fi
           curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $REPORT_CRON_SECRET" \
             -H "Content-Type: application/json" \
             -d "{\"period\":\"$period\"}" \
             "$SUPABASE_URL/functions/v1/executive-reports"
