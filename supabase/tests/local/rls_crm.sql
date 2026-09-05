@@ -1,4 +1,6 @@
 \set ON_ERROR_STOP on
+begin;
+set local search_path = public;
 
 -- Stable identities for the complete CRM permission matrix.
 insert into auth.users(id,email) values
@@ -36,3 +38,4 @@ select public.t_changed('crm','Admin advances deal', $$update public.crm_deals s
 select public.t_true('crm','CRM writes are audited', $$select count(*) >= 5 from public.audit_logs where table_name like 'crm_%'$$);
 
 select public.t_finish('crm');
+rollback;
