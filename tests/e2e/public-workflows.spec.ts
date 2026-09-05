@@ -68,3 +68,17 @@ test('renders privacy and in-app 404 routes', async ({ page }) => {
   await page.goto('/does-not-exist');
   await expect(page.getByRole('heading', { name: '404' })).toBeVisible();
 });
+
+test('dark mode actually darkens inherited text', async ({ page }) => {
+  // The hero headline sets no colour of its own. It once kept the light theme's
+  // near-black ink on a dark ground because `body` resolved --ink against
+  // :root while `.dark` redefined it on a descendant.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/');
+  const heading = page.getByRole('heading', { level: 1 }).first();
+  const [r, g, b] = await heading.evaluate(el =>
+    getComputedStyle(el).color.match(/\d+/g)!.map(Number),
+  );
+  // Perceived luminance: light text on a dark ground, not the inherited ink.
+  expect(0.2126 * r + 0.7152 * g + 0.0722 * b).toBeGreaterThan(140);
+});

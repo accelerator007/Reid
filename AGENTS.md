@@ -45,6 +45,7 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Route manifest shared by the app and the Worker: `src/routes.ts`.
 - Typed data boundary and bilingual error mapping: `src/db.ts`.
 - Authenticated shell, access states and the single gate: `src/shell.tsx`.
+- Design tokens, the only file that names a colour: `src/tokens.css`.
 - Archived pre-React marketing content: `content/legacy/` (built by nothing, served by nothing).
 - Database migrations: `supabase/migrations/`.
 - Database pgTAP draft: `supabase/tests/rls.sql`.
@@ -69,6 +70,7 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Preserve the public website identity and bilingual behavior. Do not rename the company to COR.
 - When changing schema, add a migration; do not edit an already-applied migration.
 - Read Supabase through `src/db.ts`. Never write `(result.data || [])`: it discards the error object, so an expired session, a network drop and an empty table all render as the same blank panel.
+- Never write a colour literal or a raw `border-radius` value in a component stylesheet. Use a token from `src/tokens.css`; `tokens.test.ts` fails the build otherwise, and every token needs a dark counterpart unless it is a named exemption.
 - Read the session through `useSession()`. Roles, suspension and profile completion are resolved once by `src/shell.tsx`; a component that re-reads `user_roles` for the current user is a bug.
 - Guard a page with `<Guarded>`, and declare who may open it in the route's `allow` list. Never hand-roll a gate: `routes.contract.test.ts` and `shell.test.ts` require every authenticated route to declare its roles, and prove the navigation never offers what the gate would refuse.
 - Add a route only in `src/routes.ts`. Both `src/main.tsx` and `src/worker.ts` derive from it, and `src/routes.contract.test.ts` fails if a path the app renders is not served by the edge.
@@ -258,6 +260,15 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 5. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
 
 ## Verification log
+
+### 2026-09-04 design tokens (feature branch)
+
+- The stylesheets held six variables and **85 hard-coded colours**: roughly seventeen shades of purple doing the work of three, six greens, five reds and two ambers. The dark theme was defined in one file, so all 85 literals stayed frozen at their light values when the theme flipped.
+- `src/tokens.css` is now the only file that names a colour. A seven-step brand ramp built on `#55418b`, the value already in the `theme-color` meta tag, plus semantic `good`/`warn`/`risk` families kept deliberately separate from the brand so a warning and a button cannot look alike. Radii collapsed from twelve values, including two spellings of "pill", onto a six-step scale across 51 declarations.
+- `tokens.test.ts` enforces it: no component stylesheet may contain a colour literal, every token referenced must exist, and every colour token needs a dark counterpart unless it is a named exemption. The 500 and 700 brand steps are exempt because they are fills carrying white `--on-brand` text and stay deep on either ground.
+- The test also caught ten tokens defined but never used, which were removed rather than shipped.
+- **Dark-mode defect fixed.** `body` resolved `color: var(--ink)` against `:root`, while `.dark` redefined `--ink` on `.app`, a descendant. Every element that only inherited kept the light theme's near-black ink on a dark ground: the hero headline and the stat figures were close to invisible. Confirmed by screenshot before and after; `.app` now resolves its own colour in the scope where the token is redefined, and an E2E test measures the headline's computed luminance so it cannot regress.
+- The theme also ignored the reader's system preference and always opened light. It is now seeded from `prefers-color-scheme` and still owned by the toggle afterwards, so there is one mechanism rather than two.
 
 ### 2026-09-04 authenticated shell (feature branch)
 

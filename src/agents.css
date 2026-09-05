@@ -16,16 +16,16 @@
   gap: 0.15rem;
   padding: 0.75rem;
   border: 1px solid var(--line, rgba(128, 128, 128, 0.3));
-  border-radius: 12px;
+  border-radius:var(--radius-sm);
 }
 .agent-command .provider-list li[data-enabled="false"] {
   opacity: 0.55;
 }
 .agent-command .provider-list li[data-kind="external"] {
-  border-inline-start: 3px solid #b45309;
+  border-inline-start: 3px solid var(--warn);
 }
 .agent-command .provider-list li[data-kind="local"] {
-  border-inline-start: 3px solid #15803d;
+  border-inline-start: 3px solid var(--good);
 }
 .agent-command .agent[data-enabled="false"] {
   opacity: 0.6;
@@ -39,7 +39,7 @@
 .agent-command .agent-actions button,
 .agent-command .agent-run button {
   padding: 0.35rem 0.7rem;
-  border-radius: 999px;
+  border-radius:var(--radius-pill);
   font-size: 0.8rem;
   cursor: pointer;
 }
@@ -55,12 +55,12 @@
 }
 .agent-command .agent-run textarea {
   width: 100%;
-  border-radius: 10px;
+  border-radius:var(--radius-xs);
   padding: 0.5rem;
   font: inherit;
 }
 .agent-command .warn {
-  color: #b45309;
+  color: var(--warn);
 }
 .agent-command .preview {
   opacity: 0.8;
@@ -69,14 +69,14 @@
 .agent-command .agent-output {
   white-space: pre-wrap;
   padding: 0.75rem;
-  border-radius: 12px;
+  border-radius:var(--radius-sm);
   background: rgba(124, 58, 237, 0.08);
 }
 .agent-command .run-list li[data-state="failed"] {
-  border-color: #b91c1c;
+  border-color: var(--risk);
 }
 .agent-command .run-list li[data-state="pending_approval"] {
-  border-color: #b45309;
+  border-color: var(--warn);
 }
 @media (max-width: 640px) {
   .agent-command .agent-actions {

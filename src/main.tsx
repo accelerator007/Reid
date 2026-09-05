@@ -22,6 +22,7 @@ import { ResearchWorkspace } from "./research";
 // outside Vite's public directory, so a hard-coded path is never emitted to
 // dist and the header mark 404s in production while still resolving in dev.
 import reidLogo from "../assets/img/reid-logo.svg";
+import "./tokens.css";
 import "./style.css";
 import "./brand.css";
 import "./auth.css";
@@ -1288,7 +1289,11 @@ function App() {
 function Chrome({ session }: { session: Session | null }) {
   const [page, go] = useRoute(),
     [lang, setLang] = React.useState<Lang>("ar"),
-    [dark, setDark] = React.useState(false),
+    [dark, setDark] = React.useState(
+      () =>
+        typeof matchMedia === "function" &&
+        matchMedia("(prefers-color-scheme: dark)").matches,
+    ),
     t = tr[lang];
   // Roles, suspension and profile completion are resolved once by the shell.
   const { roles: sessionRoles, profileComplete: ready, reload: check } =
