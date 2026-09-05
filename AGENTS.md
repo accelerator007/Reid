@@ -113,7 +113,7 @@ Last verified: 2026-09-05, Asia/Muscat.
 
 ### 2026-09-05 Production ownership enforcement
 
-- GitHub `main` enforces administrators, current-branch status checks, pull requests, linear history, resolved conversations, and blocks force-push/deletion. Direct collaborator downgrade still reports `write`, so `.github/CODEOWNERS` assigns the whole repository to `@accelerator007`; branch protection must require one CODEOWNER approval before this control is complete.
+- GitHub `main` enforces administrators, current-branch status checks, pull requests, linear history, resolved conversations, and blocks force-push/deletion. Direct collaborator downgrade still reports `write`, so `.github/CODEOWNERS` assigns the whole repository to `@accelerator007`; branch protection now requires one approving CODEOWNER review and applies to administrators. Production cannot merge without the Owner's explicit GitHub review.
 
 ### 2026-09-05 approved-agent dispatch implementation
 
