@@ -201,7 +201,7 @@ Last verified: 2026-09-04, Asia/Muscat.
 
 ### P1 — core modules are schema/mock only
 
-- The authenticated shell, role-aware navigation and route manifest are in place. The employee, projects and research modules still resolve their own roles and have not been moved onto `useSession()`.
+- The authenticated shell, role-aware navigation, route manifest, typed data boundary and design tokens are in place, and the employee, projects and research modules read the session through `useSession()` and report failures through `src/db.ts`. Their remaining direct writes still call Supabase without the data layer, and the three files are each over 1,000 lines and have not been split into feature folders.
 - No real employee directory, departments, onboarding, announcements, calendar, documents, KPI/performance, notifications, or timesheet UI/API.
 - No working project dashboards, Kanban, milestones, meetings, budgets, file-level permissions, clients, GitHub integration, activity, or project agents.
 - Research V1 (members, datasets, experiments, ethics/approvals, publications/DOI/conference tracking, private documents with per-user/per-role grants, tasks, activity) is merged to `develop` and proven by 79 local RLS allow/deny checks. Migration `202609040001` is **not applied to remote Supabase**, so the module cannot work against Staging or Production yet, and no authenticated browser session has verified it. The AI research assistant remains unimplemented.
@@ -260,6 +260,12 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 5. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
 
 ## Verification log
+
+### 2026-09-04 feature modules moved onto the shell
+
+- `employee.tsx`, `projects.tsx` and `research.tsx` each resolved their own roles and reported failures by printing the raw Postgres string. Session-scoped reads of `user_roles` are now **one**, in `src/shell.tsx`; the read remaining in `main.tsx` is the admin listing of every account's roles, which carries no user filter and is a different query.
+- Their parallel loads report through `firstError` and `messageFor`, so a reader sees a bilingual, actionable message instead of `new row violates row-level security policy for table ...`, and an expired session is named ahead of the failures it caused.
+- `shell.test.ts` now scans every module for a session-scoped `user_roles` read and fails if one returns, which was verified by reintroducing the query and watching the test catch it. It also asserts the shell still performs that read, so the check cannot pass vacuously.
 
 ### 2026-09-04 design tokens (feature branch)
 

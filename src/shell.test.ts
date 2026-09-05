@@ -128,3 +128,33 @@ describe("the manifest declares access for every guarded route", () => {
     for (const route of routes) expect(routeFor(route.page)).toBe(route);
   });
 });
+
+// The shell only helps while it stays the single reader. A component that
+// fetches the current user's roles again reintroduces the drift this replaced:
+// five gates that could disagree, and seven reads per session.
+describe("the shell is the only reader of the session's roles", () => {
+  const { readdirSync, readFileSync } = require("node:fs") as typeof import("node:fs");
+  const modules = readdirSync("src").filter(
+    name => /\.tsx?$/.test(name) && !name.includes(".test."),
+  );
+
+  it.each(modules.filter(name => name !== "shell.tsx"))(
+    "%s does not re-read the current user's roles",
+    name => {
+      const source = readFileSync(`src/${name}`, "utf8");
+      // A session-scoped read is user_roles filtered by a user id. The admin
+      // listing of every account's roles carries no such filter and is fine.
+      const sessionRead =
+        /from\(\s*["']user_roles["']\s*\)[\s\S]{0,160}?\.eq\(\s*["']user_id["']/.test(
+          source,
+        );
+      expect(sessionRead, `${name} should use useSession() instead`).toBe(false);
+    },
+  );
+
+  it("still reads them somewhere, so the check is not vacuous", () => {
+    const shell = readFileSync("src/shell.tsx", "utf8");
+    expect(shell).toMatch(/from\("user_roles"\)/);
+    expect(shell).toMatch(/\.eq\("user_id"/);
+  });
+});
