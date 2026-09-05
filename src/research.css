@@ -1,7 +1,7 @@
 /* Research-specific accents layered on the shared project workspace styling. */
 .research-chip {
   padding: 5px 12px;
-  border-radius: 99px;
+  border-radius:var(--radius-pill);
   font-size: 12px;
   white-space: nowrap;
   border: 1px solid var(--line);
@@ -10,18 +10,18 @@
 .research-chip.s-restricted,
 .research-chip.e-rejected,
 .research-chip.p-rejected {
-  border-color: #b74d5c55;
-  color: #b74d5c;
-  background: #b74d5c14;
+  border-color: var(--risk-line);
+  color: var(--risk-strong);
+  background: var(--risk-fill);
 }
 .research-chip.e-approved,
 .research-chip.p-published {
-  border-color: #42bd8255;
-  color: #2f8a5e;
-  background: #42bd8214;
+  border-color: var(--good-line);
+  color: var(--good);
+  background: var(--good-fill);
 }
 .research-chip.s-public {
-  border-color: #55418b40;
+  border-color: var(--line-strong);
 }
 .research-empty {
   color: var(--muted);

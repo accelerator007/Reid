@@ -18,7 +18,10 @@ test('renders Reid bilingually and opens WhatsApp assistant', async ({ page }) =
 
 test('protects the dashboard for anonymous visitors', async ({ page }) => {
   await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: 'تسجيل الدخول مطلوب' })).toBeVisible();
+  // Every guarded route now offers sign-in inline and keeps the destination,
+  // rather than a dead-end gate that forgets where the visitor was going.
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'G Google' })).toBeVisible();
   await expect(page.getByText('Pending Approvals')).toHaveCount(0);
 });
 
@@ -64,4 +67,18 @@ test('renders privacy and in-app 404 routes', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'سياسة الخصوصية' })).toBeVisible();
   await page.goto('/does-not-exist');
   await expect(page.getByRole('heading', { name: '404' })).toBeVisible();
+});
+
+test('dark mode actually darkens inherited text', async ({ page }) => {
+  // The hero headline sets no colour of its own. It once kept the light theme's
+  // near-black ink on a dark ground because `body` resolved --ink against
+  // :root while `.dark` redefined it on a descendant.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/');
+  const heading = page.getByRole('heading', { level: 1 }).first();
+  const [r, g, b] = await heading.evaluate(el =>
+    getComputedStyle(el).color.match(/\d+/g)!.map(Number),
+  );
+  // Perceived luminance: light text on a dark ground, not the inherited ink.
+  expect(0.2126 * r + 0.7152 * g + 0.0722 * b).toBeGreaterThan(140);
 });

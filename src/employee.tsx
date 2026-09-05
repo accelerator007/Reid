@@ -1,6 +1,8 @@
 import React from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { firstError, messageFor, toAppError } from "./db";
+import { useSession } from "./shell";
 import "./employee.css";
 
 type Lang = "ar" | "en";
@@ -171,7 +173,6 @@ export function EmployeeWorkspace({
 }) {
   const t = labels[lang],
     [section, setSection] = React.useState<Section>("overview"),
-    [roles, setRoles] = React.useState<string[]>([]),
     [people, setPeople] = React.useState<Profile[]>([]),
     [departments, setDepartments] = React.useState<Department[]>([]),
     [onboarding, setOnboarding] = React.useState<Onboarding[]>([]),
@@ -186,6 +187,8 @@ export function EmployeeWorkspace({
     [selected, setSelected] = React.useState(user.id),
     [message, setMessage] = React.useState(""),
     [busy, setBusy] = React.useState(false);
+  // Roles come from the shell, which resolved them once for the session.
+  const { roles } = useSession();
   const staff = roles.some((r) =>
     ["owner", "super_admin", "admin", "hr"].includes(r),
   );
@@ -202,13 +205,7 @@ export function EmployeeWorkspace({
 
   const refresh = React.useCallback(async () => {
     if (!supabase) return;
-    const roleResult = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id);
-    const nextRoles = roleResult.data?.map((x) => x.role) || [];
-    setRoles(nextRoles);
-    const privileged = nextRoles.some((r) =>
+    const privileged = roles.some((r) =>
       ["owner", "super_admin", "admin", "hr"].includes(r),
     );
     const [p, d, o, ta, e, a, n, doc, k, r, ts] = await Promise.all([
@@ -267,10 +264,17 @@ export function EmployeeWorkspace({
         .order("work_date", { ascending: false })
         .limit(privileged ? 300 : 100),
     ]);
-    const failures = [p, d, o, ta, e, a, n, doc, k, r, ts]
-      .map((x) => x.error?.message)
-      .filter(Boolean);
-    if (failures.length) setMessage(failures[0] || "");
+    // A raw Postgres string is not something a reader can act on. The data
+    // layer turns it into a bilingual message, and an expired session is
+    // reported ahead of the failures it caused.
+    const failure = firstError(
+      [p, d, o, ta, e, a, n, doc, k, r, ts].map((x) =>
+        x.error
+          ? { ok: false as const, error: toAppError(x.error) }
+          : { ok: true as const, data: null },
+      ),
+    );
+    setMessage(failure ? messageFor(failure, lang) : "");
     setPeople((p.data || []) as Profile[]);
     setDepartments((d.data || []) as Department[]);
     setOnboarding((o.data || []) as Onboarding[]);
@@ -282,7 +286,7 @@ export function EmployeeWorkspace({
     setKpis((k.data || []) as Kpi[]);
     setReviews((r.data || []) as Review[]);
     setTimesheets((ts.data || []) as Timesheet[]);
-  }, [user.id]);
+  }, [user.id, roles, lang]);
   React.useEffect(() => {
     void refresh();
   }, [refresh]);

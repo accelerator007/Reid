@@ -1,6 +1,8 @@
 import React from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { firstError, messageFor, toAppError } from "./db";
+import { useSession } from "./shell";
 import "./projects.css";
 import "./project-permissions.css";
 import "./research.css";
@@ -203,8 +205,9 @@ const copy = {
 };
 
 export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
+  // Roles come from the shell, which resolved them once for the session.
+  const { roles } = useSession();
   const t = copy[lang],
-    [roles, setRoles] = React.useState<string[]>([]),
     [research, setResearch] = React.useState<Research[]>([]),
     [people, setPeople] = React.useState<Person[]>([]),
     [selected, setSelected] = React.useState<string | null>(
@@ -243,11 +246,10 @@ export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
 
   const loadResearch = React.useCallback(async () => {
     if (!supabase) return;
-    const [r, p] = await Promise.all([
-      supabase.from("user_roles").select("role").eq("user_id", user.id),
-      supabase.from("profiles").select("id,full_name,email").order("full_name"),
-    ]);
-    setRoles(r.data?.map((x) => x.role) || []);
+    const p = await supabase
+      .from("profiles")
+      .select("id,full_name,email")
+      .order("full_name");
     setPeople((p.data || []) as Person[]);
     const q = await supabase
       .from("research")
@@ -256,8 +258,15 @@ export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
       )
       .order("updated_at", { ascending: false });
     setResearch((q.data || []) as Research[]);
-    if (q.error) setMessage(q.error.message);
-  }, [user.id]);
+    const failure = firstError(
+      [p, q].map((x) =>
+        x.error
+          ? { ok: false as const, error: toAppError(x.error) }
+          : { ok: true as const, data: null },
+      ),
+    );
+    setMessage(failure ? messageFor(failure, lang) : "");
+  }, [user.id, lang]);
 
   const loadDetail = React.useCallback(async () => {
     if (!supabase || !selected) return;
@@ -325,9 +334,16 @@ export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
     setDocuments((dc.data || []) as DocumentRow[]);
     setPermissions((pe.data || []) as DocumentPermission[]);
     setActivity((ac.data || []) as Activity[]);
-    const err = [m, ta, ds, ex, et, pu, dc, pe, ac].find((x) => x.error)?.error;
-    if (err) setMessage(err.message);
-  }, [selected]);
+    // A raw Postgres string is not something a reader can act on.
+    const failure = firstError(
+      [m, ta, ds, ex, et, pu, dc, pe, ac].map((x) =>
+        x.error
+          ? { ok: false as const, error: toAppError(x.error) }
+          : { ok: true as const, data: null },
+      ),
+    );
+    setMessage(failure ? messageFor(failure, lang) : "");
+  }, [selected, lang]);
 
   React.useEffect(() => {
     void loadResearch();

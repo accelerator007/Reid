@@ -10,19 +10,19 @@
   align-items: center;
   gap: 5px;
   padding: 4px 8px;
-  border-radius: 99px;
+  border-radius:var(--radius-pill);
   background: color-mix(in srgb, var(--purple) 12%, transparent);
   font-size: 12px;
 }
 
-.file-permissions button { color: #b74d5c; }
+.file-permissions button { color: var(--risk-strong); }
 
 .project-list article select {
   max-width: 320px;
   margin-top: 9px;
   padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius:var(--radius-xs);
   background: var(--bg);
   color: var(--ink);
 }

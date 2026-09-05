@@ -3,31 +3,34 @@ import { createRoot } from "react-dom/client";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { installIdleTimeout } from "./session";
+import { pathFor, resolvePage } from "./routes";
+import { firstError, list, messageFor, run, toAppError } from "./db";
+import {
+  Gate,
+  Guarded,
+  SessionProvider,
+  useNavigation,
+  useSession,
+} from "./shell";
+import type { AppError } from "./db";
+import type { Page } from "./routes";
 import { EmployeeWorkspace } from "./employee";
 import { ProjectWorkspace } from "./projects";
+import { AgentCommand } from "./agent-command";
 import { ResearchWorkspace } from "./research";
 // Imported rather than written as a literal URL. The assets directory sits
 // outside Vite's public directory, so a hard-coded path is never emitted to
 // dist and the header mark 404s in production while still resolving in dev.
 import reidLogo from "../assets/img/reid-logo.svg";
+import "./tokens.css";
 import "./style.css";
 import "./brand.css";
 import "./auth.css";
 import "./profile.css";
 import "./workflow.css";
+import "./agents.css";
 
 type Lang = "ar" | "en";
-type Page =
-  | "home"
-  | "dashboard"
-  | "apply"
-  | "login"
-  | "profile"
-  | "workspace"
-  | "projects"
-  | "research"
-  | "privacy"
-  | "not-found";
 type ProfileData = {
   full_name: string;
   phone: string;
@@ -36,14 +39,6 @@ type ProfileData = {
   linkedin_url: string;
   github_url: string;
   bio: string;
-};
-type Agent = {
-  id: string;
-  name: string;
-  status: string;
-  model: string;
-  host: string;
-  approval_level: number;
 };
 type Application = {
   id: string;
@@ -121,35 +116,6 @@ const tr = {
     research: "Research",
   },
 };
-const routes: Record<string, Page> = {
-  "/": "home",
-  "/login": "login",
-  "/apply": "apply",
-  "/profile": "profile",
-  "/workspace": "workspace",
-  "/projects": "projects",
-  "/research": "research",
-  "/dashboard": "dashboard",
-  "/privacy": "privacy",
-};
-const paths: Record<Page, string> = {
-  home: "/",
-  login: "/login",
-  apply: "/apply",
-  profile: "/profile",
-  workspace: "/workspace",
-  projects: "/projects",
-  research: "/research",
-  dashboard: "/dashboard",
-  privacy: "/privacy",
-  "not-found": "/404",
-};
-function resolvePage(pathname: string): Page {
-  const normalized = pathname.replace(/\/+$/, "") || "/";
-  if (normalized.startsWith("/projects/")) return "projects";
-  if (normalized.startsWith("/research/")) return "research";
-  return routes[normalized] || "not-found";
-}
 function useRoute() {
   const [page, setPage] = React.useState<Page>(
     resolvePage(location.pathname),
@@ -162,7 +128,7 @@ function useRoute() {
   return [
     page,
     (p: Page) => {
-      history.pushState({}, "", paths[p]);
+      history.pushState({}, "", pathFor(p));
       setPage(p);
       scrollTo(0, 0);
     },
@@ -488,16 +454,11 @@ function Profile({
     bio: "",
   };
   const [p, setP] = React.useState(empty),
-    [roles, setRoles] = React.useState<string[]>([]),
     [message, setMessage] = React.useState(""),
     [newPassword, setNewPassword] = React.useState("");
+  const { roles } = useSession();
   React.useEffect(() => {
     getProfile(user).then((x) => x && setP({ ...empty, ...x }));
-    supabase!
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .then(({ data }) => setRoles(data?.map((item) => item.role) || []));
   }, [user.id]);
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -608,12 +569,9 @@ function Dashboard({
   login: () => void;
   profile: () => void;
 }) {
-  const [roles, setRoles] = React.useState<string[]>([]),
-    [agents, setAgents] = React.useState<Agent[]>([]),
-    [apps, setApps] = React.useState<Application[]>([]),
+  const [apps, setApps] = React.useState<Application[]>([]),
     [failedInvites, setFailedInvites] = React.useState<Application[]>([]),
     [accounts, setAccounts] = React.useState<CompanyAccount[]>([]),
-    [accountStatus, setAccountStatus] = React.useState("active"),
     [notifications, setNotifications] = React.useState<Notification[]>([]),
     [counts, setCounts] = React.useState([0, 0, 0, 0, 0]),
     [message, setMessage] = React.useState(""),
@@ -622,29 +580,18 @@ function Dashboard({
       "approved" | "rejected" | null
     >(null),
     [rejectReason, setRejectReason] = React.useState(""),
-    [busyDecision, setBusyDecision] = React.useState(false);
+    [busyDecision, setBusyDecision] = React.useState(false),
+    [loadError, setLoadError] = React.useState<AppError | null>(null);
+  // Suspension, completion and roles are the shell's business; this component
+  // only asks whether it may show the company view.
+  const { roles } = useSession();
   const allowed = roles.some((x) =>
     ["owner", "super_admin", "admin", "hr"].includes(x),
   );
   const refresh = React.useCallback(async () => {
-    if (!supabase || !user) return;
-    const r = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id),
-      next = r.data?.map((x) => x.role) || [];
-    setRoles(next);
-    const control = await supabase
-      .from("account_controls")
-      .select("status")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    setAccountStatus(control.data?.status || "active");
-    if (control.data?.status && control.data.status !== "active") return;
-    if (!next.some((x) => ["owner", "super_admin", "admin", "hr"].includes(x)))
-      return;
+    if (!supabase || !user || !allowed) return;
+    setLoadError(null);
     const [
-      a,
       p,
       failed,
       projects,
@@ -656,9 +603,6 @@ function Dashboard({
       companyRoles,
       companyControls,
     ] = await Promise.all([
-      supabase
-        .from("agents")
-        .select("id,name,status,model,host,approval_level"),
       supabase
         .from("applications")
         .select(
@@ -692,11 +636,16 @@ function Dashboard({
       supabase.from("user_roles").select("user_id,role"),
       supabase.from("account_controls").select("user_id,status,reason"),
     ]);
-    setAgents((a.data || []) as Agent[]);
+    // A panel that loads in parallel reports one outcome. Without this the
+    // first denied query rendered as an empty section with no explanation.
+    const failure = firstError([p, failed, notices, companyProfiles, companyRoles, companyControls]
+      .map((r) => (r.error ? { ok: false as const, error: toAppError(r.error) } : { ok: true as const, data: null })));
+    if (failure) setLoadError(failure);
+
     setApps((p.data || []) as Application[]);
     setFailedInvites((failed.data || []) as Application[]);
     setNotifications((notices.data || []) as Notification[]);
-    const roleRows = (companyRoles.data || []) as {
+    const memberRoles = (companyRoles.data || []) as {
       user_id: string;
       role: string;
     }[];
@@ -708,7 +657,7 @@ function Dashboard({
     setAccounts(
       (companyProfiles.data || []).map((account) => ({
         ...account,
-        user_roles: roleRows
+        user_roles: memberRoles
           .filter(({ user_id }) => user_id === account.id)
           .map(({ role }) => ({ role })),
         account_controls:
@@ -849,22 +798,32 @@ function Dashboard({
         label={tr[lang].account}
       />
     );
-  if (accountStatus !== "active")
+  if (!allowed)
     return (
       <Gate
         title={
-          lang === "ar"
-            ? "الحساب موقوف. تواصل مع الإدارة."
-            : "Account suspended. Contact an administrator."
+          loadError
+            ? messageFor(loadError, lang)
+            : lang === "ar"
+              ? "لا توجد صلاحية"
+              : "Access denied"
         }
+        action={loadError ? () => void refresh() : undefined}
+        label={loadError ? (lang === "ar" ? "أعد المحاولة" : "Try again") : undefined}
       />
     );
-  if (!allowed)
-    return <Gate title={lang === "ar" ? "لا توجد صلاحية" : "Access denied"} />;
   return (
     <main className="dashboard">
       <span>REID COMMAND CENTER</span>
       <h1>{lang === "ar" ? "لوحة الشركة الحية" : "Live company dashboard"}</h1>
+      {loadError && (
+        <p className="load-error" role="alert" data-kind={loadError.kind}>
+          {messageFor(loadError, lang)}
+          <button type="button" onClick={() => void refresh()}>
+            {lang === "ar" ? "أعد المحاولة" : "Try again"}
+          </button>
+        </p>
+      )}
       <section className="kpis">
         {[
           "Active Projects",
@@ -1223,43 +1182,7 @@ function Dashboard({
           </section>
         </div>
       )}
-      <h2>{lang === "ar" ? "الوكلاء" : "Agents"}</h2>
-      <section className="grid">
-        {agents.map((a) => (
-          <article key={a.id} className={"agent " + a.status}>
-            <i>R</i>
-            <b>{a.name}</b>
-            <small>
-              {a.status} · {a.model}
-            </small>
-            <small>
-              L{a.approval_level} · {a.host}
-            </small>
-          </article>
-        ))}
-      </section>
-    </main>
-  );
-}
-function Gate({
-  title,
-  action,
-  label,
-}: {
-  title: string;
-  action?: () => void;
-  label?: string;
-}) {
-  return (
-    <main className="auth">
-      <section className="auth-card">
-        <h1>{title}</h1>
-        {action && (
-          <button className="primary" onClick={action}>
-            {label}
-          </button>
-        )}
-      </section>
+      <AgentCommand lang={lang} />
     </main>
   );
 }
@@ -1326,37 +1249,59 @@ function Chat({ lang }: { lang: Lang }) {
   );
 }
 
+function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
+  switch (page) {
+    case "home":
+      return t.home;
+    case "apply":
+      return t.join;
+    case "workspace":
+      return t.workspace;
+    case "projects":
+      return t.projects;
+    case "research":
+      return t.research;
+    case "dashboard":
+      return t.system;
+    case "profile":
+      return t.account;
+    default:
+      return page;
+  }
+}
+
 function App() {
+  const [session, setSession] = React.useState<Session | null>(null);
+  React.useEffect(() => {
+    supabase?.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data } = supabase?.auth.onAuthStateChange((_e, s) =>
+      setSession(s),
+    ) || { data: null };
+    return () => data?.subscription.unsubscribe();
+  }, []);
+  return (
+    <SessionProvider user={session?.user || null}>
+      <Chrome session={session} />
+    </SessionProvider>
+  );
+}
+
+function Chrome({ session }: { session: Session | null }) {
   const [page, go] = useRoute(),
     [lang, setLang] = React.useState<Lang>("ar"),
-    [dark, setDark] = React.useState(false),
-    [session, setSession] = React.useState<Session | null>(null),
-    [sessionRoles, setSessionRoles] = React.useState<string[]>([]),
-    [ready, setReady] = React.useState(false),
+    [dark, setDark] = React.useState(
+      () =>
+        typeof matchMedia === "function" &&
+        matchMedia("(prefers-color-scheme: dark)").matches,
+    ),
     t = tr[lang];
+  // Roles, suspension and profile completion are resolved once by the shell.
+  const { roles: sessionRoles, profileComplete: ready, reload: check } =
+    useSession();
   const canManageCompany = sessionRoles.some((role) =>
     ["owner", "super_admin", "admin", "hr"].includes(role),
   );
-  const check = React.useCallback(async (u: User | null) => {
-    setReady(Boolean((await getProfile(u))?.linkedin_url));
-    if (!supabase || !u) return setSessionRoles([]);
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", u.id);
-    setSessionRoles(data?.map(({ role }) => role) || []);
-  }, []);
-  React.useEffect(() => {
-    supabase?.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      check(data.session?.user || null);
-    });
-    const { data } = supabase?.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-      check(s?.user || null);
-    }) || { data: null };
-    return () => data?.subscription.unsubscribe();
-  }, [check]);
+  const navigation = useNavigation();
   React.useEffect(() => {
     const client = supabase;
     if (!session || !client) return;
@@ -1376,24 +1321,19 @@ function App() {
           <strong>{t.brand}</strong>
         </button>
         <nav>
-          <button onClick={() => go("home")}>{t.home}</button>
-          <button
-            onClick={() =>
-              go(session && !canManageCompany ? "workspace" : "dashboard")
-            }
-          >
-            {t.system}
-          </button>
-          <button onClick={() => go("apply")}>{t.join}</button>
-          {session && (
-            <button onClick={() => go("workspace")}>{t.workspace}</button>
-          )}
-          {session && (
-            <button onClick={() => go("projects")}>{t.projects}</button>
-          )}
-          {session && (
-            <button onClick={() => go("research")}>{t.research}</button>
-          )}
+          {/* Derived from src/routes.ts, so the navigation can never offer a
+              destination the gate would then refuse. */}
+          {navigation
+            .filter(({ page: target }) => target !== "privacy" && target !== "login")
+            .map(({ page: target }) => (
+              <button
+                key={target}
+                onClick={() => go(target)}
+                aria-current={page === target ? "page" : undefined}
+              >
+                {navLabel(target, lang, t)}
+              </button>
+            ))}
           <button
             className="pill"
             onClick={() => go(session ? "profile" : "login")}
@@ -1470,7 +1410,7 @@ function App() {
             lang={lang}
             user={session.user}
             complete={async () => {
-              await check(session.user);
+              await check();
               go("dashboard");
             }}
             signout={async () => {
@@ -1486,48 +1426,65 @@ function App() {
           />
         ))}{" "}
       {page === "dashboard" && (
-        <Dashboard
+        <Guarded
+          page="dashboard"
           lang={lang}
-          user={session?.user || null}
-          ready={ready}
-          login={() => go("login")}
-          profile={() => go("profile")}
-        />
-      )}{" "}
-      {page === "workspace" &&
-        (session?.user ? (
-          <EmployeeWorkspace
+          renderSignIn={() => (
+            <Login lang={lang} done={() => go("dashboard")} apply={() => go("apply")} />
+          )}
+          onProfile={() => go("profile")}
+        >
+          <Dashboard
             lang={lang}
-            user={session.user}
+            user={session?.user || null}
+            ready={ready}
+            login={() => go("login")}
             profile={() => go("profile")}
           />
-        ) : (
-          <Login
-            lang={lang}
-            done={() => go("workspace")}
-            apply={() => go("apply")}
-          />
-        ))}{" "}
-      {page === "projects" &&
-        (session?.user ? (
-          <ProjectWorkspace lang={lang} user={session.user} />
-        ) : (
-          <Login
-            lang={lang}
-            done={() => go("projects")}
-            apply={() => go("apply")}
-          />
-        ))}{" "}
-      {page === "research" &&
-        (session?.user ? (
-          <ResearchWorkspace lang={lang} user={session.user} />
-        ) : (
-          <Login
-            lang={lang}
-            done={() => go("research")}
-            apply={() => go("apply")}
-          />
-        ))}{" "}
+        </Guarded>
+      )}{" "}
+      {page === "workspace" && (
+        <Guarded
+          page="workspace"
+          lang={lang}
+          renderSignIn={() => (
+            <Login lang={lang} done={() => go("workspace")} apply={() => go("apply")} />
+          )}
+          onProfile={() => go("profile")}
+        >
+          {session?.user && (
+            <EmployeeWorkspace
+              lang={lang}
+              user={session.user}
+              profile={() => go("profile")}
+            />
+          )}
+        </Guarded>
+      )}{" "}
+      {page === "projects" && (
+        <Guarded
+          page="projects"
+          lang={lang}
+          renderSignIn={() => (
+            <Login lang={lang} done={() => go("projects")} apply={() => go("apply")} />
+          )}
+          onProfile={() => go("profile")}
+        >
+          {session?.user && <ProjectWorkspace lang={lang} user={session.user} />}
+        </Guarded>
+      )}{" "}
+      {page === "research" && (
+        <Guarded
+          page="research"
+          lang={lang}
+          renderSignIn={() => (
+            <Login lang={lang} done={() => go("research")} apply={() => go("apply")} />
+          )}
+          onProfile={() => go("profile")}
+        >
+          {session?.user && <ResearchWorkspace lang={lang} user={session.user} />}
+        </Guarded>
+      )}{" "}
       {page === "privacy" && (
         <main className="legal">
           <h1>{lang === "ar" ? "سياسة الخصوصية" : "Privacy Policy"}</h1>

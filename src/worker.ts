@@ -1,6 +1,7 @@
-const appRoutes = new Set(['/login', '/apply', '/profile', '/dashboard', '/workspace', '/projects', '/research', '/privacy'])
-// Routes whose children are application-owned deep links (/projects/:id).
-const appRoutePrefixes = ['/projects/', '/research/']
+// The edge only decides which paths render the application shell. That decision
+// comes from src/routes.ts, the same manifest the browser app resolves against,
+// so the two can no longer drift.
+import { isAppShellPath, legacyRedirects, normalizePath } from './routes'
 
 type WorkerEnvironment = {
   ASSETS: { fetch(request: Request): Promise<Response> }
@@ -10,17 +11,11 @@ export default {
   async fetch(request: Request, env: WorkerEnvironment): Promise<Response> {
     const url = new URL(request.url)
 
-    if (url.pathname === '/privacy.html') {
-      return Response.redirect(new URL('/privacy', url), 301)
-    }
+    const redirect = legacyRedirects[normalizePath(url.pathname)]
+    if (redirect) return Response.redirect(new URL(redirect, url), 301)
 
     const canRenderApp = request.method === 'GET' || request.method === 'HEAD'
-
-    if (
-      canRenderApp &&
-      (appRoutes.has(url.pathname) ||
-        appRoutePrefixes.some(prefix => url.pathname.startsWith(prefix)))
-    ) {
+    if (canRenderApp && isAppShellPath(url.pathname)) {
       const indexUrl = new URL('/', url)
       return env.ASSETS.fetch(new Request(indexUrl, request))
     }

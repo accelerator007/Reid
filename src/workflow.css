@@ -1,8 +1,8 @@
 .guard-message {
   padding: 14px 18px;
-  border: 1px solid #8d7de0;
-  border-radius: 14px;
-  background: #8d7de015;
+  border: 1px solid var(--brand-300);
+  border-radius:var(--radius-md);
+  background: var(--brand-fill);
 }
 .role-badges {
   display: flex;
@@ -12,9 +12,9 @@
 }
 .role-badges b {
   padding: 5px 10px;
-  border-radius: 999px;
-  background: #7256c718;
-  color: #674db6;
+  border-radius:var(--radius-pill);
+  background: var(--brand-fill);
+  color: var(--brand-400);
   text-transform: capitalize;
   font-size: 12px;
 }
@@ -30,7 +30,7 @@
   gap: 20px;
   padding: 18px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius:var(--radius-lg);
   background: var(--card);
 }
 .applications-list article div:last-child {
@@ -74,7 +74,7 @@
 .review-overview > article {
   padding: 20px;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius:var(--radius-lg);
   background: var(--card);
 }
 .notice {
@@ -93,7 +93,7 @@
 }
 .notice.unread {
   padding-inline-start: 12px;
-  border-inline-start: 3px solid #7656cc;
+  border-inline-start: 3px solid var(--brand-500);
 }
 .review-backdrop {
   position: fixed;
@@ -102,7 +102,7 @@
   display: grid;
   place-items: center;
   padding: 20px;
-  background: #160f2c99;
+  background: var(--scrim);
   backdrop-filter: blur(10px);
 }
 .review-dialog {
@@ -111,9 +111,9 @@
   overflow: auto;
   padding: 24px;
   border: 1px solid var(--line);
-  border-radius: 26px;
+  border-radius: var(--radius-xl);
   background: var(--card);
-  box-shadow: 0 30px 90px #160f2c55;
+  box-shadow: var(--shadow-lg);
 }
 .review-dialog > header {
   display: flex;
@@ -134,8 +134,8 @@
 .review-dialog dl > div,
 .review-dialog > article {
   padding: 14px;
-  border-radius: 14px;
-  background: #7558c70b;
+  border-radius:var(--radius-md);
+  background: var(--brand-fill);
 }
 .review-dialog dt {
   font-size: 12px;
@@ -146,7 +146,7 @@
   overflow-wrap: anywhere;
 }
 .review-dialog a {
-  color: #684bbf;
+  color: var(--brand-400);
 }
 .review-dialog > label {
   display: grid;
@@ -184,7 +184,7 @@
   gap: 16px;
   padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius:var(--radius-lg);
   background: var(--card);
 }
 .accounts-list small {
@@ -200,9 +200,9 @@
 .account-roles button {
   padding: 4px 8px;
   border: 0;
-  border-radius: 999px;
-  background: #7458c718;
-  color: #674db6;
+  border-radius:var(--radius-pill);
+  background: var(--brand-fill);
+  color: var(--brand-400);
   font-size: 11px;
 }
 .account-roles button:disabled {
@@ -211,15 +211,15 @@
 }
 .account-status {
   padding: 8px 10px;
-  border-radius: 12px;
+  border-radius:var(--radius-sm);
   text-align: center;
-  background: #2e9f6914;
-  color: #237a51;
+  background: var(--good-fill);
+  color: var(--good);
 }
 .account-status.suspended,
 .account-status.disabled {
-  background: #d44b4b14;
-  color: #a52f2f;
+  background: var(--risk-fill);
+  color: var(--risk);
 }
 .account-actions {
   display: flex;
@@ -235,4 +235,30 @@
   .account-actions > * {
     flex: 1;
   }
+}
+
+/* A failed load explains itself instead of rendering an empty panel. */
+.load-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  padding: .8rem 1rem;
+  margin: 0 0 1.25rem;
+  border-radius:var(--radius-sm);
+  border: 1px solid var(--warn-line);
+  background: var(--warn-fill);
+  color: var(--ink);
+}
+.load-error[data-kind="unauthenticated"],
+.load-error[data-kind="offline"] {
+  border-color: var(--warn-line);
+  background: var(--warn-fill);
+}
+.load-error button {
+  margin-inline-start: auto;
+  border: 1px solid var(--line);
+  border-radius:var(--radius-pill);
+  padding: .35rem .9rem;
+  cursor: pointer;
 }
