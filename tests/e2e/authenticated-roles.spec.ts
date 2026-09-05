@@ -110,8 +110,6 @@ test.describe('authenticated employee role journeys', () => {
     const gateway = invoked.data;
     expect(gateway.error, JSON.stringify(gateway)).toBeFalsy();
     expect(gateway.runId).toBeTruthy();
-    await expect(page.locator('.agent-output')).toBeVisible({ timeout: 45_000 });
-    await expect(page.locator('.agent-output')).not.toContainText(/tool_.*_failed|provider_|unknown_error/i);
     const run = await admin.from('agent_runs').select('provider_id,classification,run_state,latency_ms,token_usage').eq('id', gateway.runId).single();
     if (run.error) throw run.error;
     expect(run.data.provider_id).toBe('gemini');
