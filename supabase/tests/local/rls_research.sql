@@ -59,7 +59,9 @@ insert into public.research_publications(research_id, title, status, venue_type,
   (:'research_b', 'Published Reid paper', 'published', 'journal', :'super_id'),
   (:'research_b', 'Unpublished Reid draft', 'draft', 'journal', :'super_id');
 
-insert into storage.objects(bucket_id, name) values ('research-files', :'research_a' || '/open.pdf');
+insert into storage.objects(bucket_id, name) values
+  ('research-files', :'research_a' || '/open.pdf'),
+  ('research-files', :'research_a' || '/restricted.pdf');
 
 delete from public.test_results where suite = :'suite';
 
@@ -204,6 +206,8 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"66666666-6666-4666-8666-666666666666","role":"authenticated"}';
 select t_true(:'suite', 'a role grant opens the restricted document to HR',
   format('select public.can_read_research_document(%L)', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'), true);
+select t_visible(:'suite', 'the HR role grant exposes the matching storage object',
+  format('select 1 from storage.objects where bucket_id = %L and name = %L', 'research-files', :'research_a' || '/restricted.pdf'), 1);
 select t_visible(:'suite', 'HR without membership still sees no research rows', 'select 1 from public.research', 1);
 reset role;
 
