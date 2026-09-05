@@ -1,3 +1,5 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
@@ -37,6 +39,17 @@ Deno.serve(async (request) => {
 
     const key = Deno.env.get('GEMINI_API_KEY');
     if (!key) throw new Error('provider_unavailable');
+    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const quota = await admin.rpc('consume_public_assistant_quota', { daily_limit: 18 });
+    if (quota.error || quota.data !== true) {
+      return Response.json({
+        error: 'daily_quota_exceeded',
+        reply: lang === 'ar'
+          ? 'وصل المساعد إلى الحد المجاني اليوم. جرّب غدًا أو اطلب التحدث مع فريق ريّد.'
+          : 'The assistant has reached today’s free limit. Try again tomorrow or ask to speak with the Reid team.',
+        handoff: true,
+      }, { headers: cors });
+    }
     // Keep the public assistant on the same verified Gemini model as the
     // governed agent gateway unless an explicit function secret overrides it.
     const model = Deno.env.get('PUBLIC_ASSISTANT_MODEL') || 'gemini-3.6-flash';
