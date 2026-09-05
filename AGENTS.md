@@ -116,15 +116,17 @@ Last verified: 2026-09-05, Asia/Muscat.
 - Remote migration `202609040001_research_workspace.sql` was applied to Supabase project `pkogchbrknwmzefjklkr`; the linked migration history matches through that version and remote database lint reports no schema errors.
 - A synthetic authenticated suite exercised Owner, supervisor, researcher, HR, outsider, suspended-member, and anonymous sessions against the live PostgREST/Auth/Storage services. The first pass completed 36/39 assertions and cleaned up its users, research rows, and objects.
 - That pass exposed a real nested-RLS defect: a role grant made `can_read_research_document()` true for HR, but the Storage policy's lookup of `research_documents` was filtered before it could evaluate the grant, so a signed URL returned `Object not found`. Migration `202609050001_research_granted_storage_read.sql` makes granted document metadata visible to the same authorized reader. A local RLS regression now seeds both open and restricted objects and requires an HR role grant to expose only the matching authorized private Storage object.
-- Do not release Research to Production until the corrective migration is applied remotely and the complete authenticated suite passes, including the signed URL returning the expected file bytes.
+- Corrective migration `202609050001` is applied remotely. A focused authenticated regression then created temporary Owner, supervisor and HR accounts, uploaded a restricted object, granted HR by role, downloaded it through a one-minute signed URL, verified the exact 24-byte payload, and cleaned up every test row, object and account.
 
-### 2026-09-04 agent gateway (feature branch, not yet deployed)
+### 2026-09-05 agent gateway and live Gemini provider
 - Migration `202609040002_agent_gateway.sql` adds `llm_providers`, provider/classification/enabled columns on `agents`, run lifecycle and approval columns on `agent_runs`, the `provider_accepts` clearance function, the `agent_runs_clearance` trigger, the `approve_agent_run` RPC, Owner-only provider writes, and Realtime on `agent_runs`.
 - Edge Function `llm-gateway` dispatches to Gemini or Ollama behind one provider-agnostic interface, so restoring `ai-lap` is a provider row change rather than a rewrite.
 - The dashboard Agent Map is replaced by `AgentCommand`: provider clearance display, manual run, pause/resume, disable/enable, approval decisions for L2+ runs, and a run stream with latency, tokens, output preview, and errors.
 - `supabase/tests/local/rls_agents.sql` adds 30 executable allow/deny checks that CI runs against a real PostgreSQL 16 with every migration applied, so the clearance rule, the roster scoping, the admin controls and the approval engine are proven by the database rather than by the UI.
 - 8 new unit tests cover the clearance and approval policy.
-- Not deployed and not executed against a live provider. See the P0 list below.
+- Migration `202609040002` is applied, Edge Function `llm-gateway` version 1 is active, and `GEMINI_API_KEY` is stored only as an encrypted Supabase Edge Function secret.
+- A live authenticated Owner regression selected the enabled L1 Competitor Intelligence agent, invoked Gemini through the deployed gateway, required the exact sentinel response, verified the persisted run as `succeeded` on provider `gemini`, latency `1773 ms`, token usage `127`, and removed the synthetic account and run afterwards.
+- The Marketing and Content/Social agents remain L2: their runs correctly stop at human approval. Competitor Intelligence is L1 and runs immediately. Only `public` data may reach the current free-tier key.
 
 ### 2026-09-02 critical V1 implementation (feature branch)
 
@@ -201,21 +203,21 @@ Last verified: 2026-09-05, Asia/Muscat.
 12. Security headers are now emitted from `public/_headers`; Production header verification remains required because Worker static-asset handling may differ from Pages.
 13. Owner-only Production merging is not fully enforced. Collaborator `sheikhaalmamari4-cyber` currently has `write` permission, and main protection requires zero approvals; a writer could merge a passing PR.
 14. A Google OAuth client secret appeared in an automation tool transcript during setup. It is not committed to Git, but it should be rotated and the replacement stored only in Supabase after explicit credential-rotation confirmation.
-15. A Gemini API key was pasted into an assistant transcript on 2026-09-04. The Owner accepted the exposure and asked for it to be applied. It is stored only in the gitignored `.dev.vars` and was never committed. It must be rotated, and the replacement set with `supabase secrets set GEMINI_API_KEY=...` only.
+15. The Gemini API key used by Reid has appeared in assistant/browser automation output. It is not committed and is now stored as an encrypted Supabase secret, but Google rejected an attempted replacement-key creation as suspicious. Rotate it in Google AI Studio when Google permits creation, then replace only the Supabase secret.
 16. The Gemini account is on the free tier, so the provider is capped at `public` and the five `internal` agents (Operations, Analytics, Knowledge, Support, CEO) are disabled. Moving to a paid tier and raising the cap to `internal` is the smallest change that activates them.
-17. Migration `202609040002_agent_gateway.sql` and the `llm-gateway` function have not been applied or deployed to Staging or Production. The RLS policies, the clearance trigger and the approval engine are proven locally by `rls_agents`, but no request has passed through the Edge Function itself, so the gateway's session handling, rate limiting and provider dispatch remain untested against real traffic.
-18. Model availability on this key is narrower than the API's own model list. `gemini-2.5-flash` and `text-embedding-004` are listed by ListModels but rejected at call time, so a provider row must be verified by a real call, never by the listing.
+17. The gateway has no automatic post-approval dispatcher yet: L2+ runs pause correctly, but an approved run is not automatically resumed. Pause/enable and the L2-L4 approval RPC are database-tested; live browser verification of those controls remains required.
+18. Model availability must always be verified by a real call rather than ListModels. The configured `gemini-3.6-flash` chat model passed a live gateway call on 2026-09-05; the configured embedding route still needs a live 768-dimension test.
 
 ### P1 — core modules are schema/mock only
 
 - The authenticated shell, role-aware navigation, route manifest, typed data boundary and design tokens are in place, and the employee, projects and research modules read the session through `useSession()` and report failures through `src/db.ts`. Their remaining direct writes still call Supabase without the data layer, and the three files are each over 1,000 lines and have not been split into feature folders.
 - No real employee directory, departments, onboarding, announcements, calendar, documents, KPI/performance, notifications, or timesheet UI/API.
 - No working project dashboards, Kanban, milestones, meetings, budgets, file-level permissions, clients, GitHub integration, activity, or project agents.
-- Research V1 (members, datasets, experiments, ethics/approvals, publications/DOI/conference tracking, private documents with per-user/per-role grants, tasks, activity) is merged to `develop` and proven by 79 local RLS allow/deny checks. Migration `202609040001` is **not applied to remote Supabase**, so the module cannot work against Staging or Production yet, and no authenticated browser session has verified it. The AI research assistant remains unimplemented.
+- Research V1 (members, datasets, experiments, ethics/approvals, publications/DOI/conference tracking, private documents with per-user/per-role grants, tasks, activity) is merged to `develop`; migrations `202609040001` and `202609050001` are applied remotely. CI proves 80 local allow/deny checks, and the live HR role-grant signed-URL workflow passes. Full authenticated browser coverage and the AI research assistant remain incomplete.
 - No working CRM UI, lead pipeline, Sales permissions E2E, or Sales agent.
 - CV Storage, three Realtime tables, and the decision Edge Function are deployed. The `project-files` and `research-files` buckets and policies exist in migrations; the research bucket is not yet applied remotely. Avatar and general-document buckets are still missing.
 - RAG/Knowledge Agent, Google Drive synchronization, embeddings pipeline, and document ACL filtering are not implemented.
-- Agent execution, admin controls, and the private gateway are implemented on `claude/agent-plan-7v3s5l` and proposed in PR #58, but not deployed, so no agent has completed a real run yet.
+- Agent execution, admin controls, and the private gateway are merged to `develop` and deployed to Supabase. One public L1 agent has completed a verified real Gemini run. The new authenticated shell/Agent Map is live on Staging but is not yet released to Production.
 - No daily/weekly executive report generation or weekly email delivery.
 - Tool allow-lists, per-agent system prompts, and memory-scope retrieval are not implemented; the gateway currently passes the caller's text straight through.
 - No queue worker: L2+ runs stop at `pending_approval` and an approved run is not automatically dispatched afterwards.
@@ -223,7 +225,7 @@ Last verified: 2026-09-05, Asia/Muscat.
 
 ### P2 — quality and operations
 
-- Twenty-one unit tests, eight public-browser E2E tests, and 109 database RLS allow/deny checks exist (79 research, 30 agent gateway). Authenticated Auth/email/storage workflows still lack executable integration coverage, and the RLS harness proves policy behaviour against a local database rather than against the remote Supabase project.
+- The current CI passes 113 unit tests, 9 public-browser E2E tests, and 110 database RLS allow/deny checks (80 research, 30 agent gateway). Focused authenticated live regressions now cover Gemini dispatch/audit and research role-grant Storage download; broad authenticated browser coverage is still missing.
 - `supabase/tests/rls.sql` is still a schema-shape draft (38 checks) that CI does not run, because pgTAP is not installed in the harness. Role impersonation is now covered instead by `scripts/rls-local.sh`, which applies every migration to a throwaway PostgreSQL 16 database and runs 79 allow/deny checks as real `anon`/`authenticated` roles in its own CI job. The Research workspace and the agent gateway have such suites; Employee, Projects, Applications, and account-lifecycle suites are still missing.
 - A Chromium public-flow E2E suite exists; authenticated E2E, accessibility automation, mobile visual regression, performance budgets, error monitoring, and uptime alerts remain missing.
 - No tested recovery procedure, restore drill, staging data policy, retention policy, or disaster recovery evidence.
@@ -248,7 +250,7 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 2. Build the authenticated shell and role-aware navigation for Profile, People, Projects, Research, Tasks, Calendar, Documents, Announcements, KPIs, Notifications, Timesheets, CRM, Agents, Approvals, and Settings.
 3. Deliver Employees + departments + onboarding + announcements + timesheets as real workflows.
 4. Deliver Projects + members + Kanban tasks + milestones + files + meetings + activity + KPIs + GitHub repository link.
-5. Deliver Research + members + documents + datasets + experiments + ethics/approvals + publications/DOI/conference tracking. Merged to `develop` and covered by 79 local RLS checks. The remote migration has not been applied and no authenticated Staging verification has run, so this is not complete.
+5. Deliver Research + members + documents + datasets + experiments + ethics/approvals + publications/DOI/conference tracking. Merged to `develop`, covered by 80 local RLS checks, remotely migrated, and its highest-risk file-grant path is live-tested. Full authenticated Staging browser coverage is still required before calling the entire module complete.
 6. Deliver CRM contacts/leads/pipeline for Admin, HR, and Sales.
 
 ### Phase 2 — governance and integrations
