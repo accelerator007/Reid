@@ -30,5 +30,17 @@ create policy whatsapp_commands_owner_read on public.whatsapp_commands for selec
 revoke all on public.whatsapp_events, public.whatsapp_commands from anon, authenticated;
 grant select on public.whatsapp_events, public.whatsapp_commands to authenticated;
 
+create function public.audit_whatsapp_command() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  insert into public.audit_logs(actor_id, action, table_name, record_id, old_data, new_data)
+  values (
+    auth.uid(), tg_op, 'whatsapp_commands', coalesce(new.id, old.id)::text,
+    case when tg_op in ('UPDATE','DELETE') then jsonb_build_object('status', old.status, 'agent_run_id', old.agent_run_id) end,
+    case when tg_op in ('INSERT','UPDATE') then jsonb_build_object('status', new.status, 'agent_run_id', new.agent_run_id) end
+  );
+  return case when tg_op = 'DELETE' then old else new end;
+end $$;
+
 create trigger audit_whatsapp_commands after insert or update or delete on public.whatsapp_commands
-for each row execute function public.audit_row();
+for each row execute function public.audit_whatsapp_command();
