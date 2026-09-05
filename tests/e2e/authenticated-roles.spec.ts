@@ -98,10 +98,16 @@ test.describe('authenticated employee role journeys', () => {
     await expect(page.getByRole('heading', { name: 'خريطة قيادة الوكلاء' })).toBeVisible();
     await page.getByRole('button', { name: /Operations:/ }).click();
     await page.getByPlaceholder('اكتب الهدف أو المهمة').fill('أعطني ملخصًا قصيرًا لحالة المشاريع والمهام الموجودة في السياق المصرح به فقط.');
-    await page.getByRole('button', { name: 'تشغيل يدوي' }).click();
+    const [gatewayResponse] = await Promise.all([
+      page.waitForResponse(response => response.url().includes('/functions/v1/llm-gateway'), { timeout: 45_000 }),
+      page.getByRole('button', { name: 'تشغيل يدوي' }).click(),
+    ]);
+    const gateway = await gatewayResponse.json();
+    expect(gatewayResponse.ok(), JSON.stringify(gateway)).toBe(true);
+    expect(gateway.runId).toBeTruthy();
     await expect(page.locator('.agent-output')).toBeVisible({ timeout: 45_000 });
     await expect(page.locator('.agent-output')).not.toContainText(/tool_.*_failed|provider_|unknown_error/i);
-    const run = await admin.from('agent_runs').select('provider_id,classification,run_state,latency_ms,token_usage').eq('requested_by', users.owner.id).eq('agent_id', 'operations').order('created_at', { ascending: false }).limit(1).single();
+    const run = await admin.from('agent_runs').select('provider_id,classification,run_state,latency_ms,token_usage').eq('id', gateway.runId).single();
     if (run.error) throw run.error;
     expect(run.data.provider_id).toBe('gemini');
     expect(run.data.classification).toBe('internal');
