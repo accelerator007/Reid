@@ -130,6 +130,11 @@ select t_visible(:'suite', 'agent runs publish to Realtime',
 select t_true(:'suite', 'a run keeps only a prompt hash, never the prompt',
   $q$select count(*) = 0 from information_schema.columns
      where table_schema = 'public' and table_name = 'agent_runs' and column_name = 'prompt'$q$, true);
+select t_true(:'suite', 'authenticated clients have no privilege on transient agent payloads',
+  $q$select not has_table_privilege('authenticated', 'public.agent_run_payloads', 'select')
+     and not has_table_privilege('authenticated', 'public.agent_run_payloads', 'insert')
+     and not has_table_privilege('authenticated', 'public.agent_run_payloads', 'update')
+     and not has_table_privilege('authenticated', 'public.agent_run_payloads', 'delete')$q$, true);
 
 \o
 select label, case when ok then 'PASS' else 'FAIL' end as result, detail
