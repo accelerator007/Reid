@@ -32,6 +32,17 @@ type Agent = {
   system_prompt: string | null;
 };
 
+type Run = {
+  id: string;
+  agent_id: string;
+  provider_id: string;
+  requested_by: string;
+  classification: string;
+  approval_level: number;
+  approval_state: string;
+  run_state: string;
+};
+
 const rank: Record<string, number> = { public: 0, internal: 1, confidential: 2, restricted: 3 };
 
 // Prompts are correlated by hash so a run is auditable without storing the
@@ -103,6 +114,33 @@ async function embed(provider: Provider, input: string) {
   return payload?.embedding?.values as number[];
 }
 
+async function executeRun(admin: ReturnType<typeof createClient>, run: Run, agent: Agent, provider: Provider, action: string, input: string) {
+  const startedAt = Date.now();
+  await admin.from('agent_runs').update({
+    run_state: 'running', status: 'running', started_at: new Date().toISOString(), error: null,
+  }).eq('id', run.id);
+
+  if (action === 'embed') {
+    const vector = await embed(provider, input);
+    await admin.from('agent_runs').update({
+      run_state: 'succeeded', status: 'succeeded', latency_ms: Date.now() - startedAt,
+      finished_at: new Date().toISOString(),
+    }).eq('id', run.id);
+    return { runId: run.id, embedding: vector, dimensions: vector?.length ?? 0 };
+  }
+
+  const result = provider.kind === 'local'
+    ? await callOllama(provider, agent.system_prompt, input)
+    : await callGemini(provider, agent.system_prompt, input);
+  const latency = Date.now() - startedAt;
+  await admin.from('agent_runs').update({
+    run_state: 'succeeded', status: 'succeeded', latency_ms: latency,
+    token_usage: result.tokens, output_preview: result.text.slice(0, PREVIEW_LIMIT),
+    finished_at: new Date().toISOString(),
+  }).eq('id', run.id);
+  return { runId: run.id, output: result.text, latencyMs: latency, tokenUsage: result.tokens, provider: provider.id };
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: cors });
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -123,7 +161,32 @@ Deno.serve(async (request) => {
     const body = await request.json();
     const action: string = body.action || 'run';
     const input: string = (body.input || '').toString();
-    if (action !== 'cancel' && !input.trim()) throw new Error('empty_input');
+
+    if (action === 'approve' || action === 'reject') {
+      const decision = action === 'approve' ? 'approved' : 'rejected';
+      const decided = await caller.rpc('approve_agent_run', { run_id: body.runId, decision, note: body.note || null });
+      if (decided.error) throw decided.error;
+      const approved = decided.data as Run;
+      runId = approved.id;
+      if (decision === 'rejected') {
+        await admin.from('agent_run_payloads').delete().eq('run_id', approved.id);
+        return Response.json({ runId: approved.id, status: 'cancelled' }, { headers: cors });
+      }
+
+      const [{ data: resumedAgent, error: resumedAgentError }, { data: resumedProvider, error: resumedProviderError }, { data: payload, error: payloadError }] = await Promise.all([
+        admin.from('agents').select('id,name,status,enabled,provider_id,classification,approval_level,system_prompt').eq('id', approved.agent_id).single(),
+        admin.from('llm_providers').select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour').eq('id', approved.provider_id).single(),
+        admin.from('agent_run_payloads').select('action,input').eq('run_id', approved.id).single(),
+      ]);
+      if (resumedAgentError) throw resumedAgentError;
+      if (resumedProviderError) throw resumedProviderError;
+      if (payloadError) throw payloadError;
+      const result = await executeRun(admin, approved, resumedAgent as Agent, resumedProvider as Provider, payload.action, payload.input);
+      await admin.from('agent_run_payloads').delete().eq('run_id', approved.id);
+      return Response.json(result, { headers: cors });
+    }
+
+    if (!input.trim()) throw new Error('empty_input');
 
     // Reading the agent through the caller applies `agents_admin_read`, so a
     // non-admin session cannot execute an agent at all.
@@ -190,33 +253,13 @@ Deno.serve(async (request) => {
 
     // L2+ work stops here until a human approves it through approve_agent_run.
     if (needsApproval) {
+      const payload = await admin.from('agent_run_payloads').insert({ run_id: created.id, action, input });
+      if (payload.error) throw payload.error;
       return Response.json({ run: created, status: 'pending_approval', approvalLevel: agent.approval_level }, { headers: cors });
     }
 
-    const startedAt = Date.now();
-    if (action === 'embed') {
-      const vector = await embed(provider, input);
-      await admin.from('agent_runs').update({
-        run_state: 'succeeded', status: 'succeeded', latency_ms: Date.now() - startedAt,
-        finished_at: new Date().toISOString(),
-      }).eq('id', created.id);
-      return Response.json({ runId: created.id, embedding: vector, dimensions: vector?.length ?? 0 }, { headers: cors });
-    }
-
-    const result = provider.kind === 'local'
-      ? await callOllama(provider, agent.system_prompt, input)
-      : await callGemini(provider, agent.system_prompt, input);
-    const latency = Date.now() - startedAt;
-    await admin.from('agent_runs').update({
-      run_state: 'succeeded',
-      status: 'succeeded',
-      latency_ms: latency,
-      token_usage: result.tokens,
-      output_preview: result.text.slice(0, PREVIEW_LIMIT),
-      finished_at: new Date().toISOString(),
-    }).eq('id', created.id);
-
-    return Response.json({ runId: created.id, output: result.text, latencyMs: latency, tokenUsage: result.tokens, provider: provider.id }, { headers: cors });
+    const result = await executeRun(admin, created as Run, agent, provider, action, input);
+    return Response.json(result, { headers: cors });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown_error';
     // A failed run stays visible in the stream instead of disappearing.
@@ -224,6 +267,7 @@ Deno.serve(async (request) => {
       await admin.from('agent_runs').update({
         run_state: 'failed', status: 'failed', error: message, finished_at: new Date().toISOString(),
       }).eq('id', runId);
+      await admin.from('agent_run_payloads').delete().eq('run_id', runId);
     }
     return Response.json({ error: message, runId }, { status: 400, headers: cors });
   }

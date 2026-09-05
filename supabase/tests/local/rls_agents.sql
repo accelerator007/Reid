@@ -64,6 +64,7 @@ select t_allowed(:'suite', 'public data is accepted against the external provide
 
 insert into public.agent_runs(id, agent_id, provider_id, classification, requested_by, status, run_state, approval_level, approval_state)
 values (:'run_l3', 'marketing', 'gemini', 'public', :'employee_id', 'pending_approval', 'pending_approval', 3, 'pending');
+insert into public.agent_run_payloads(run_id, action, input) values (:'run_l3', 'run', 'private pending payload');
 
 -- ------------------------------------------------------------------ read access
 select test_sign_in(:'employee_id');
@@ -73,18 +74,24 @@ select t_visible(:'suite', 'an employee cannot read the provider registry',
   'select 1 from public.llm_providers', 0);
 select t_visible(:'suite', 'an employee sees only their own runs',
   'select 1 from public.agent_runs', 1);
+select t_visible(:'suite', 'an employee cannot read their own transient payload',
+  'select 1 from public.agent_run_payloads', 0);
 
 select test_sign_in(:'admin_id');
 select t_visible(:'suite', 'an admin reads the whole agent roster',
   'select 1 from public.agents', 11);
 select t_visible(:'suite', 'an admin reads the whole run stream',
   'select 1 from public.agent_runs', 2);
+select t_visible(:'suite', 'an admin cannot read transient payloads',
+  'select 1 from public.agent_run_payloads', 0);
 
 select test_sign_out();
 select t_visible(:'suite', 'an anonymous visitor sees no agents',
   'select 1 from public.agents', 0);
 select t_visible(:'suite', 'an anonymous visitor sees no runs',
   'select 1 from public.agent_runs', 0);
+select t_visible(:'suite', 'an anonymous visitor sees no transient payloads',
+  'select 1 from public.agent_run_payloads', 0);
 
 -- ----------------------------------------------------------------- agent control
 select test_sign_in(:'admin_id');
