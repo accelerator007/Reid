@@ -15,7 +15,7 @@ test.describe('authenticated employee role journeys', () => {
   const users: Record<string, { id: string; email: string }> = {};
   let departmentId: string | undefined;
 
-  const createUser = async (label: string, role: 'employee' | 'hr') => {
+  const createUser = async (label: string, role: 'employee' | 'hr' | 'owner') => {
     const email = `reid-browser-${label}-${stamp}@example.com`;
     const created = await admin.auth.admin.createUser({
       email,
@@ -50,6 +50,7 @@ test.describe('authenticated employee role journeys', () => {
     await createUser('manager', 'employee');
     await createUser('employee', 'employee');
     await createUser('hr', 'hr');
+    await createUser('owner', 'owner');
     const department = await admin.from('departments').insert({
       name_ar: `ضمان الجودة ${stamp}`,
       name_en: `Quality Assurance ${stamp}`,
@@ -87,5 +88,24 @@ test.describe('authenticated employee role journeys', () => {
     await expect(page.getByText('Reid hr', { exact: true }).first()).toBeVisible();
     await page.goto('/crm');
     await expect(page.getByRole('heading', { name: 'إدارة العملاء والمبيعات' })).toBeVisible();
+  });
+
+  test('Owner runs Operations against real governed company context through Gemini', async ({ page }) => {
+    await page.goto('/dashboard');
+    await page.locator('input[name="email"]').fill(users.owner.email);
+    await page.locator('input[name="password"]').fill(password);
+    await page.locator('form button.primary').click();
+    await expect(page.getByRole('heading', { name: 'خريطة قيادة الوكلاء' })).toBeVisible();
+    await page.getByRole('button', { name: /Operations:/ }).click();
+    await page.getByPlaceholder('اكتب الهدف أو المهمة').fill('أعطني ملخصًا قصيرًا لحالة المشاريع والمهام الموجودة في السياق المصرح به فقط.');
+    await page.getByRole('button', { name: 'تشغيل يدوي' }).click();
+    await expect(page.locator('.agent-output')).toBeVisible({ timeout: 45_000 });
+    await expect(page.locator('.agent-output')).not.toContainText(/tool_.*_failed|provider_|unknown_error/i);
+    const run = await admin.from('agent_runs').select('provider_id,classification,run_state,latency_ms,token_usage').eq('requested_by', users.owner.id).eq('agent_id', 'operations').order('created_at', { ascending: false }).limit(1).single();
+    if (run.error) throw run.error;
+    expect(run.data.provider_id).toBe('gemini');
+    expect(run.data.classification).toBe('internal');
+    expect(run.data.run_state).toBe('succeeded');
+    expect(run.data.latency_ms).toBeGreaterThan(0);
   });
 });
