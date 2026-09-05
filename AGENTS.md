@@ -116,6 +116,7 @@ Last verified: 2026-09-05, Asia/Muscat.
 - Branch `feature/agent-approved-dispatch` adds a service-role-only transient payload table for L2-L4 runs. Full prompts remain invisible to browser/database roles and are deleted immediately after rejection or completed execution.
 - Agent approvals now pass through the authenticated gateway: the existing atomic approval RPC verifies the human's level, then an approved run resumes against its recorded provider while a rejection cancels it and erases the payload. This closes the previous state where approved runs remained queued forever.
 - The live Gemini embedding route was separately verified with an authenticated synthetic Owner and returned exactly 768 dimensions; its run and test account were cleaned up afterwards.
+- Migration `202609050002` is applied remotely and `llm-gateway` version 2 is active. A live Owner suite submitted a Marketing L2 run, observed `pending_approval`, approved it, received the required Gemini response and verified `succeeded/approved`; it separately rejected a Content L2 run and verified `cancelled/rejected`. Both transient payload rows were erased and all synthetic accounts/runs were cleaned up.
 
 ### 2026-09-05 frontend rebuild Production release
 
@@ -217,8 +218,6 @@ Last verified: 2026-09-05, Asia/Muscat.
 14. A Google OAuth client secret appeared in an automation tool transcript during setup. It is not committed to Git, but it should be rotated and the replacement stored only in Supabase after explicit credential-rotation confirmation.
 15. The Gemini API key used by Reid has appeared in assistant/browser automation output. It is not committed and is now stored as an encrypted Supabase secret, but Google rejected an attempted replacement-key creation as suspicious. Rotate it in Google AI Studio when Google permits creation, then replace only the Supabase secret.
 16. The Gemini account is on the free tier, so the provider is capped at `public` and the five `internal` agents (Operations, Analytics, Knowledge, Support, CEO) are disabled. Moving to a paid tier and raising the cap to `internal` is the smallest change that activates them.
-17. The gateway has no automatic post-approval dispatcher yet: L2+ runs pause correctly, but an approved run is not automatically resumed. Pause/enable and the L2-L4 approval RPC are database-tested; live browser verification of those controls remains required.
-18. Model availability must always be verified by a real call rather than ListModels. The configured `gemini-3.6-flash` chat model passed a live gateway call on 2026-09-05; the configured embedding route still needs a live 768-dimension test.
 
 ### P1 — core modules are schema/mock only
 
@@ -232,12 +231,11 @@ Last verified: 2026-09-05, Asia/Muscat.
 - Agent execution, admin controls, and the private gateway are merged to `develop` and deployed to Supabase. One public L1 agent has completed a verified real Gemini run. The new authenticated shell/Agent Map is live on Staging but is not yet released to Production.
 - No daily/weekly executive report generation or weekly email delivery.
 - Tool allow-lists, per-agent system prompts, and memory-scope retrieval are not implemented; the gateway currently passes the caller's text straight through.
-- No queue worker: L2+ runs stop at `pending_approval` and an approved run is not automatically dispatched afterwards.
 - `ai-lap` was offline during the latest audit, so the local provider remains disabled and unverified.
 
 ### P2 — quality and operations
 
-- The current CI passes 113 unit tests, 9 public-browser E2E tests, and 110 database RLS allow/deny checks (80 research, 30 agent gateway). Focused authenticated live regressions now cover Gemini dispatch/audit and research role-grant Storage download; broad authenticated browser coverage is still missing.
+- The current CI passes 114 unit tests, 9 public-browser E2E tests, and 113 database RLS allow/deny checks (80 research, 33 agent gateway). Focused authenticated live regressions now cover immediate Gemini dispatch/audit, 768-dimensional embeddings, approved and rejected L2 execution with payload erasure, and research role-grant Storage download; broad authenticated browser coverage is still missing.
 - `supabase/tests/rls.sql` is still a schema-shape draft (38 checks) that CI does not run, because pgTAP is not installed in the harness. Role impersonation is now covered instead by `scripts/rls-local.sh`, which applies every migration to a throwaway PostgreSQL 16 database and runs 79 allow/deny checks as real `anon`/`authenticated` roles in its own CI job. The Research workspace and the agent gateway have such suites; Employee, Projects, Applications, and account-lifecycle suites are still missing.
 - A Chromium public-flow E2E suite exists; authenticated E2E, accessibility automation, mobile visual regression, performance budgets, error monitoring, and uptime alerts remain missing.
 - No tested recovery procedure, restore drill, staging data policy, retention policy, or disaster recovery evidence.
