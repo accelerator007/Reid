@@ -37,7 +37,9 @@ Deno.serve(async (request) => {
 
     const key = Deno.env.get('GEMINI_API_KEY');
     if (!key) throw new Error('provider_unavailable');
-    const model = Deno.env.get('PUBLIC_ASSISTANT_MODEL') || 'gemini-2.5-flash';
+    // Keep the public assistant on the same verified Gemini model as the
+    // governed agent gateway unless an explicit function secret overrides it.
+    const model = Deno.env.get('PUBLIC_ASSISTANT_MODEL') || 'gemini-3.6-flash';
     const history = cleanHistory(body.history);
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST',
@@ -48,7 +50,11 @@ Deno.serve(async (request) => {
           ...history.map(item => ({ role: item.role, parts: [{ text: item.text }] })),
           { role: 'user', parts: [{ text: message }] },
         ],
-        generationConfig: { temperature: 0.35, maxOutputTokens: 220 },
+        generationConfig: {
+          temperature: 0.35,
+          maxOutputTokens: 1024,
+          thinkingConfig: { thinkingLevel: 'LOW' },
+        },
       }),
     });
     const payload = await response.json();
