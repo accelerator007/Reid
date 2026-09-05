@@ -75,6 +75,16 @@ describe("who may reach the company dashboard", () => {
   });
 });
 
+describe("who may reach CRM", () => {
+  it.each(["owner", "super_admin", "admin", "hr", "sales"] as const)("admits %s", role => {
+    expect(accessForPage("crm", session({ roles: [role] }))).toBe("ready");
+  });
+
+  it.each(["employee", "project_member", "research_member", "guest"] as const)("refuses %s", role => {
+    expect(accessForPage("crm", session({ roles: [role] }))).toBe("forbidden");
+  });
+});
+
 describe("a guest approved but not yet onboarded", () => {
   const guest = session({ roles: ["guest"], profileComplete: false });
 

@@ -18,6 +18,7 @@ import { EmployeeWorkspace } from "./employee";
 import { ProjectWorkspace } from "./projects";
 import { AgentCommand } from "./agent-command";
 import { ResearchWorkspace } from "./research";
+import { CrmWorkspace } from "./crm";
 // Imported rather than written as a literal URL. The assets directory sits
 // outside Vite's public directory, so a hard-coded path is never emitted to
 // dist and the header mark 404s in production while still resolving in dev.
@@ -29,6 +30,7 @@ import "./auth.css";
 import "./profile.css";
 import "./workflow.css";
 import "./agents.css";
+import "./crm.css";
 
 type Lang = "ar" | "en";
 type ProfileData = {
@@ -97,6 +99,7 @@ const tr = {
     workspace: "مساحة العمل",
     projects: "المشاريع",
     research: "الأبحاث",
+    crm: "العملاء والمبيعات",
   },
   en: {
     brand: "Reid",
@@ -114,6 +117,7 @@ const tr = {
     workspace: "Workspace",
     projects: "Projects",
     research: "Research",
+    crm: "CRM & Sales",
   },
 };
 function useRoute() {
@@ -1261,6 +1265,8 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
       return t.projects;
     case "research":
       return t.research;
+    case "crm":
+      return t.crm;
     case "dashboard":
       return t.system;
     case "profile":
@@ -1483,6 +1489,18 @@ function Chrome({ session }: { session: Session | null }) {
           onProfile={() => go("profile")}
         >
           {session?.user && <ResearchWorkspace lang={lang} user={session.user} />}
+        </Guarded>
+      )}{" "}
+      {page === "crm" && (
+        <Guarded
+          page="crm"
+          lang={lang}
+          renderSignIn={() => (
+            <Login lang={lang} done={() => go("crm")} apply={() => go("apply")} />
+          )}
+          onProfile={() => go("profile")}
+        >
+          {session?.user && <CrmWorkspace lang={lang} user={session.user} />}
         </Guarded>
       )}{" "}
       {page === "privacy" && (
