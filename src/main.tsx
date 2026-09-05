@@ -18,6 +18,8 @@ import { EmployeeWorkspace } from "./employee";
 import { ProjectWorkspace } from "./projects";
 import { AgentCommand } from "./agent-command";
 import { ResearchWorkspace } from "./research";
+import { CrmWorkspace } from "./crm";
+import { Building2, FolderKanban, FlaskConical, Handshake, LayoutDashboard, LogOut, Menu, UserRound, UsersRound, X } from "lucide-react";
 // Imported rather than written as a literal URL. The assets directory sits
 // outside Vite's public directory, so a hard-coded path is never emitted to
 // dist and the header mark 404s in production while still resolving in dev.
@@ -29,6 +31,8 @@ import "./auth.css";
 import "./profile.css";
 import "./workflow.css";
 import "./agents.css";
+import "./crm.css";
+import "./workspace-shell.css";
 
 type Lang = "ar" | "en";
 type ProfileData = {
@@ -97,6 +101,7 @@ const tr = {
     workspace: "مساحة العمل",
     projects: "المشاريع",
     research: "الأبحاث",
+    crm: "العملاء والمبيعات",
   },
   en: {
     brand: "Reid",
@@ -114,6 +119,7 @@ const tr = {
     workspace: "Workspace",
     projects: "Projects",
     research: "Research",
+    crm: "CRM & Sales",
   },
 };
 function useRoute() {
@@ -1261,6 +1267,8 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
       return t.projects;
     case "research":
       return t.research;
+    case "crm":
+      return t.crm;
     case "dashboard":
       return t.system;
     case "profile":
@@ -1268,6 +1276,21 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
     default:
       return page;
   }
+}
+
+const workspaceIcons: Partial<Record<Page, React.ReactNode>> = {
+  dashboard: <LayoutDashboard />, workspace: <UsersRound />, projects: <FolderKanban />,
+  research: <FlaskConical />, crm: <Handshake />, profile: <UserRound />,
+};
+
+function WorkspaceSidebar({ lang, page, navigation, open, go, signout }: { lang: Lang; page: Page; navigation: ReturnType<typeof useNavigation>; open: boolean; go: (page: Page) => void; signout: () => void }) {
+  const t = tr[lang];
+  const destinations = navigation.filter(route => ["dashboard", "workspace", "projects", "research", "crm", "profile"].includes(route.page));
+  return <aside className="workspace-sidebar" data-open={open} aria-label={lang === "ar" ? "تنقل نظام الشركة" : "Company system navigation"}>
+    <div className="workspace-sidebar-heading"><small>REID OS</small><b>{lang === "ar" ? "مساحة الشركة" : "Company workspace"}</b></div>
+    <nav>{destinations.map(route => <button key={route.page} type="button" aria-current={page === route.page ? "page" : undefined} onClick={() => go(route.page)}>{workspaceIcons[route.page]}<span>{navLabel(route.page, lang, t)}</span></button>)}</nav>
+    <footer><button type="button" onClick={signout}><LogOut /><span>{lang === "ar" ? "تسجيل الخروج" : "Sign out"}</span></button></footer>
+  </aside>;
 }
 
 function App() {
@@ -1302,6 +1325,8 @@ function Chrome({ session }: { session: Session | null }) {
     ["owner", "super_admin", "admin", "hr"].includes(role),
   );
   const navigation = useNavigation();
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const internalPage = session && ["dashboard", "workspace", "projects", "research", "crm", "profile"].includes(page);
   React.useEffect(() => {
     const client = supabase;
     if (!session || !client) return;
@@ -1312,15 +1337,15 @@ function Chrome({ session }: { session: Session | null }) {
   }, [session]);
   return (
     <div
-      className={dark ? "app dark" : "app"}
+      className={`${dark ? "app dark" : "app"}${internalPage ? " workspace-mode" : ""}`}
       dir={lang === "ar" ? "rtl" : "ltr"}
     >
-      <header>
+      <header className={internalPage ? "workspace-topbar" : "public-topbar"}>
         <button className="brand" onClick={() => go("home")}>
           <img src={reidLogo} alt="" aria-hidden="true" />
           <strong>{t.brand}</strong>
         </button>
-        <nav>
+        {!internalPage && <nav>
           {/* Derived from src/routes.ts, so the navigation can never offer a
               destination the gate would then refuse. */}
           {navigation
@@ -1340,14 +1365,17 @@ function Chrome({ session }: { session: Session | null }) {
           >
             {session ? t.account : t.login}
           </button>
-        </nav>
+        </nav>}
+        {internalPage && <div className="workspace-topbar-context"><Building2 /><span>{lang === "ar" ? "نظام شركة ريّد" : "Reid Company System"}</span></div>}
         <aside>
+          {internalPage && <button className="mobile-menu" aria-label="Menu" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>}
           <button onClick={() => setDark(!dark)}>{dark ? "☀" : "☾"}</button>
           <button onClick={() => setLang(lang === "ar" ? "en" : "ar")}>
             {lang === "ar" ? "EN" : "ع"}
           </button>
         </aside>
       </header>
+      {internalPage && <WorkspaceSidebar lang={lang} page={page} navigation={navigation} open={menuOpen} go={(target) => { setMenuOpen(false); go(target); }} signout={async () => { await supabase?.auth.signOut(); go("home"); }} />}
       {page === "home" && (
         <main>
           <section className="hero">
@@ -1360,18 +1388,18 @@ function Chrome({ session }: { session: Session | null }) {
               </button>
               <button onClick={() => go("dashboard")}>{t.discover}</button>
             </div>
-            <section className="stats">
+            <section className="stats public-value">
               <article>
-                <b>11</b>
-                <small>AI Agents</small>
+                <b>{lang === "ar" ? "حلول مخصصة" : "Tailored"}</b>
+                <small>{lang === "ar" ? "لأهداف كل مؤسسة" : "For each organization"}</small>
               </article>
               <article>
-                <b>5</b>
-                <small>Project Types</small>
+                <b>{lang === "ar" ? "من الفكرة للتشغيل" : "End to end"}</b>
+                <small>{lang === "ar" ? "تصميم وبناء وتشغيل" : "Design, build and operate"}</small>
               </article>
               <article>
-                <b>RLS</b>
-                <small>Secure by default</small>
+                <b>{lang === "ar" ? "بأمان" : "Secure"}</b>
+                <small>{lang === "ar" ? "صلاحيات وموافقات واضحة" : "Clear access and approvals"}</small>
               </article>
             </section>
           </section>
@@ -1483,6 +1511,18 @@ function Chrome({ session }: { session: Session | null }) {
           onProfile={() => go("profile")}
         >
           {session?.user && <ResearchWorkspace lang={lang} user={session.user} />}
+        </Guarded>
+      )}{" "}
+      {page === "crm" && (
+        <Guarded
+          page="crm"
+          lang={lang}
+          renderSignIn={() => (
+            <Login lang={lang} done={() => go("crm")} apply={() => go("apply")} />
+          )}
+          onProfile={() => go("profile")}
+        >
+          {session?.user && <CrmWorkspace lang={lang} user={session.user} />}
         </Guarded>
       )}{" "}
       {page === "privacy" && (

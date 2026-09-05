@@ -111,9 +111,31 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-05, Asia/Muscat.
 
+### 2026-09-05 reliability task 1 implementation
+
+- GitHub Actions now holds the Supabase URL, publishable key and service-role key as encrypted repository secrets; no value is committed. A separate authenticated-browser CI job creates disposable Employee, department Manager and HR identities, exercises their real `/workspace` sessions against remote RLS, and deletes every identity/department afterwards.
+- `scripts/uptime-check.sh` verifies Production and Staging, all declared application routes, real edge 404 behavior, the Reid SVG, six security headers, and Supabase API availability. `.github/workflows/uptime.yml` runs it every 15 minutes and may be dispatched manually.
+- Local pre-PR verification passed: 3/3 authenticated Chromium role journeys (Employee, direct-report Manager, HR), 114/114 Vitest checks, the TypeScript/Vite Production build, and the Production/Staging/Supabase uptime probe. The authenticated job must also pass with repository secrets on the pull request before merge.
+- Weekly database backup remains blocked only on `SUPABASE_DB_URL`, which requires the database password. Never paste it into chat; add the complete connection URL directly as a GitHub Actions secret.
+
+### 2026-09-05 CRM and executive reports implementation
+
+- Work is active on `feature/crm-executive-reports`; do not present it as Production-ready before remote migration, authenticated role verification, CI, Staging, and the protected Production release pass.
+- Migration `202609050003_crm_reports.sql` adds companies, expanded contacts, leads, deals, follow-up activities, daily/weekly executive reports, audit triggers, Realtime and a database-generated metrics snapshot. CRM data is limited to Owner/Super Admin/Admin/HR/Sales; ordinary employees and anonymous users receive no rows. Sales cannot read executive reports.
+- Added the bilingual `/crm` workspace with pipeline KPIs, lead board, company/contact/lead/deal/follow-up creation, stage controls and report generation/history. Route visibility is role-aware and database RLS remains the security boundary.
+- Added the service-role-only `executive-reports` Edge Function and scheduled GitHub workflow: a daily snapshot is stored every day and a weekly snapshot is stored each Sunday. Weekly Arabic email delivery activates only when `RESEND_API_KEY` and a verified `REPORT_FROM_EMAIL` are configured in Supabase; without them the report remains stored and records `email_provider_not_configured` instead of pretending delivery.
+- Local application verification passes 127/127 Vitest checks, the TypeScript/Vite Production build and 10/10 public Chromium journeys; three remote authenticated journeys are intentionally CI-only. The linked migration dry run lists only `202609050003`. Local database RLS execution is unavailable on this Mac because PostgreSQL client binaries are absent, so the PR's PostgreSQL 16 RLS job is mandatory before remote migration.
+- The first PR RLS run correctly rejected test-fixture collisions with existing suites; CRM fixtures now use dedicated emails and rely on the real auth-profile trigger instead of inserting duplicate profiles. Repeat CI is required before remote migration.
+- The second RLS run exposed that the new suite lacked a transaction, so `set local` JWT impersonation ended before each assertion. The suite now follows the established begin/rollback isolation contract; repeat CI remains mandatory.
+- PR `#72` subsequently passed both PostgreSQL 16 RLS jobs, both application jobs, the authenticated HR CRM route journey and Cloudflare Staging. Migration `202609050003` is applied remotely. A live disposable-role suite passed Sales CRUD/stage/activity, HR client/report access and Employee denial, then removed its synthetic users and CRM rows.
+- The report function uses a dedicated `REPORT_CRON_SECRET` shared only between Supabase and GitHub rather than exposing a database/service key to the scheduler. Supabase platform JWT verification is disabled only for this function; the function itself rejects every request whose bearer value does not exactly match that dedicated secret.
+- Resend account `3lialajmi524@gmail.com` now contains domain `reidpro.com`. Cloudflare Domain Connect added the required DNS-only DKIM record plus the `send` SPF and MX records; independent DNS queries resolve all three. A new sending-only key named `Reid Weekly Reports` is stored as `RESEND_API_KEY` in Supabase, and `REPORT_FROM_EMAIL` is `Reid <reports@reidpro.com>`; neither value is committed or exposed to GitHub.
+- A live weekly invocation generated the report but Resend returned HTTP 403 while the new domain remained `pending`; the report correctly records `email_status=failed` and `email_error=provider_403`. Retry only after the Resend domain status becomes `verified`. The scheduler bearer was rotated after testing and synchronized between Supabase and GitHub Secrets.
+- The weekly backup secret still did not update after the latest browser handoff: GitHub reports the original update timestamp and the repeated manual backup failed. Treat the value as invalid until a complete percent-encoded pooler DSN is saved and a run succeeds.
+
 ### 2026-09-05 Production ownership enforcement
 
-- GitHub `main` enforces administrators, current-branch status checks, pull requests, linear history, resolved conversations, and blocks force-push/deletion. Direct collaborator downgrade still reports `write`, so `.github/CODEOWNERS` assigns the whole repository to `@accelerator007`; branch protection must require one CODEOWNER approval before this control is complete.
+- GitHub `main` enforces administrators, current-branch status checks, pull requests, linear history, resolved conversations, and blocks force-push/deletion. Direct collaborator downgrade still reports `write`, so `.github/CODEOWNERS` assigns the whole repository to `@accelerator007`; branch protection now requires one approving CODEOWNER review and applies to administrators. Production cannot merge without the Owner's explicit GitHub review.
 
 ### 2026-09-05 approved-agent dispatch implementation
 
@@ -557,3 +579,23 @@ Work is active on `claude/reid-system-development-bcaz9n`, branched from `develo
 ## Definition of done
 
 A workflow is done only when its happy path, denial path, validation errors, RBAC/RLS, audit log, notification, responsive UI, and automated tests pass in Staging; Production is deployed through a protected PR; and this file is updated with exact evidence and remaining limitations.
+
+### 2026-09-05 Owner agent command map redesign
+
+- Replaced the flat Agent Command cards with a responsive animated operating map. The CEO/Orchestrator is the single root; Operations, Growth, Revenue, Knowledge, HR and Finance form the governed domains; Analytics, Content/Social, Competitor Intelligence and Support appear as linked specialists under their operating lead.
+- The eleven database agents remain separate identities. No HR, finance, CRM or company memory is merged: grouping is visual and operational only, preserving least privilege, independent prompts, audit trails and approval levels.
+- Every node is driven by live provider/agent/run data and displays ready, working, approval, paused, security-blocked or error state. Animated connections visualize active routing, while blocked connections are visibly distinct and do not imply a working provider.
+- Selecting a node opens its purpose, queue, run count, latency, token usage, tools, memory scopes, provider/model, classification, approval level, manual run, pause/resume, recent logs, approval/rejection and failed-run retry controls.
+- Enable/disable is visibly Owner-only in the interface. Admin operational controls and database RLS remain authoritative; sensitive agents stay blocked while Gemini's public-data ceiling is the only available provider and `ai-lap` remains offline.
+- The layout supports Arabic/English, light/dark themes, narrow screens and reduced-motion preferences. Unit coverage now validates the 11-node rooted topology and distinct blocked/paused/approval states. Local verification: 129/129 Vitest checks and the Production TypeScript/Vite build pass.
+- Remaining release evidence: authenticated Owner interaction on Cloudflare Staging, authenticated non-Owner denial check, and the normal develop then Owner-approved Production PR. This entry must not be represented as Production-live before those gates pass.
+
+### 2026-09-05 public-site and company-workspace separation
+
+- Separated the public Reid experience from the signed-in company operating system at the application-shell level. Public pages keep the compact marketing header; authenticated company routes now use a persistent role-derived sidebar and a smaller context top bar.
+- The sidebar is generated from the same central route manifest and session roles as the authorization gate. It can never advertise CRM, Dashboard, Research or another module to a role that cannot open it; database RLS remains the final security boundary.
+- The company shell includes Dashboard, Employees/Workspace, Projects, Research, CRM and Profile when permitted, plus sign-out. Desktop uses a fixed navigation rail; mobile uses an off-canvas menu with RTL-correct direction and reduced-motion support.
+- Removed implementation trivia (`11 Agents`, `5 Project Types`, `RLS`) from the public hero. It now communicates customer outcomes: tailored solutions, end-to-end delivery and governed security. Internal technical health remains inside the Owner Agent Command Map.
+- Reused the existing Reid token system, logo, bilingual copy, light/dark themes and all existing business modules. No data table, workflow or permission was removed.
+- Local verification passes: 131/131 unit/contract/security-style tests, TypeScript/Vite Production build, 10/10 public Chromium workflows, and `git diff --check`. Authenticated Employee/Manager/HR browser cases are configured for CI where protected test credentials exist.
+- Remaining release gates: PR CI/RLS/authenticated-browser, Cloudflare Staging visual and role verification, merge into `develop`, then a separate Owner-approved Production release to `main`.

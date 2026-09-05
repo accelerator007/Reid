@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { providerAccepts, effectiveClassification, needsApproval, canRun, rank } from './agents';
+import { providerAccepts, effectiveClassification, needsApproval, canRun, rank, agentTopology, operationalState } from './agents';
 import type { AgentRow, ProviderRow } from './agents';
 
 const gemini: ProviderRow = { id: 'gemini', name: 'Google Gemini API', kind: 'external', chat_model: 'gemini-2.5-flash', max_classification: 'public', retains_data: true, enabled: true };
@@ -49,5 +49,17 @@ describe('agent gateway policy', () => {
     const marketing = agent({ id: 'marketing', classification: 'public', approval_level: 2 });
     expect(canRun(marketing, gemini)).toBe(true);
     expect(canRun({ ...marketing, status: 'paused' }, gemini)).toBe(false);
+  });
+
+  it('models one governed tree with CEO as its only root', () => {
+    expect(agentTopology).toHaveLength(11);
+    expect(agentTopology.filter(node => node.parent === null).map(node => node.id)).toEqual(['ceo']);
+    expect(agentTopology.filter(node => node.parent && !agentTopology.some(parent => parent.id === node.parent))).toEqual([]);
+  });
+
+  it('shows security blocks separately from pause and approval states', () => {
+    expect(operationalState(agent({ enabled: false }), gemini, [])).toBe('blocked');
+    expect(operationalState(agent({ id: 'marketing', classification: 'public', status: 'paused' }), gemini, [])).toBe('paused');
+    expect(operationalState(agent({ id: 'marketing', classification: 'public' }), gemini, [{ id: 'r', agent_id: 'marketing', provider_id: 'gemini', classification: 'public', run_state: 'pending_approval', approval_level: 2, approval_state: 'pending', latency_ms: null, token_usage: null, output_preview: null, error: null, created_at: '' }])).toBe('approval');
   });
 });

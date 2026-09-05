@@ -46,6 +46,11 @@ test('protects research routes for anonymous visitors', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
 });
 
+test('protects CRM for anonymous visitors', async ({ page }) => {
+  await page.goto('/crm');
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+});
+
 test('keeps account creation behind the join approval workflow', async ({ page }) => {
   await page.goto('/login');
   await expect(page.getByText('الدخول للحسابات المعتمدة فقط.')).toBeVisible();
