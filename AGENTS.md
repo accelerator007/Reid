@@ -111,6 +111,12 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-05, Asia/Muscat.
 
+### 2026-09-05 approved-agent dispatch implementation
+
+- Branch `feature/agent-approved-dispatch` adds a service-role-only transient payload table for L2-L4 runs. Full prompts remain invisible to browser/database roles and are deleted immediately after rejection or completed execution.
+- Agent approvals now pass through the authenticated gateway: the existing atomic approval RPC verifies the human's level, then an approved run resumes against its recorded provider while a rejection cancels it and erases the payload. This closes the previous state where approved runs remained queued forever.
+- The live Gemini embedding route was separately verified with an authenticated synthetic Owner and returned exactly 768 dimensions; its run and test account were cleaned up afterwards.
+
 ### 2026-09-05 frontend rebuild Production release
 
 - Release PR `#56` merged to `main` as `037ecec` after both RLS jobs, both application test jobs, and Cloudflare Staging passed. Cloudflare Worker Production build `0e484466-9670-4e61-a402-e2e6673bf9c9` and the matching Pages build completed successfully.
