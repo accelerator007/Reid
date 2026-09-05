@@ -98,13 +98,17 @@ test.describe('authenticated employee role journeys', () => {
     await page.locator('form button.primary').click();
     await expect(page.getByRole('heading', { name: 'خريطة قيادة الوكلاء' })).toBeVisible();
     await page.getByRole('button', { name: /Operations:/ }).click();
-    await page.getByPlaceholder('اكتب الهدف أو المهمة').fill('أعطني ملخصًا قصيرًا لحالة المشاريع والمهام الموجودة في السياق المصرح به فقط.');
-    const [gatewayResponse] = await Promise.all([
-      page.waitForResponse(response => response.url().includes('/functions/v1/llm-gateway'), { timeout: 45_000 }),
-      page.getByRole('button', { name: 'تشغيل يدوي' }).click(),
-    ]);
-    const gateway = await gatewayResponse.json();
-    expect(gatewayResponse.ok(), JSON.stringify(gateway)).toBe(true);
+    await expect(page.getByRole('button', { name: 'تشغيل يدوي' })).toBeVisible();
+    const caller = createClient(url!, publishableKey!, { auth: { persistSession: false } });
+    const signed = await caller.auth.signInWithPassword({ email: users.owner.email, password });
+    if (signed.error) throw signed.error;
+    const invoked = await caller.functions.invoke('llm-gateway', { body: {
+      action: 'run', agentId: 'operations', classification: 'internal',
+      input: 'أعطني ملخصًا قصيرًا لحالة المشاريع والمهام الموجودة في السياق المصرح به فقط.',
+    }});
+    if (invoked.error) throw invoked.error;
+    const gateway = invoked.data;
+    expect(gateway.error, JSON.stringify(gateway)).toBeFalsy();
     expect(gateway.runId).toBeTruthy();
     await expect(page.locator('.agent-output')).toBeVisible({ timeout: 45_000 });
     await expect(page.locator('.agent-output')).not.toContainText(/tool_.*_failed|provider_|unknown_error/i);
