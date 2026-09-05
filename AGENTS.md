@@ -111,6 +111,13 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-05, Asia/Muscat.
 
+### 2026-09-05 WhatsApp Cloud API setup
+
+- Meta developer account verification is complete for the Reid company account. Meta app `Reid` (`961651950294892`), business portfolio `Reid` (`999137349850382`), and WhatsApp Business test account (`3774337566038468`) were created. The claimed test Phone Number ID is `1270966392773395`; access tokens are never recorded in this repository.
+- Branch `feature/whatsapp-agent-gateway` adds `whatsapp-webhook`, a signature-verified Meta webhook with constant-time verification-token comparison, idempotent event ingestion, an environment-only Owner phone allow-list, and bounded acknowledgement replies. It refuses POST delivery when `META_APP_SECRET` is absent rather than accepting unsigned events.
+- Migration `202609050006_whatsapp_gateway.sql` stores idempotent webhook events and the command inbox. Both tables are RLS-hidden from everyone except Owner and command changes are audited. The first implementation intentionally records commands but does **not** execute an agent or sensitive action until the WhatsApp approval/dispatch adapter is completed and tested.
+- Production setup still requires deploying the migration/function, storing `META_APP_SECRET`, `META_WHATSAPP_VERIFY_TOKEN`, `META_WHATSAPP_ACCESS_TOKEN`, `META_WHATSAPP_PHONE_NUMBER_ID`, and `WHATSAPP_OWNER_NUMBERS` as Supabase secrets, registering the callback in Meta, subscribing to `messages`, registering the real number, and publishing/verifying the Meta app. Never commit or paste these values into chat.
+
 ### 2026-09-05 reliability task 1 implementation
 
 - GitHub Actions now holds the Supabase URL, publishable key and service-role key as encrypted repository secrets; no value is committed. A separate authenticated-browser CI job creates disposable Employee, department Manager and HR identities, exercises their real `/workspace` sessions against remote RLS, and deletes every identity/department afterwards.
