@@ -111,6 +111,10 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-05, Asia/Muscat.
 
+### 2026-09-05 Production ownership enforcement
+
+- GitHub `main` enforces administrators, current-branch status checks, pull requests, linear history, resolved conversations, and blocks force-push/deletion. Direct collaborator downgrade still reports `write`, so `.github/CODEOWNERS` assigns the whole repository to `@accelerator007`; branch protection must require one CODEOWNER approval before this control is complete.
+
 ### 2026-09-05 approved-agent dispatch implementation
 
 - Branch `feature/agent-approved-dispatch` adds a service-role-only transient payload table for L2-L4 runs. Full prompts remain invisible to browser/database roles and are deleted immediately after rejection or completed execution.
