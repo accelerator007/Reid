@@ -382,21 +382,26 @@ Deno.serve(async (request) => {
       throw new Error(`provider_not_cleared: ${provider.id} may not handle ${classification}`);
     }
 
-    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const { count } = await admin
-      .from('agent_runs')
-      .select('id', { count: 'exact', head: true })
-      .eq('requested_by', auth.user.id)
-      .gte('created_at', since);
-    if ((count ?? 0) >= provider.requests_per_hour) throw new Error('rate_limit_exceeded');
+    // Database tools do not call the model provider and must not consume or be
+    // blocked by Gemini's tiny free-tier quota. They keep their own RBAC,
+    // assignment, approval and audit gates below.
+    if (action !== 'tool') {
+      const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const { count } = await admin
+        .from('agent_runs')
+        .select('id', { count: 'exact', head: true })
+        .eq('requested_by', auth.user.id)
+        .gte('created_at', since);
+      if ((count ?? 0) >= provider.requests_per_hour) throw new Error('rate_limit_exceeded');
 
-    const sinceDay = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { count: dailyCount } = await admin
-      .from('agent_runs')
-      .select('id', { count: 'exact', head: true })
-      .eq('provider_id', provider.id)
-      .gte('created_at', sinceDay);
-    if ((dailyCount ?? 0) >= provider.requests_per_day) throw new Error('daily_quota_exceeded');
+      const sinceDay = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count: dailyCount } = await admin
+        .from('agent_runs')
+        .select('id', { count: 'exact', head: true })
+        .eq('provider_id', provider.id)
+        .gte('created_at', sinceDay);
+      if ((dailyCount ?? 0) >= provider.requests_per_day) throw new Error('daily_quota_exceeded');
+    }
 
     let effectiveApproval = agent.approval_level;
     if (action === 'tool') {
