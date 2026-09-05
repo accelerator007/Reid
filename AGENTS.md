@@ -599,3 +599,10 @@ A workflow is done only when its happy path, denial path, validation errors, RBA
 - Reused the existing Reid token system, logo, bilingual copy, light/dark themes and all existing business modules. No data table, workflow or permission was removed.
 - Local verification passes: 131/131 unit/contract/security-style tests, TypeScript/Vite Production build, 10/10 public Chromium workflows, and `git diff --check`. Authenticated Employee/Manager/HR browser cases are configured for CI where protected test credentials exist.
 - Remaining release gates: PR CI/RLS/authenticated-browser, Cloudflare Staging visual and role verification, merge into `develop`, then a separate Owner-approved Production release to `main`.
+
+### 2026-09-05 Resend verification and live weekly delivery
+
+- Resend now reports `reidpro.com` as `Verified`; the existing SPF, DKIM and MX records were accepted without recreating DNS records or API credentials.
+- A manual weekly Executive Reports workflow ran from `main` as GitHub Actions run `33968156023`. The deployed Supabase Edge Function returned report id `bead7999-7075-4fc5-b354-2b35d41a78cc` with `email_status: sent`.
+- The successful response proves the generated `executive_reports` row was updated to `sent` by the function after Resend accepted the Arabic weekly email for both configured Admin recipients. No credential was printed or changed.
+- The scheduled daily report generation and Sunday weekly email workflow remain active. The temporary `verify-reid-email` heartbeat is no longer needed after this verified delivery.
