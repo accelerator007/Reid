@@ -33,6 +33,7 @@ import "./workflow.css";
 import "./agents.css";
 import "./crm.css";
 import "./workspace-shell.css";
+import "./prototype.css";
 
 type Lang = "ar" | "en";
 type ProfileData = {

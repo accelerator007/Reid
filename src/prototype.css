@@ -1,0 +1,2 @@
+.prototype-notice{display:flex;align-items:flex-start;gap:.65rem;margin-bottom:1rem;padding:.75rem .9rem;border:1px solid var(--warn-line);border-radius:var(--radius-sm);background:var(--warn-fill);color:var(--warn)}
+.prototype-notice svg{width:1.1rem;flex:0 0 auto}.prototype-notice div{display:grid;gap:.15rem}.prototype-notice b{font-size:.8rem}.prototype-notice span{font-size:.72rem;line-height:1.6}

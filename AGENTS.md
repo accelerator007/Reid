@@ -599,3 +599,11 @@ A workflow is done only when its happy path, denial path, validation errors, RBA
 - Reused the existing Reid token system, logo, bilingual copy, light/dark themes and all existing business modules. No data table, workflow or permission was removed.
 - Local verification passes: 131/131 unit/contract/security-style tests, TypeScript/Vite Production build, 10/10 public Chromium workflows, and `git diff --check`. Authenticated Employee/Manager/HR browser cases are configured for CI where protected test credentials exist.
 - Remaining release gates: PR CI/RLS/authenticated-browser, Cloudflare Staging visual and role verification, merge into `develop`, then a separate Owner-approved Production release to `main`.
+
+### 2026-09-05 temporary all-agent prototype mode
+
+- The Owner explicitly requested that every agent be usable as a prototype while `ai-lap` remains offline. Migration `202609050004_agent_prototype_mode.sql` routes all eleven prompt-only agents to Gemini, classifies prototype runs as `public`, and enables the roster.
+- This is not production business automation: no HR, finance, CRM, storage, social publishing, payment, deletion or other business tool is connected. The Agent Map carries a permanent bilingual warning not to enter real employee, customer or financial information.
+- Gemini's database clearance remains capped at `public`; the migration does not raise it. The storage-layer run-clearance trigger, rate limiting, audit logs, prompt hashing, L2/L3 approvals and Owner controls remain active.
+- The RLS suite now verifies that Operations and HR are enabled only with `prototype_mode=true`, `public_prompts_only=true`, and `business_tools_connected=false`; it continues to reject internal/restricted runs against Gemini.
+- Returning to real operation requires switching sensitive agents back to their original classifications and the verified private Ollama provider. Never treat prototype output as an authorized hiring, financial, contractual or customer action.

@@ -66,6 +66,13 @@ export function AgentCommand({ lang }: { lang: Lang }) {
           {(["working", "approval", "ready", "paused", "blocked", "error"] as const).map(state => <span key={state} data-state={state}><i />{stateLabel(t, state)} <b>{counts[state] || 0}</b></span>)}
         </div>
       </header>
+      <div className="prototype-notice" role="note">
+        <ShieldCheck />
+        <div>
+          <b>{lang === "ar" ? "وضع النموذج التجريبي مفعّل" : "Prototype mode is active"}</b>
+          <span>{lang === "ar" ? "كل الوكلاء يعملون على Gemini ببيانات تجريبية عامة فقط. لا تدخل بيانات موظفين أو عملاء أو معلومات مالية حقيقية." : "All agents run on Gemini with public test data only. Do not enter real employee, customer, or financial information."}</span>
+        </div>
+      </div>
       <div className="agent-map-layout">
         <div className="agent-network" aria-label={t.title}>
           <svg className="agent-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">

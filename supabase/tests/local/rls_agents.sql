@@ -38,10 +38,12 @@ select t_true(:'suite', 'the local provider ships disabled',
   $q$select not enabled and kind = 'local' from public.llm_providers where id = 'ollama'$q$, true);
 select t_true(:'suite', 'a public agent is enabled on the free tier',
   $q$select enabled and status = 'idle' from public.agents where id = 'marketing'$q$, true);
-select t_true(:'suite', 'an internal agent is disabled on the free tier',
-  $q$select not enabled and status = 'disabled' from public.agents where id = 'operations'$q$, true);
-select t_true(:'suite', 'the HR agent is disabled and carries a reason',
-  $q$select not enabled and disabled_reason is not null from public.agents where id = 'hr'$q$, true);
+select t_true(:'suite', 'prototype operations is public and enabled',
+  $q$select enabled and status = 'idle' and classification = 'public'
+     and configuration->>'prototype_mode' = 'true' from public.agents where id = 'operations'$q$, true);
+select t_true(:'suite', 'prototype HR is prompt-only and public',
+  $q$select enabled and classification = 'public'
+     and configuration->>'business_tools_connected' = 'false' from public.agents where id = 'hr'$q$, true);
 select t_true(:'suite', 'each agent mirrors its provider model',
   $q$select a.model = p.chat_model and a.host = p.id
      from public.agents a join public.llm_providers p on p.id = a.provider_id where a.id = 'marketing'$q$, true);
