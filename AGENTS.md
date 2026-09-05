@@ -111,6 +111,13 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-05, Asia/Muscat.
 
+### 2026-09-05 reliability task 1 implementation
+
+- GitHub Actions now holds the Supabase URL, publishable key and service-role key as encrypted repository secrets; no value is committed. A separate authenticated-browser CI job creates disposable Employee, department Manager and HR identities, exercises their real `/workspace` sessions against remote RLS, and deletes every identity/department afterwards.
+- `scripts/uptime-check.sh` verifies Production and Staging, all declared application routes, real edge 404 behavior, the Reid SVG, six security headers, and Supabase API availability. `.github/workflows/uptime.yml` runs it every 15 minutes and may be dispatched manually.
+- Local pre-PR verification passed: 3/3 authenticated Chromium role journeys (Employee, direct-report Manager, HR), 114/114 Vitest checks, the TypeScript/Vite Production build, and the Production/Staging/Supabase uptime probe. The authenticated job must also pass with repository secrets on the pull request before merge.
+- Weekly database backup remains blocked only on `SUPABASE_DB_URL`, which requires the database password. Never paste it into chat; add the complete connection URL directly as a GitHub Actions secret.
+
 ### 2026-09-05 Production ownership enforcement
 
 - GitHub `main` enforces administrators, current-branch status checks, pull requests, linear history, resolved conversations, and blocks force-push/deletion. Direct collaborator downgrade still reports `write`, so `.github/CODEOWNERS` assigns the whole repository to `@accelerator007`; branch protection must require one CODEOWNER approval before this control is complete.
