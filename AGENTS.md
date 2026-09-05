@@ -589,3 +589,13 @@ A workflow is done only when its happy path, denial path, validation errors, RBA
 - Enable/disable is visibly Owner-only in the interface. Admin operational controls and database RLS remain authoritative; sensitive agents stay blocked while Gemini's public-data ceiling is the only available provider and `ai-lap` remains offline.
 - The layout supports Arabic/English, light/dark themes, narrow screens and reduced-motion preferences. Unit coverage now validates the 11-node rooted topology and distinct blocked/paused/approval states. Local verification: 129/129 Vitest checks and the Production TypeScript/Vite build pass.
 - Remaining release evidence: authenticated Owner interaction on Cloudflare Staging, authenticated non-Owner denial check, and the normal develop then Owner-approved Production PR. This entry must not be represented as Production-live before those gates pass.
+
+### 2026-09-05 public-site and company-workspace separation
+
+- Separated the public Reid experience from the signed-in company operating system at the application-shell level. Public pages keep the compact marketing header; authenticated company routes now use a persistent role-derived sidebar and a smaller context top bar.
+- The sidebar is generated from the same central route manifest and session roles as the authorization gate. It can never advertise CRM, Dashboard, Research or another module to a role that cannot open it; database RLS remains the final security boundary.
+- The company shell includes Dashboard, Employees/Workspace, Projects, Research, CRM and Profile when permitted, plus sign-out. Desktop uses a fixed navigation rail; mobile uses an off-canvas menu with RTL-correct direction and reduced-motion support.
+- Removed implementation trivia (`11 Agents`, `5 Project Types`, `RLS`) from the public hero. It now communicates customer outcomes: tailored solutions, end-to-end delivery and governed security. Internal technical health remains inside the Owner Agent Command Map.
+- Reused the existing Reid token system, logo, bilingual copy, light/dark themes and all existing business modules. No data table, workflow or permission was removed.
+- Local verification passes: 131/131 unit/contract/security-style tests, TypeScript/Vite Production build, 10/10 public Chromium workflows, and `git diff --check`. Authenticated Employee/Manager/HR browser cases are configured for CI where protected test credentials exist.
+- Remaining release gates: PR CI/RLS/authenticated-browser, Cloudflare Staging visual and role verification, merge into `develop`, then a separate Owner-approved Production release to `main`.
