@@ -59,7 +59,9 @@ insert into public.research_publications(research_id, title, status, venue_type,
   (:'research_b', 'Published Reid paper', 'published', 'journal', :'super_id'),
   (:'research_b', 'Unpublished Reid draft', 'draft', 'journal', :'super_id');
 
-insert into storage.objects(bucket_id, name) values ('research-files', :'research_a' || '/open.pdf');
+insert into storage.objects(bucket_id, name) values
+  ('research-files', :'research_a' || '/open.pdf'),
+  ('research-files', :'research_a' || '/restricted.pdf');
 
 delete from public.test_results where suite = :'suite';
 
