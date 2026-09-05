@@ -115,7 +115,7 @@ Last verified: 2026-09-05, Asia/Muscat.
 
 - Release PR `#56` merged to `main` as `037ecec` after both RLS jobs, both application test jobs, and Cloudflare Staging passed. Cloudflare Worker Production build `0e484466-9670-4e61-a402-e2e6673bf9c9` and the matching Pages build completed successfully.
 - The rebuilt bilingual shell, route manifest, typed data boundary, design tokens, Research workspace and Agent Command are live on `reidpro.com`; `/`, `/login`, `/research`, `/dashboard`, and `/privacy` are application routes. `/dashboard` is the administrative Agent Command route; `/agents` is intentionally not a route.
-- Production smoke testing found the browser favicon's absolute `/assets/img/reid-logo.svg` URL was not emitted by Vite, although the in-app imported logo was emitted. Branch `fix/production-favicon` adds the same mark under `public/` and a build-contract regression; do not close the release verification until its Production URL returns SVG/200.
+- Production smoke testing found the browser favicon's absolute `/assets/img/reid-logo.svg` URL was not emitted by Vite, although the in-app imported logo was emitted. PRs `#60` and `#61` added the same mark under `public/` and a build-contract regression. Production commit `772a176` deployed through successful Worker build `e7dea15d-3aa6-466d-bc2a-4607494063db`; the public URL now returns HTTP 200 with `image/svg+xml`.
 
 ### 2026-09-05 remote Research verification and granted-file correction
 
@@ -372,7 +372,7 @@ Work is active on `claude/reid-system-development-bcaz9n`, branched from `develo
 **Production defect fixed — the header brand mark was broken on `reidpro.com`.**
 
 - The Owner reported a broken-image placeholder next to `ريّد` in the live header. Root cause: `src/main.tsx` referenced the mark as the literal string `/assets/img/reid-logo.svg`. Vite rewrites imported assets and copies `public/`, but leaves literal URLs untouched, and `assets/` sits outside `public/`. Nothing was emitted to `dist/`, so the tag returned 404 in Production while still resolving against the dev server — which is exactly why the existing E2E assertion passed and the bug shipped.
-- The mark is now imported, so Vite emits and content-hashes it. A production build confirms `dist/assets/reid-logo-CbVH3nq6.svg` exists and that both the bundle and the `index.html` favicon link point at it.
+- The in-app mark is imported, so Vite emits and content-hashes it. The fixed absolute favicon URL is separately copied from `public/assets/img/reid-logo.svg`; Production verifies both delivery paths instead of assuming an HTML literal is rewritten.
 - Two regressions were added. `src/assets.test.ts` fails the build if any file under `src/` references `/assets` through a bare string literal. The E2E assertion no longer matches a fixed URL but asserts the rendered image has a non-zero `naturalWidth`, which is the condition that actually broke.
 - The `/assets/fonts/*.woff2` URLs inside `src/style.css` were checked and are safe: Vite rewrites `url()` in processed CSS, and both font files appear in `dist/`.
 
