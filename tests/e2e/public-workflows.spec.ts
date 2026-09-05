@@ -18,7 +18,10 @@ test('renders Reid bilingually and opens WhatsApp assistant', async ({ page }) =
 
 test('protects the dashboard for anonymous visitors', async ({ page }) => {
   await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: 'تسجيل الدخول مطلوب' })).toBeVisible();
+  // Every guarded route now offers sign-in inline and keeps the destination,
+  // rather than a dead-end gate that forgets where the visitor was going.
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'G Google' })).toBeVisible();
   await expect(page.getByText('Pending Approvals')).toHaveCount(0);
 });
 

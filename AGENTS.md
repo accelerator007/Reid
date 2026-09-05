@@ -44,6 +44,7 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Agent gateway client and policy: `src/agents.ts`, `src/agent-command.tsx`.
 - Route manifest shared by the app and the Worker: `src/routes.ts`.
 - Typed data boundary and bilingual error mapping: `src/db.ts`.
+- Authenticated shell, access states and the single gate: `src/shell.tsx`.
 - Archived pre-React marketing content: `content/legacy/` (built by nothing, served by nothing).
 - Database migrations: `supabase/migrations/`.
 - Database pgTAP draft: `supabase/tests/rls.sql`.
@@ -68,6 +69,8 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Preserve the public website identity and bilingual behavior. Do not rename the company to COR.
 - When changing schema, add a migration; do not edit an already-applied migration.
 - Read Supabase through `src/db.ts`. Never write `(result.data || [])`: it discards the error object, so an expired session, a network drop and an empty table all render as the same blank panel.
+- Read the session through `useSession()`. Roles, suspension and profile completion are resolved once by `src/shell.tsx`; a component that re-reads `user_roles` for the current user is a bug.
+- Guard a page with `<Guarded>`, and declare who may open it in the route's `allow` list. Never hand-roll a gate: `routes.contract.test.ts` and `shell.test.ts` require every authenticated route to declare its roles, and prove the navigation never offers what the gate would refuse.
 - Add a route only in `src/routes.ts`. Both `src/main.tsx` and `src/worker.ts` derive from it, and `src/routes.contract.test.ts` fails if a path the app renders is not served by the edge.
 - Use accessible labels, keyboard behavior, loading/error states, and mobile QA for every new UI workflow.
 
@@ -196,7 +199,7 @@ Last verified: 2026-09-04, Asia/Muscat.
 
 ### P1 — core modules are schema/mock only
 
-- The route manifest and deep links are in place; the authenticated application shell and role-aware navigation are still missing, so each feature module re-implements its own gate.
+- The authenticated shell, role-aware navigation and route manifest are in place. The employee, projects and research modules still resolve their own roles and have not been moved onto `useSession()`.
 - No real employee directory, departments, onboarding, announcements, calendar, documents, KPI/performance, notifications, or timesheet UI/API.
 - No working project dashboards, Kanban, milestones, meetings, budgets, file-level permissions, clients, GitHub integration, activity, or project agents.
 - Research V1 (members, datasets, experiments, ethics/approvals, publications/DOI/conference tracking, private documents with per-user/per-role grants, tasks, activity) is merged to `develop` and proven by 79 local RLS allow/deny checks. Migration `202609040001` is **not applied to remote Supabase**, so the module cannot work against Staging or Production yet, and no authenticated browser session has verified it. The AI research assistant remains unimplemented.
@@ -255,6 +258,17 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 5. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
 
 ## Verification log
+
+### 2026-09-04 authenticated shell (feature branch)
+
+- Session state was resolved independently in five places. `user_roles` was read seven times per session, five hand-written gates could disagree, and the navigation offered every signed-in visitor every destination regardless of role.
+- `src/shell.tsx` resolves user, roles, account status and profile completion once and provides them through `useSession()`. Session-scoped role reads went from four to one; the three remaining in the feature modules move as each module migrates, and the read left in `main.tsx` is the admin listing of every account's roles, which is a different query.
+- Routes now declare `allow`, the roles that may open them, so the gate and the navigation derive from the same manifest. `navigableRoutes` cannot offer a destination `accessFor` would then refuse, which `shell.test.ts` proves for every role.
+- One `<Guarded>` component replaces the five gates and reports *why* access was refused: `anonymous`, `incomplete_profile`, `suspended`, `forbidden`, `error`, each distinct.
+- **Gap closed.** `/workspace`, `/projects` and `/research` never checked account suspension; only `/dashboard` did. A suspended employee could open all three. Row-level security still refused their rows through `is_account_active()`, so no data was exposed, but the interface opened. All four routes now refuse through the same gate.
+- A session that cannot be read is reported as an error with a retry, never as `forbidden`: the roles list is empty in both cases, so the previous code showed "Access denied" for a dropped connection.
+- Sign-in is now offered inline on every guarded route and returns the person to the page they asked for. `/workspace` already behaved this way; `/dashboard` showed a dead-end gate that forgot the destination. The public E2E expectation for `/dashboard` was updated to the improved behaviour.
+- 16 new unit tests cover the access matrix, including that suspension is checked before roles so an Owner is suspended too, and that a guest may reach the profile to finish onboarding but not the workspace.
 
 ### 2026-09-04 typed data boundary (feature branch)
 

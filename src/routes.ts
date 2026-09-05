@@ -9,6 +9,8 @@
 //
 // This module stays free of React and DOM APIs so the Worker can import it.
 
+import type { Role } from "./policy";
+
 export type Page =
   | "home"
   | "login"
@@ -28,18 +30,44 @@ export type Route = {
   readonly deepLinks?: boolean;
   /** Rendering requires a session. The edge still serves the shell; the app decides. */
   readonly authenticated?: boolean;
+  /**
+   * Roles that may open the route. Absent on a public route, required on an
+   * authenticated one, which routes.contract.test.ts enforces.
+   *
+   * This is the coarse gate deciding whether a page opens at all and what the
+   * navigation offers. It is never the security boundary: row-level security
+   * in the database decides which rows the page can actually read.
+   */
+  readonly allow?: readonly Role[];
 };
+
+/** Every role that holds a company seat. Guests are deliberately excluded. */
+const staff: readonly Role[] = [
+  "owner",
+  "super_admin",
+  "admin",
+  "hr",
+  "sales",
+  "employee",
+  "project_member",
+  "research_member",
+];
+
+/** Roles that administer the company rather than work inside it. */
+const administrators: readonly Role[] = ["owner", "super_admin", "admin", "hr"];
 
 export const routes: readonly Route[] = [
   { page: "home", path: "/" },
   { page: "login", path: "/login" },
   { page: "apply", path: "/apply" },
   { page: "privacy", path: "/privacy" },
-  { page: "profile", path: "/profile", authenticated: true },
-  { page: "workspace", path: "/workspace", authenticated: true },
-  { page: "projects", path: "/projects", deepLinks: true, authenticated: true },
-  { page: "research", path: "/research", deepLinks: true, authenticated: true },
-  { page: "dashboard", path: "/dashboard", authenticated: true },
+  // A guest has a profile but no workspace: the profile route admits everyone
+  // with a session so an approved applicant can complete onboarding.
+  { page: "profile", path: "/profile", authenticated: true, allow: [...staff, "guest"] },
+  { page: "workspace", path: "/workspace", authenticated: true, allow: staff },
+  { page: "projects", path: "/projects", deepLinks: true, authenticated: true, allow: staff },
+  { page: "research", path: "/research", deepLinks: true, authenticated: true, allow: staff },
+  { page: "dashboard", path: "/dashboard", authenticated: true, allow: administrators },
 ];
 
 /** Where the in-app 404 lives. It is never served by the edge. */
@@ -58,6 +86,26 @@ export function resolvePage(pathname: string): Page {
     route => route.deepLinks && normalized.startsWith(`${route.path}/`),
   );
   return parent ? parent.page : "not-found";
+}
+
+/** May a holder of these roles open this route at all? */
+export function canOpen(route: Route, roles: readonly Role[]): boolean {
+  if (!route.allow) return true;
+  return route.allow.some(allowed => roles.includes(allowed));
+}
+
+/** The routes a navigation should offer, in declaration order. */
+export function navigableRoutes(
+  roles: readonly Role[],
+  signedIn: boolean,
+): readonly Route[] {
+  return routes.filter(route =>
+    route.authenticated ? signedIn && canOpen(route, roles) : true,
+  );
+}
+
+export function routeFor(page: Page): Route | undefined {
+  return routes.find(route => route.page === page);
 }
 
 export function pathFor(page: Page): string {
