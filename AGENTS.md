@@ -579,3 +579,13 @@ Work is active on `claude/reid-system-development-bcaz9n`, branched from `develo
 ## Definition of done
 
 A workflow is done only when its happy path, denial path, validation errors, RBAC/RLS, audit log, notification, responsive UI, and automated tests pass in Staging; Production is deployed through a protected PR; and this file is updated with exact evidence and remaining limitations.
+
+### 2026-09-05 Owner agent command map redesign
+
+- Replaced the flat Agent Command cards with a responsive animated operating map. The CEO/Orchestrator is the single root; Operations, Growth, Revenue, Knowledge, HR and Finance form the governed domains; Analytics, Content/Social, Competitor Intelligence and Support appear as linked specialists under their operating lead.
+- The eleven database agents remain separate identities. No HR, finance, CRM or company memory is merged: grouping is visual and operational only, preserving least privilege, independent prompts, audit trails and approval levels.
+- Every node is driven by live provider/agent/run data and displays ready, working, approval, paused, security-blocked or error state. Animated connections visualize active routing, while blocked connections are visibly distinct and do not imply a working provider.
+- Selecting a node opens its purpose, queue, run count, latency, token usage, tools, memory scopes, provider/model, classification, approval level, manual run, pause/resume, recent logs, approval/rejection and failed-run retry controls.
+- Enable/disable is visibly Owner-only in the interface. Admin operational controls and database RLS remain authoritative; sensitive agents stay blocked while Gemini's public-data ceiling is the only available provider and `ai-lap` remains offline.
+- The layout supports Arabic/English, light/dark themes, narrow screens and reduced-motion preferences. Unit coverage now validates the 11-node rooted topology and distinct blocked/paused/approval states. Local verification: 129/129 Vitest checks and the Production TypeScript/Vite build pass.
+- Remaining release evidence: authenticated Owner interaction on Cloudflare Staging, authenticated non-Owner denial check, and the normal develop then Owner-approved Production PR. This entry must not be represented as Production-live before those gates pass.

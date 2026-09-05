@@ -17,6 +17,46 @@ export type AgentRow = {
   disabled_reason: string | null;
 };
 
+export type AgentTopology = {
+  id: string;
+  parent: string | null;
+  x: number;
+  y: number;
+  domain: 'executive' | 'delivery' | 'growth' | 'revenue' | 'governance' | 'knowledge';
+  tools: readonly string[];
+  memories: readonly string[];
+  purpose: { ar: string; en: string };
+};
+
+// The eleven database agents stay separate for audit and least-privilege. The
+// map groups them into six operating domains instead of pretending every agent
+// is an equal peer. Specialist nodes keep their own tools and approval ceiling.
+export const agentTopology: readonly AgentTopology[] = [
+  { id: 'ceo', parent: null, x: 50, y: 12, domain: 'executive', tools: ['توجيه الأهداف', 'إنشاء المهام', 'ترتيب الأولويات'], memories: ['الشركة', 'الاستراتيجية'], purpose: { ar: 'ينسّق العمل ويحوّل أهداف المالك إلى مهام قابلة للتنفيذ.', en: 'Turns Owner strategy into governed, executable work.' } },
+  { id: 'operations', parent: 'ceo', x: 27, y: 33, domain: 'delivery', tools: ['المهام', 'المشاريع', 'المواعيد'], memories: ['الشركة', 'الأقسام', 'المشاريع'], purpose: { ar: 'يتابع التنفيذ والمشاريع والاختناقات التشغيلية.', en: 'Monitors delivery, projects, and operational blockers.' } },
+  { id: 'marketing', parent: 'ceo', x: 73, y: 33, domain: 'growth', tools: ['خطة التسويق', 'الحملات', 'المسودات'], memories: ['الشركة', 'العلامة'], purpose: { ar: 'يقود النمو والحملات ويوجّه مختصي المحتوى والمنافسين.', en: 'Leads growth and delegates to content and intelligence specialists.' } },
+  { id: 'sales', parent: 'ceo', x: 18, y: 61, domain: 'revenue', tools: ['CRM', 'الفرص', 'المتابعة'], memories: ['الشركة', 'CRM'], purpose: { ar: 'يدير العملاء المحتملين والصفقات والمتابعات.', en: 'Runs leads, deals, and commercial follow-up.' } },
+  { id: 'knowledge', parent: 'ceo', x: 82, y: 61, domain: 'knowledge', tools: ['البحث', 'RAG', 'المستندات'], memories: ['الشركة', 'المشاريع', 'المعرفة'], purpose: { ar: 'خدمة معرفة مشتركة؛ RAG وDrive يبقيان غير مفعّلين حتى اكتمال الربط.', en: 'Shared knowledge service; RAG and Drive remain gated until connected.' } },
+  { id: 'hr', parent: 'ceo', x: 38, y: 82, domain: 'governance', tools: ['CV', 'الموظفون', 'التوظيف L3'], memories: ['الموارد البشرية فقط'], purpose: { ar: 'يعالج بيانات الموظفين المقيدة داخل حد أمني مستقل.', en: 'Handles restricted people data inside an isolated security boundary.' } },
+  { id: 'finance', parent: 'ceo', x: 62, y: 82, domain: 'governance', tools: ['الميزانية', 'التحليل المالي', 'المدفوعات L4'], memories: ['المالية فقط'], purpose: { ar: 'تحليل مالي مع موافقة بشرية إلزامية للالتزامات والمدفوعات.', en: 'Financial analysis with mandatory human approval for commitments.' } },
+  { id: 'analytics', parent: 'operations', x: 36, y: 51, domain: 'delivery', tools: ['KPIs', 'التقارير', 'التنبيهات'], memories: ['الشركة', 'المشاريع'], purpose: { ar: 'خدمة قياس مشتركة للتشغيل والتقارير.', en: 'Shared measurement service for operations and reporting.' } },
+  { id: 'content', parent: 'marketing', x: 64, y: 51, domain: 'growth', tools: ['المحتوى', 'Instagram', 'LinkedIn'], memories: ['العلامة', 'الحملات'], purpose: { ar: 'ينشئ محتوى موحدًا لـInstagram وLinkedIn؛ النشر L2.', en: 'Creates unified Instagram and LinkedIn content; publishing is L2.' } },
+  { id: 'competitor', parent: 'marketing', x: 88, y: 40, domain: 'growth', tools: ['رصد المنافسين', 'المقارنة', 'التنبيهات'], memories: ['السوق', 'المنافسون'], purpose: { ar: 'مختص رصد تحت فريق النمو، وليس مركز قرار مستقل.', en: 'A growth specialist for market monitoring, not a decision authority.' } },
+  { id: 'support', parent: 'sales', x: 8, y: 78, domain: 'revenue', tools: ['التذاكر', 'قاعدة المعرفة', 'التصعيد'], memories: ['الدعم', 'العملاء'], purpose: { ar: 'يخدم العملاء ويصعّد الفرص والمشكلات إلى المبيعات.', en: 'Supports customers and escalates opportunities or issues to Sales.' } },
+] as const;
+
+export const topologyFor = (id: string) => agentTopology.find(node => node.id === id);
+
+export function operationalState(agent: AgentRow, provider: ProviderRow | undefined, runs: readonly RunRow[]) {
+  if (!agent.enabled || !provider || !providerAccepts(provider, agent.classification)) return 'blocked';
+  if (agent.status === 'paused') return 'paused';
+  const latest = runs.find(run => run.agent_id === agent.id);
+  if (latest?.approval_state === 'pending') return 'approval';
+  if (latest?.run_state === 'running' || latest?.run_state === 'queued') return 'working';
+  if (latest?.run_state === 'failed') return 'error';
+  return 'ready';
+}
+
 export type ProviderRow = {
   id: string;
   name: string;
