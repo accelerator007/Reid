@@ -589,6 +589,15 @@ Work is active on `claude/reid-system-development-bcaz9n`, branched from `develo
 
 A workflow is done only when its happy path, denial path, validation errors, RBAC/RLS, audit log, notification, responsive UI, and automated tests pass in Staging; Production is deployed through a protected PR; and this file is updated with exact evidence and remaining limitations.
 
+### 2026-09-06 governed agent tools and scoped memory V1
+
+- Work is active on `feature/agent-tools-memory-v1`. Migration `202609060001` adds a centrally audited tool catalog, agent-to-tool assignments, execution receipts and bilingual content drafts. Every tool declares its operation, JSON input contract and approval level; the gateway takes the stricter of the agent and tool levels before any mutation runs.
+- The first real tools cover bounded project/task reads, task creation, CRM pipeline and follow-up creation, employee/application reads, onboarding creation, budget reads and L3 budget updates, content context/drafts and L2 publication, plus authorized knowledge search. Service-role execution is available only after the caller has passed the existing authenticated agent gate; Gemini never receives a database credential or arbitrary table/column selector.
+- All eleven agents now have distinct operating prompts and persisted tool IDs. HR has no finance mutation, Finance has no CV/application access, and Content publication remains a separate L2 action. This separation is enforced by `agent_tool_assignments`, not by prompt wording.
+- Durable memories retain the five scopes `user`, `project`, `department`, `company`, and `agent`, and now record creator, source run, title and update time. Gateway retrieval no longer passes every memory to every agent: it selects only the current agent, Reid company, requesting user, and explicitly selected project/department scopes, capped to 24 recent records.
+- The Owner Agent Map loads the live tool catalog and invokes tools through the gateway. Tool results and failures remain tied to an `agent_run`; successful executions add a separate hash-only receipt without retaining raw arguments.
+- Local application verification: 131/131 Vitest checks and the TypeScript/Vite Production build pass; `git diff --check` passes; linked database lint reports no schema errors and the dry run lists only `202609060001`. The local RLS harness was unavailable on this host, so PostgreSQL CI/RLS, remote migration, Edge Function deployment, authenticated Staging tool workflows and the protected Production release remain mandatory before calling this live.
+
 ### 2026-09-05 Owner agent command map redesign
 
 - Replaced the flat Agent Command cards with a responsive animated operating map. The CEO/Orchestrator is the single root; Operations, Growth, Revenue, Knowledge, HR and Finance form the governed domains; Analytics, Content/Social, Competitor Intelligence and Support appear as linked specialists under their operating lead.

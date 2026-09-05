@@ -48,6 +48,17 @@ select t_true(:'suite', 'HR keeps restricted classification while using Gemini',
 select t_true(:'suite', 'each agent mirrors its provider model',
   $q$select a.model = p.chat_model and a.host = p.id
      from public.agents a join public.llm_providers p on p.id = a.provider_id where a.id = 'marketing'$q$, true);
+select t_true(:'suite', 'every agent has an independent system prompt',
+  $q$select count(*) = 11 and count(distinct system_prompt) = 11 from public.agents where nullif(trim(system_prompt),'') is not null$q$, true);
+select t_true(:'suite', 'HR cannot use finance budget mutation',
+  $q$select not exists(select 1 from public.agent_tool_assignments where agent_id='hr' and tool_id='projects.budget.update')$q$, true);
+select t_true(:'suite', 'Finance budget mutation requires L3 approval',
+  $q$select approval_level = 3 from public.agent_tools where id='projects.budget.update'$q$, true);
+select t_true(:'suite', 'Content publication requires L2 approval',
+  $q$select approval_level = 2 from public.agent_tools where id='content.publish'$q$, true);
+select t_true(:'suite', 'all five durable memory scopes remain available',
+  $q$select pg_get_constraintdef(oid) like '%user%project%department%company%agent%'
+     from pg_constraint where conrelid='public.memories'::regclass and contype='c'$q$, true);
 
 -- --------------------------------------------------------- clearance enforcement
 -- The whole safety story: the trigger refuses the write, so a compromised
@@ -79,12 +90,20 @@ select t_visible(:'suite', 'an employee sees only their own runs',
   'select 1 from public.agent_runs', 1);
 select t_visible(:'suite', 'an employee cannot read their own transient payload',
   'select 1 from public.agent_run_payloads', 0);
+select t_visible(:'suite', 'an employee cannot enumerate agent tools',
+  'select 1 from public.agent_tools', 0);
+select t_visible(:'suite', 'an employee cannot enumerate tool assignments',
+  'select 1 from public.agent_tool_assignments', 0);
+select t_visible(:'suite', 'an employee cannot read tool execution audits',
+  'select 1 from public.agent_tool_executions', 0);
 
 select test_sign_in(:'admin_id');
 select t_visible(:'suite', 'an admin reads the whole agent roster',
   'select 1 from public.agents', 11);
 select t_visible(:'suite', 'an admin reads the whole run stream',
   'select 1 from public.agent_runs', 4);
+select t_visible(:'suite', 'an admin reads the governed tool catalog',
+  'select 1 from public.agent_tools', 14);
 select t_visible(:'suite', 'an admin cannot read transient payloads',
   'select 1 from public.agent_run_payloads', 0);
 
@@ -97,6 +116,8 @@ select t_visible(:'suite', 'an anonymous visitor sees no runs',
   'select 1 from public.agent_runs', 0);
 select t_visible(:'suite', 'an anonymous visitor sees no transient payloads',
   'select 1 from public.agent_run_payloads', 0);
+select t_visible(:'suite', 'an anonymous visitor sees no governed tools',
+  'select 1 from public.agent_tools', 0);
 
 -- ----------------------------------------------------------------- agent control
 select test_sign_in(:'admin_id');
