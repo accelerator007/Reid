@@ -111,6 +111,12 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-05, Asia/Muscat.
 
+### 2026-09-05 frontend rebuild Production release
+
+- Release PR `#56` merged to `main` as `037ecec` after both RLS jobs, both application test jobs, and Cloudflare Staging passed. Cloudflare Worker Production build `0e484466-9670-4e61-a402-e2e6673bf9c9` and the matching Pages build completed successfully.
+- The rebuilt bilingual shell, route manifest, typed data boundary, design tokens, Research workspace and Agent Command are live on `reidpro.com`; `/`, `/login`, `/research`, `/dashboard`, and `/privacy` are application routes. `/dashboard` is the administrative Agent Command route; `/agents` is intentionally not a route.
+- Production smoke testing found the browser favicon's absolute `/assets/img/reid-logo.svg` URL was not emitted by Vite, although the in-app imported logo was emitted. Branch `fix/production-favicon` adds the same mark under `public/` and a build-contract regression; do not close the release verification until its Production URL returns SVG/200.
+
 ### 2026-09-05 remote Research verification and granted-file correction
 
 - Remote migration `202609040001_research_workspace.sql` was applied to Supabase project `pkogchbrknwmzefjklkr`; the linked migration history matches through that version and remote database lint reports no schema errors.

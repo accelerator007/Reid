@@ -31,4 +31,13 @@ describe("deployable assets", () => {
     expect(logo).toContain("<svg");
     expect(logo).toContain("Reid");
   });
+
+  it("ships the absolute favicon URL through public assets", () => {
+    const html = readFileSync(join(root, "index.html"), "utf8");
+    const favicon = readFileSync(join(root, "public/assets/img/reid-logo.svg"), "utf8");
+
+    expect(html).toContain('href="/assets/img/reid-logo.svg"');
+    expect(favicon).toContain("<svg");
+    expect(favicon).toContain("Reid");
+  });
 });
