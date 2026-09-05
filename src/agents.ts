@@ -77,8 +77,12 @@ export async function setAgentState(agentId: string, patch: { status?: string; e
 
 export async function decideRun(runId: string, decision: 'approved' | 'rejected', note?: string) {
   if (!supabase) throw new Error('supabase_unavailable');
-  const { error } = await supabase.rpc('approve_agent_run', { run_id: runId, decision, note: note || null });
+  const { data, error } = await supabase.functions.invoke('llm-gateway', {
+    body: { action: decision === 'approved' ? 'approve' : 'reject', runId, note: note || null },
+  });
   if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
 }
 
 export async function loadAgentControl() {
