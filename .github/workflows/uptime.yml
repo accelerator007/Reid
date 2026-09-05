@@ -1,0 +1,15 @@
+name: Reid uptime
+on:
+  schedule: [{cron: '*/15 * * * *'}]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/uptime-check.sh
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
