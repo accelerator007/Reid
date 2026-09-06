@@ -124,9 +124,10 @@ Last verified: 2026-09-06, Asia/Muscat.
 
 ### 2026-09-06 WhatsApp Owner personalization
 
-- Work is active on `feature/whatsapp-owner-personalization`. The webhook maps each allowed phone number to its own real Owner profile before calling the governed gateway, so Ali and Sheikha no longer share one requester identity, user-memory scope or approval actor.
+- PR `#102` passed CI/RLS, authenticated Chromium and Cloudflare Staging, then merged to `develop`. The webhook maps each allowed phone number to its own real Owner profile before calling the governed gateway, so Ali and Sheikha no longer share one requester identity, user-memory scope or approval actor.
 - Each response receives only the last 12 messages from that Owner conversation and is instructed to match the responsible person's Arabic/English language, brevity and tone without inventing familiarity. This uses the normalized message history already protected by Owner-only RLS; it does not broaden agent tools or approval levels.
 - Obvious six-digit OTP values and password/secret/API-key assignments are redacted before conversational context reaches a model. The raw webhook event retention policy remains separate work; responsible users must still never send credentials to the bot.
+- The Ali/Sheikha identity map is stored as a Supabase Edge Function secret, and the updated `llm-gateway` and `whatsapp-webhook` are deployed. Local verification passes 141/141 checks and the Production build; the next real message from each Owner is the live personalization acceptance test.
 
 ### 2026-09-06 ai-lap returned and was audited
 
