@@ -7,6 +7,18 @@ const safeEqual = (left:string,right:string) => {
   let different=0; for(let i=0;i<a.length;i++) different|=a[i]^b[i]; return different===0;
 };
 
+async function notifyWhatsApp(admin: ReturnType<typeof createClient>, runId: string, message: string, status: 'completed'|'failed') {
+  const token=Deno.env.get('META_WHATSAPP_ACCESS_TOKEN'), phoneId=Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
+  const command=await admin.from('whatsapp_commands').select('id,sender_phone').eq('agent_run_id',runId).maybeSingle();
+  if(!command.data) return;
+  await admin.from('whatsapp_commands').update({status,error:status==='failed'?message:null,updated_at:new Date().toISOString()}).eq('id',command.data.id);
+  if(!token || !phoneId) return;
+  await fetch(`https://graph.facebook.com/v26.0/${phoneId}/messages`,{
+    method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},
+    body:JSON.stringify({messaging_product:'whatsapp',to:command.data.sender_phone,type:'text',text:{preview_url:false,body:message.slice(0,4000)}}),
+  });
+}
+
 Deno.serve(async request => {
   try {
     if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
@@ -63,6 +75,7 @@ Deno.serve(async request => {
       if (updated.error) throw updated.error;
       if (output) await admin.from('memories').insert({scope:'agent',scope_id:run.data.agent_id,title:`Run ${run.data.id}`,content:output.slice(0,4000),embedding,classification:run.data.classification,created_by:run.data.requested_by,source_run_id:run.data.id});
       await admin.from('agent_run_payloads').delete().eq('run_id',run.data.id);
+      await notifyWhatsApp(admin,run.data.id,output?`رد الوكيل:\n${output}`:'اكتمل تنفيذ الأمر.', 'completed');
       return json({ ok:true });
     }
 
@@ -70,6 +83,7 @@ Deno.serve(async request => {
       const run = await admin.from('agent_runs').update({run_state:'failed',status:'failed',error:String(body.error||'local_runner_failed').slice(0,500),finished_at:new Date().toISOString()}).eq('id',body.runId).eq('provider_id','ollama').eq('run_state','running').select('id').single();
       if (run.error) throw new Error('run_not_claimed');
       await admin.from('agent_run_payloads').delete().eq('run_id',run.data.id);
+      await notifyWhatsApp(admin,run.data.id,'تعذر تنفيذ الأمر على الخادم المحلي. راجع لوحة الوكلاء.', 'failed');
       return json({ok:true});
     }
     return json({error:'invalid_action'},400);

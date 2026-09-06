@@ -598,6 +598,15 @@ Work is active on `claude/reid-system-development-bcaz9n`, branched from `develo
 
 A workflow is done only when its happy path, denial path, validation errors, RBAC/RLS, audit log, notification, responsive UI, and automated tests pass in Staging; Production is deployed through a protected PR; and this file is updated with exact evidence and remaining limitations.
 
+### 2026-09-06 WhatsApp governed agent dispatch
+
+- Meta app `Reid` already has the Supabase `whatsapp-webhook` callback verified and the `messages` webhook field subscribed. The remote Supabase project already holds the verify token, Owner phone allow-list and phone-number ID; values remain secret and browser-inaccessible.
+- Replaced the receipt-only prototype with real governed dispatch. Authorized Owner text is deterministically routed to CEO, Operations, Sales, HR, Finance, Content, Marketing, Analytics, Knowledge, Support or Competitor Intelligence, then enters the same `llm-gateway` classification, provider, rate-limit, L0-L4 approval, prompt-hash and audit path as Dashboard requests.
+- Added a separate 256-bit internal gateway credential and explicit WhatsApp Owner user mapping in Supabase secrets. The gateway accepts this channel only when both the secret and `source=whatsapp` match; ordinary browser authentication remains unchanged.
+- L2-L4 commands return WhatsApp reply buttons for approval/rejection. A decision is accepted only from the same allowed Owner phone and only once for a matching pending command. Local Ollama completion/failure updates the command and sends the bounded result back through Meta; immediate Gemini results return in the original webhook call.
+- Help/menu responses and agent-name routing are bilingual. Unknown/non-text messages receive bounded guidance; unauthorized senders cannot enqueue a command. Event and command message IDs remain idempotent.
+- Deployed updated `llm-gateway`, `whatsapp-webhook` and `ai-lap-runner`. Local verification passes: 131/131 checks and Production build. Existing WhatsApp RLS suite remains 8/8; a real-number send/receive test is still blocked at Meta's mandatory human reCAPTCHA and phone OTP registration.
+
 ### 2026-09-06 ai-lap outbound Ollama runtime
 
 - Verified `ai-lap`: Ubuntu 22.04, 31 GiB RAM, NVIDIA RTX 3080 Ti 12 GB, Ollama 0.33.2, `gemma4:12b` and `nomic-embed-text:latest`. A live non-thinking chat returned the requested sentinel and embeddings are exactly 768 dimensions.
