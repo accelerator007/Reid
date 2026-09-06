@@ -117,6 +117,8 @@ Last verified: 2026-09-05, Asia/Muscat.
 - The requested model exists under the exact local tag `gemma4:12b` (7.6 GB); `nomic-embed-text:latest` is also installed. A live warm chat returned the exact sentinel `REID_OK` in about seven seconds with `think:false`. A bounded run with default thinking returned empty content after spending its output ceiling on hidden thinking, so the future adapter must explicitly disable thinking for normal agent runs.
 - `cloudflared` is installed but its service/tunnel configuration was not changed. No Ollama port was exposed and no provider was enabled during this audit.
 - The complete gated rollout, private tunnel/Access design, provider routing, RAG verification and rollback plan is recorded in `docs/AI_LAP_INTEGRATION.md`. Implementation remains pending Cloudflare Access setup and the sudo-required local adapter service.
+- Partial implementation on `feature/ai-lap-secure-adapter`: the versioned Python adapter and hardened user-systemd unit are installed on `ai-lap` at loopback `127.0.0.1:11436`. Live local checks passed: unauthenticated request 401, Ollama administration path 404, authenticated health 200, exact `REID_ADAPTER_OK` chat output, and a 768-dimensional embedding. The adapter forces `gemma4:12b`, `nomic-embed-text:latest`, `think:false`, body/time limits and redacted logs. The Supabase gateway code now supports the separate origin token and Cloudflare Access headers.
+- The existing root cloudflared service is configured with a token but failed because UDP/QUIC is blocked while Cloudflare's own preflight reports HTTP/2 reachable. A systemd HTTP/2 override is staged at `/home/ai-lap/cloudflared-http2.conf`. The host went offline before sudo installation; the override, Cloudflare Access hostname/service token, Supabase secret synchronization, provider activation and remote end-to-end tests remain incomplete. A token briefly visible in a local process listing was immediately rotated on `ai-lap` and is invalid; the replacement has not yet reached Supabase because its CLI request stalled.
 
 ### 2026-09-05 WhatsApp Cloud API setup
 
@@ -595,6 +597,18 @@ Work is active on `claude/reid-system-development-bcaz9n`, branched from `develo
 ## Definition of done
 
 A workflow is done only when its happy path, denial path, validation errors, RBAC/RLS, audit log, notification, responsive UI, and automated tests pass in Staging; Production is deployed through a protected PR; and this file is updated with exact evidence and remaining limitations.
+
+### 2026-09-06 ai-lap outbound Ollama runtime
+
+- Verified `ai-lap`: Ubuntu 22.04, 31 GiB RAM, NVIDIA RTX 3080 Ti 12 GB, Ollama 0.33.2, `gemma4:12b` and `nomic-embed-text:latest`. A live non-thinking chat returned the requested sentinel and embeddings are exactly 768 dimensions.
+- Installed and live-tested the loopback-only adapter on `127.0.0.1:11436`: correct credential succeeds, missing credential is denied, model administration routes are absent, chat works, and three adapter unit tests pass. Ollama remains bound to loopback.
+- Cloudflare Tunnel was rejected after a real test because the current network blocks its required outbound TCP/UDP 7844 path even with HTTP/2 forced. No public Ollama hostname or inbound port was created.
+- Replaced the tunnel with an outbound HTTPS runner. `ai-lap` claims queued jobs from the private `ai-lap-runner` Edge Function, executes locally, writes the bounded result/768-vector memory back, and emits a 30-second heartbeat. A 15-minute stale-job recovery prevents permanently stranded work.
+- Migration `202609060003` is applied: Ollama is enabled with exact model `gemma4:12b`, all eleven agents use it as primary, and Gemini remains enabled/preserved for deliberate Owner-controlled fallback. Sensitive data never falls back silently.
+- The runner credential was generated locally and stored as a Supabase secret without committing or printing it. `ai-lap-runner` and the queue-aware `llm-gateway` are deployed.
+- Availability routing uses a 90-second heartbeat: fresh `ai-lap` routes to Ollama; a missing/stale heartbeat routes to the already Owner-authorized Gemini provider only after the same classification-ceiling check. Every run persists its actual provider, and a classification that the fallback is not cleared for is refused rather than leaked.
+- Verification passed locally: 131/131 application checks, Production build, 3/3 adapter tests, Python compilation, 48/48 agent RLS checks, migration/function deployment, runner authentication denial and authenticated heartbeat. The user service is installed, enabled and active on `ai-lap`.
+- Final outbound model completion remains externally blocked: the server reaches its LAN gateway and is reachable over SSH/ZeroTier, but has no Internet route or DNS response, including direct `1.1.1.1`/HTTPS. Gemini fallback engaged correctly but its conservative 18-request free-tier daily budget was already exhausted. Regular CI therefore continues to require the live tool workflow without spending model quota; the dedicated live-provider workflow verifies Ollama after Internet returns (or Gemini after its UTC-day quota resets).
 
 ### 2026-09-06 governed agent tools and scoped memory V1
 

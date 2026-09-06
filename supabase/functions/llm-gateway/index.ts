@@ -79,12 +79,20 @@ async function callGemini(provider: Provider, systemPrompt: string | null, input
 }
 
 async function callOllama(provider: Provider, systemPrompt: string | null, input: string) {
+  const originToken = Deno.env.get('OLLAMA_ORIGIN_TOKEN');
+  if (!originToken) throw new Error('ollama_origin_token_missing');
   const response = await fetch(`${provider.endpoint}/api/chat`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      'x-reid-origin-token': originToken,
+      ...(Deno.env.get('CF_ACCESS_CLIENT_ID') ? { 'CF-Access-Client-Id': Deno.env.get('CF_ACCESS_CLIENT_ID')! } : {}),
+      ...(Deno.env.get('CF_ACCESS_CLIENT_SECRET') ? { 'CF-Access-Client-Secret': Deno.env.get('CF_ACCESS_CLIENT_SECRET')! } : {}),
+    },
     body: JSON.stringify({
       model: provider.chat_model,
       stream: false,
+      think: false,
       messages: [
         ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
         { role: 'user', content: input },
@@ -101,9 +109,15 @@ async function callOllama(provider: Provider, systemPrompt: string | null, input
 async function embed(provider: Provider, input: string) {
   if (!provider.embedding_model) throw new Error('provider_has_no_embedding_model');
   if (provider.id === 'ollama') {
+    const originToken = Deno.env.get('OLLAMA_ORIGIN_TOKEN');
+    if (!originToken) throw new Error('ollama_origin_token_missing');
     const response = await fetch(`${provider.endpoint}/api/embeddings`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json', 'x-reid-origin-token': originToken,
+        ...(Deno.env.get('CF_ACCESS_CLIENT_ID') ? { 'CF-Access-Client-Id': Deno.env.get('CF_ACCESS_CLIENT_ID')! } : {}),
+        ...(Deno.env.get('CF_ACCESS_CLIENT_SECRET') ? { 'CF-Access-Client-Secret': Deno.env.get('CF_ACCESS_CLIENT_SECRET')! } : {}),
+      },
       body: JSON.stringify({ model: provider.embedding_model, prompt: input }),
     });
     const payload = await response.json();
@@ -344,6 +358,10 @@ Deno.serve(async (request) => {
       if (resumedAgentError) throw resumedAgentError;
       if (resumedProviderError) throw resumedProviderError;
       if (payloadError) throw payloadError;
+      if ((resumedProvider as Provider).kind === 'local' && payload.action !== 'tool') {
+        await admin.from('agent_runs').update({run_state:'queued',status:'queued',started_at:null}).eq('id',approved.id);
+        return Response.json({runId:approved.id,status:'queued',provider:resumedProvider.id},{headers:cors});
+      }
       const result = await executeRun(admin, approved, resumedAgent as Agent, resumedProvider as Provider, payload.action, payload.input);
       await admin.from('agent_run_payloads').delete().eq('run_id', approved.id);
       return Response.json(result, { headers: cors });
@@ -371,8 +389,25 @@ Deno.serve(async (request) => {
       .maybeSingle();
     if (providerError) throw providerError;
     if (!providerRow) throw new Error('provider_not_found');
-    const provider = providerRow as Provider;
+    let provider = providerRow as Provider;
     if (!provider.enabled) throw new Error('provider_disabled');
+
+    // Ollama is primary, but ai-lap may be powered off or lose Internet. A
+    // fresh heartbeat selects local execution; otherwise use the explicitly
+    // Owner-authorized Gemini provider whose clearance is still enforced below.
+    // This never silently crosses a classification boundary.
+    if (provider.kind === 'local' && action !== 'tool') {
+      const heartbeat = await admin.from('agent_runner_status').select('last_seen_at,status').eq('id','ai-lap').maybeSingle();
+      const fresh = !heartbeat.error && heartbeat.data?.status === 'online'
+        && Date.now() - new Date(heartbeat.data.last_seen_at).getTime() < 90_000;
+      if (!fresh) {
+        const fallback = await admin.from('llm_providers')
+          .select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day')
+          .eq('id','gemini').eq('enabled',true).maybeSingle();
+        if (fallback.error || !fallback.data) throw new Error('local_provider_offline');
+        provider = fallback.data as Provider;
+      }
+    }
 
     // The run inherits the stricter of the agent's ceiling and the caller's
     // declared classification, so a caller can raise sensitivity but never lower it.
@@ -440,6 +475,13 @@ Deno.serve(async (request) => {
       const payload = await admin.from('agent_run_payloads').insert({ run_id: created.id, action, input });
       if (payload.error) throw payload.error;
       return Response.json({ run: created, status: 'pending_approval', approvalLevel: effectiveApproval }, { headers: cors });
+    }
+
+    if (provider.kind === 'local' && action !== 'tool') {
+      await admin.from('agent_runs').update({run_state:'queued',status:'queued',started_at:null}).eq('id',created.id);
+      const payload = await admin.from('agent_run_payloads').insert({run_id:created.id,action,input});
+      if (payload.error) throw payload.error;
+      return Response.json({runId:created.id,status:'queued',provider:provider.id},{headers:cors});
     }
 
     const result = await executeRun(admin, created as Run, agent, provider, action, input);
