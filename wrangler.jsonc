@@ -7,5 +7,11 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "run_worker_first": true
+  },
+  "vars": {
+    "SUPABASE_FUNCTIONS_URL": "https://pkogchbrknwmzefjklkr.supabase.co/functions/v1"
+  },
+  "triggers": {
+    "crons": ["* * * * *"]
   }
 }

@@ -246,6 +246,18 @@ async function executeTool(admin: ReturnType<typeof createClient>, tool: AgentTo
       const match = (row: Record<string, unknown>) => JSON.stringify(row).toLowerCase().includes(query);
       return { projectDocuments: projectDocuments.filter(match).slice(0, 12), researchDocuments: researchDocuments.filter(match).slice(0, 12), memory: memory.filter(match).slice(0, 12) };
     }
+    case 'reminders.list': {
+      const result=await admin.from('personal_reminders').select('id,reminder_text,due_at,status,timezone').eq('owner_id',requesterId).eq('status','scheduled').order('due_at').limit(30);
+      if(result.error)throw new Error('tool_reminders_list_failed'); return result.data||[];
+    }
+    case 'reminders.create': {
+      const result=await admin.from('personal_reminders').insert({owner_id:requesterId,whatsapp_phone:text(args.whatsapp_phone,30),reminder_text:text(args.reminder_text,1000),due_at:text(args.due_at,40)}).select('id,reminder_text,due_at,status').single();
+      if(result.error)throw new Error('tool_reminder_create_failed'); return result.data;
+    }
+    case 'reminders.cancel': {
+      const result=await admin.from('personal_reminders').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('id',uuid(args.reminder_id)).eq('owner_id',requesterId).eq('status','scheduled').select('id,status').single();
+      if(result.error)throw new Error('tool_reminder_cancel_failed'); return result.data;
+    }
     case 'tasks.create': {
       const payload = { title: text(args.title, 200), description: text(args.description, 2000), project_id: uuid(args.project_id), research_id: uuid(args.research_id), assignee_id: uuid(args.assignee_id), priority: Math.max(0, Math.min(4, Number(args.priority ?? 2))), due_at: text(args.due_at, 40), created_by: requesterId };
       if (!payload.project_id && !payload.research_id) throw new Error('tool_argument_missing:project_id_or_research_id');
