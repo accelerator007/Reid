@@ -107,7 +107,11 @@ test.describe('authenticated employee role journeys', () => {
       action: 'run', agentId: 'operations', classification: 'internal',
       input: 'أعطني ملخصًا قصيرًا لحالة المشاريع والمهام الموجودة في السياق المصرح به فقط.',
     }});
-    if (invoked.error) throw invoked.error;
+    if (invoked.error) {
+      let detail = invoked.error.message;
+      try { detail = JSON.stringify(await invoked.error.context.json()); } catch { /* keep SDK message */ }
+      throw new Error(`llm-gateway: ${detail}`);
+    }
     const gateway = invoked.data;
     expect(gateway.error, JSON.stringify(gateway)).toBeFalsy();
     expect(gateway.runId).toBeTruthy();
