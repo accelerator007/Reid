@@ -337,8 +337,10 @@ Deno.serve(async (request) => {
     let requesterId = '';
     let caller: ReturnType<typeof createClient> | null = null;
     if (internal) {
-      requesterId = Deno.env.get('WHATSAPP_OWNER_USER_ID') || '';
+      requesterId = typeof body.requesterId === 'string' ? body.requesterId : (Deno.env.get('WHATSAPP_OWNER_USER_ID') || '');
       if (!requesterId) throw new Error('whatsapp_owner_not_configured');
+      const ownerRole = await admin.from('user_roles').select('role').eq('user_id', requesterId).eq('role', 'owner').maybeSingle();
+      if (!ownerRole.data) throw new Error('whatsapp_owner_invalid');
     } else {
       if (!authorization) throw new Error('missing_authorization');
       caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {

@@ -122,6 +122,12 @@ Last verified: 2026-09-06, Asia/Muscat.
 - Migration `202609060004` is applied remotely and both `whatsapp-inbox` and the updated `whatsapp-webhook` are deployed. Authenticated Cloudflare Staging verification with `alialajmi524@gmail.com` passed: the account resolved as Owner, all eleven agents reported ready on `Reid ai-lap / gemma4:12b`, and the new inbox rendered without an access or data error.
 - Local verification passes 140/140 Vitest checks, the TypeScript/Vite Production build, schema lint, migration dry run listing only `202609060004`, `git diff --check`, both PostgreSQL RLS jobs, authenticated browser CI and Cloudflare Staging. A fresh inbound message, real manual reply and real alert email remain the final Production acceptance tests because the normalized inbox intentionally contains no historical rows.
 
+### 2026-09-06 WhatsApp Owner personalization
+
+- Work is active on `feature/whatsapp-owner-personalization`. The webhook maps each allowed phone number to its own real Owner profile before calling the governed gateway, so Ali and Sheikha no longer share one requester identity, user-memory scope or approval actor.
+- Each response receives only the last 12 messages from that Owner conversation and is instructed to match the responsible person's Arabic/English language, brevity and tone without inventing familiarity. This uses the normalized message history already protected by Owner-only RLS; it does not broaden agent tools or approval levels.
+- Obvious six-digit OTP values and password/secret/API-key assignments are redacted before conversational context reaches a model. The raw webhook event retention policy remains separate work; responsible users must still never send credentials to the bot.
+
 ### 2026-09-06 ai-lap returned and was audited
 
 - Read-only SSH audit succeeded. `ai-lap` is Ubuntu 22.04 with 31 GiB RAM and an RTX 3080 Ti with 12 GiB VRAM. Ollama 0.33.2 is active and remains correctly bound only to `127.0.0.1:11434`.
