@@ -111,6 +111,11 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-06, Asia/Muscat.
 
+### 2026-09-07 Owner system command center
+
+- The Owner Dashboard command map now begins with a live system overview sourced from the real database: active projects, open tasks, employees, pending approvals, active queue, and 24-hour agent failures. It subscribes to Realtime changes for agents, runs, and the `ai-lap` heartbeat, with a 15-second reconciliation poll as a resilience fallback.
+- `ai-lap` runner telemetry version 1.1 reports heartbeat age, round-trip ping, CPU load, used/total RAM, GPU utilization, and used/total VRAM. The Owner-only RLS row contains operational measurements only—never secrets, prompts, or document data. The command map retains per-agent live state, queue, tools, permissions, memory scopes, provider/model, latency, token usage, errors, controls, approvals, and retry.
+
 ### 2026-09-07 WhatsApp Intelligence V2
 
 - PR `#108` merged to `develop`; migration `202609070001_personal_reminders_memory_v2.sql` was applied to the linked Reid Supabase project and `reminder-dispatch`, `whatsapp-webhook`, and `llm-gateway` were deployed. Owner reminders now have an audited/RLS-protected lifecycle, separate phone/user ownership, Muscat-time parsing, cancellation/listing, bounded retries, and an authenticated minute scheduler. The shared scheduler secret exists only in Supabase and Cloudflare.

@@ -69,12 +69,17 @@ Deno.serve(async request => {
     const body = await request.json();
 
     if (body.action === 'heartbeat') {
+      const numberOrNull=(value:unknown)=>Number.isFinite(Number(value))?Number(value):null;
       const heartbeat = await admin.from('agent_runner_status').upsert({
         id: 'ai-lap',
         status: 'online',
         version: String(body.version || 'unknown').slice(0, 40),
         model: String(body.model || 'gemma4:12b').slice(0, 80),
         gpu: String(body.gpu || '').slice(0, 120) || null,
+        ping_ms:numberOrNull(body.pingMs),cpu_percent:numberOrNull(body.cpuPercent),
+        memory_used_gb:numberOrNull(body.memoryUsedGb),memory_total_gb:numberOrNull(body.memoryTotalGb),
+        gpu_utilization:numberOrNull(body.gpuUtilization),vram_used_mb:numberOrNull(body.vramUsedMb),
+        vram_total_mb:numberOrNull(body.vramTotalMb),
         last_seen_at: new Date().toISOString(),
       });
       if (heartbeat.error) throw heartbeat.error;

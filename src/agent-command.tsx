@@ -1,8 +1,9 @@
 import React from "react";
-import { Activity, Bot, BrainCircuit, CirclePause, Play, Power, RefreshCw, ShieldCheck } from "lucide-react";
+import { Activity, Bot, BrainCircuit, CirclePause, Cpu, Gauge, HardDrive, Play, Power, RefreshCw, Server, ShieldCheck, Wifi } from "lucide-react";
 import { loadAgentControl, runAgent, runAgentTool, setAgentState, decideRun, canRun, providerAccepts, agentTopology, operationalState, topologyFor } from "./agents";
-import type { AgentRow, ProviderRow, RunRow, Classification, AgentToolRow } from "./agents";
+import type { AgentRow, ProviderRow, RunRow, Classification, AgentToolRow, RunnerStatusRow, SystemMetrics } from "./agents";
 import { useSession } from "./shell";
+import { supabase } from "./supabase";
 
 type Lang = "ar" | "en";
 const copy = {
@@ -19,6 +20,8 @@ export function AgentCommand({ lang }: { lang: Lang }) {
   const [providers, setProviders] = React.useState<ProviderRow[]>([]);
   const [runs, setRuns] = React.useState<RunRow[]>([]);
   const [tools, setTools] = React.useState<AgentToolRow[]>([]);
+  const [runner, setRunner] = React.useState<RunnerStatusRow|null>(null);
+  const [metrics, setMetrics] = React.useState<SystemMetrics>({activeProjects:0,openTasks:0,employees:0,pendingApprovals:0,failedRuns:0,queuedRuns:0});
   const [selectedId, setSelectedId] = React.useState("ceo");
   const [prompt, setPrompt] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -26,7 +29,7 @@ export function AgentCommand({ lang }: { lang: Lang }) {
 
   const refresh = React.useCallback(async () => {
     const value = await loadAgentControl();
-    setAgents(value.agents); setProviders(value.providers); setRuns(value.runs); setTools(value.tools);
+    setAgents(value.agents); setProviders(value.providers); setRuns(value.runs); setTools(value.tools); setRunner(value.runner); setMetrics(value.metrics);
   }, []);
   React.useEffect(() => { void refresh(); }, [refresh]);
   React.useEffect(() => {
@@ -34,6 +37,16 @@ export function AgentCommand({ lang }: { lang: Lang }) {
     const timer = window.setInterval(() => void refresh(), 15000);
     return () => window.clearInterval(timer);
   }, [agents.length, refresh]);
+  React.useEffect(() => {
+    if(!supabase || !owner)return;
+    const client=supabase;
+    const channel=client.channel('owner-command-center')
+      .on('postgres_changes',{event:'*',schema:'public',table:'agent_runs'},()=>void refresh())
+      .on('postgres_changes',{event:'*',schema:'public',table:'agents'},()=>void refresh())
+      .on('postgres_changes',{event:'*',schema:'public',table:'agent_runner_status'},()=>void refresh())
+      .subscribe();
+    return ()=>{void client.removeChannel(channel)};
+  },[owner,refresh]);
 
   const byId = React.useMemo(() => new Map(agents.map(agent => [agent.id, agent])), [agents]);
   const providerOf = React.useCallback((agent: AgentRow) => providers.find(provider => provider.id === agent.provider_id), [providers]);
@@ -61,6 +74,7 @@ export function AgentCommand({ lang }: { lang: Lang }) {
 
   return (
     <section className="agent-command" aria-labelledby="agent-map-title">
+      {owner && <SystemOverview lang={lang} runner={runner} metrics={metrics} onRefresh={refresh} />}
       <header className="agent-map-header">
         <div><span className="eyebrow"><Activity size={15} /> {t.live}</span><h2 id="agent-map-title">{t.title}</h2><p>{t.subtitle}</p></div>
         <div className="agent-map-health" aria-label={t.live}>
@@ -90,6 +104,36 @@ export function AgentCommand({ lang }: { lang: Lang }) {
       <p className="agent-map-explanation">{t.explanation}</p>
     </section>
   );
+}
+
+function SystemOverview({lang,runner,metrics,onRefresh}:{lang:Lang;runner:RunnerStatusRow|null;metrics:SystemMetrics;onRefresh:()=>Promise<void>}) {
+  const age=runner?Math.max(0,Math.round((Date.now()-new Date(runner.last_seen_at).getTime())/1000)):null;
+  const online=!!runner && age!==null && age<90 && runner.status==='online';
+  const labels=lang==='ar'
+    ? {title:'مركز قيادة النظام',subtitle:'قياسات حقيقية تتحدث مباشرة من Reid و ai-lap',online:'متصل',offline:'غير متصل',last:'آخر نبضة',projects:'مشاريع فعالة',tasks:'مهام مفتوحة',people:'الموظفون',approvals:'موافقات معلقة',queue:'قيد التنفيذ',errors:'أخطاء 24س',cpu:'CPU',memory:'RAM',gpu:'GPU',vram:'VRAM',refresh:'تحديث الآن'}
+    : {title:'System command center',subtitle:'Live operational telemetry from Reid and ai-lap',online:'Online',offline:'Offline',last:'Last heartbeat',projects:'Active projects',tasks:'Open tasks',people:'Employees',approvals:'Pending approvals',queue:'In progress',errors:'24h errors',cpu:'CPU',memory:'RAM',gpu:'GPU',vram:'VRAM',refresh:'Refresh now'};
+  const cards=[[labels.projects,metrics.activeProjects],[labels.tasks,metrics.openTasks],[labels.people,metrics.employees],[labels.approvals,metrics.pendingApprovals],[labels.queue,metrics.queuedRuns],[labels.errors,metrics.failedRuns]];
+  const percentage=(used:number|null,total:number|null)=>used!==null&&total?Math.round(used/total*100):null;
+  const memory=percentage(runner?.memory_used_gb??null,runner?.memory_total_gb??null),vram=percentage(runner?.vram_used_mb??null,runner?.vram_total_mb??null);
+  return <section className="system-overview" aria-labelledby="system-overview-title">
+    <header><div><span className="eyebrow"><Gauge size={15}/>{online?labels.online:labels.offline}</span><h2 id="system-overview-title">{labels.title}</h2><p>{labels.subtitle}</p></div><button type="button" className="system-refresh" onClick={()=>void onRefresh()}><RefreshCw/>{labels.refresh}</button></header>
+    <div className="system-kpis">{cards.map(([label,value])=><article key={label}><small>{label}</small><b>{value}</b></article>)}</div>
+    <article className="runner-card" data-online={online}>
+      <div className="runner-identity"><span><Server/></span><div><small>ai-lap · {runner?.version||'—'}</small><h3>{runner?.model||'gemma4:12b'}</h3><p>{runner?.gpu||'NVIDIA GPU'}</p></div><strong><i/>{online?labels.online:labels.offline}</strong></div>
+      <div className="runner-stats">
+        <Telemetry icon={<Wifi/>} label="Ping" value={runner?.ping_ms!=null?`${runner.ping_ms} ms`:'—'} percent={runner?.ping_ms!=null?Math.max(0,100-Math.min(100,runner.ping_ms/4)):0}/>
+        <Telemetry icon={<Cpu/>} label={labels.cpu} value={runner?.cpu_percent!=null?`${runner.cpu_percent}%`:'—'} percent={runner?.cpu_percent||0}/>
+        <Telemetry icon={<HardDrive/>} label={labels.memory} value={runner?.memory_used_gb!=null?`${runner.memory_used_gb}/${runner.memory_total_gb} GB`:'—'} percent={memory||0}/>
+        <Telemetry icon={<Gauge/>} label={labels.gpu} value={runner?.gpu_utilization!=null?`${runner.gpu_utilization}%`:'—'} percent={runner?.gpu_utilization||0}/>
+        <Telemetry icon={<HardDrive/>} label={labels.vram} value={runner?.vram_used_mb!=null?`${runner.vram_used_mb}/${runner.vram_total_mb} MB`:'—'} percent={vram||0}/>
+      </div>
+      <footer>{labels.last}: {age===null?'—':`${age}s`}</footer>
+    </article>
+  </section>;
+}
+
+function Telemetry({icon,label,value,percent}:{icon:React.ReactNode;label:string;value:string;percent:number}) {
+  return <div className="telemetry"><span>{icon}{label}</span><b>{value}</b><div aria-hidden="true"><i style={{width:`${Math.max(0,Math.min(100,percent))}%`}}/></div></div>;
 }
 
 type Copy = typeof copy.ar;
