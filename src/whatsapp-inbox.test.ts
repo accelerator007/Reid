@@ -28,4 +28,11 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("ADMIN_NOTIFICATION_EMAILS");
     expect(webhook).toContain("owner_notification_failed");
   });
+
+  it("maps each WhatsApp Owner to separate context and redacts obvious secrets", () => {
+    expect(webhook).toContain("WHATSAPP_OWNER_EMAIL_MAP");
+    expect(webhook).toContain("personalizedInput");
+    expect(webhook).toContain("[OTP محذوف]");
+    expect(webhook).toContain("requesterId:identity.id");
+  });
 });

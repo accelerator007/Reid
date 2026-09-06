@@ -80,6 +80,35 @@ async function gateway(body: Record<string,unknown>) {
   return payload;
 }
 
+function ownerEmailFor(phone:string) {
+  const configured=Deno.env.get('WHATSAPP_OWNER_EMAIL_MAP') || '96896709444=alialajmi524@gmail.com,96892797586=sheikhaalmamari4@gmail.com';
+  return configured.split(',').map(value=>value.split('=').map(part=>part.trim())).find(([number])=>number?.replace(/\D/g,'')===phone.replace(/\D/g,''))?.[1] || null;
+}
+
+async function ownerIdentity(admin:any, phone:string) {
+  const email=ownerEmailFor(phone);
+  if(email) {
+    const profile=await admin.from('profiles').select('id,full_name,email').eq('email',email).maybeSingle();
+    if(profile.data) return profile.data as {id:string;full_name:string;email:string};
+  }
+  const id=Deno.env.get('WHATSAPP_OWNER_USER_ID') || '';
+  if(!id) throw new Error('whatsapp_owner_not_configured');
+  const profile=await admin.from('profiles').select('id,full_name,email').eq('id',id).single();
+  if(profile.error) throw profile.error;
+  return profile.data as {id:string;full_name:string;email:string};
+}
+
+const redactSecrets=(value:string)=>value
+  .replace(/\b\d{6}\b/g,'[OTP محذوف]')
+  .replace(/(password|كلمة المرور|secret|api[_ -]?key)\s*[:=]?\s*\S+/gi,'$1 [محذوف]')
+  .slice(0,1200);
+
+async function personalizedInput(admin:any, conversationId:string, identity:{full_name:string}, current:string) {
+  const history=await admin.from('whatsapp_messages').select('direction,body,created_at').eq('conversation_id',conversationId).not('body','is',null).order('created_at',{ascending:false}).limit(12);
+  const lines=(history.data || []).reverse().map((item:any)=>`${item.direction==='inbound'?'المسؤول':'ريّد'}: ${redactSecrets(String(item.body))}`);
+  return `أنت تتحدث عبر واتساب مع المسؤول ${identity.full_name}. تعرّف على لغته وأسلوبه من السياق الحديث وطابقهما باحترام وباختصار، مع بقاء الحقائق والصلاحيات ومستويات الموافقة حاكمة. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
+}
+
 function incomingMessages(payload: any) {
   return (payload?.entry || []).flatMap((entry: any) =>
     (entry?.changes || []).flatMap((change: any) => change?.value?.messages || []));
@@ -166,12 +195,13 @@ Deno.serve(async request => {
     await admin.from('whatsapp_messages').insert({ conversation_id:conversationId, meta_message_id:message.id, direction:'inbound', message_type:message.type||'unknown', body:incomingText, delivery_status:'received' });
     try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
     if(conversationResult.data.bot_mode!=='active') continue;
+    const identity=await ownerIdentity(admin,message.from);
     const buttonId = message?.interactive?.button_reply?.id || message?.button?.payload || '';
     if (/^(approve|reject):[0-9a-f-]{36}$/i.test(buttonId)) {
       const [decision,runId]=buttonId.split(':');
       const command=await admin.from('whatsapp_commands').select('id,status').eq('agent_run_id',runId).eq('sender_phone',message.from).single();
       if(command.error || command.data.status!=='pending_approval') { const replyBody='هذا القرار غير متاح أو سبق حسمه.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue; }
-      const result=await gateway({action:decision,runId});
+      const result=await gateway({action:decision,runId,requesterId:identity.id});
       await admin.from('whatsapp_commands').update({status:decision==='approve'?(result.status==='queued'?'queued':'completed'):'rejected',updated_at:new Date().toISOString()}).eq('id',command.data.id);
       const replyBody=decision==='reject'?'تم رفض الأمر.':result.output?`تم التنفيذ:\n${result.output}`:'تمت الموافقة ووُضع الأمر في التنفيذ. سأرسل النتيجة عند اكتماله.';
       await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
@@ -189,7 +219,8 @@ Deno.serve(async request => {
     const command=await admin.from('whatsapp_commands').insert({ sender_phone:message.from,message_id:message.id,command_text:text,status:'received' }).select('id').single();
     if(command.error) throw command.error;
     try {
-      const result=await gateway({action:'run',agentId:agentFor(text),input:text});
+      const input=await personalizedInput(admin,conversationId,identity,text);
+      const result=await gateway({action:'run',agentId:agentFor(text),input,requesterId:identity.id});
       const runId=result.run?.id || result.runId;
       if(result.status==='pending_approval') {
         await admin.from('whatsapp_commands').update({status:'pending_approval',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
