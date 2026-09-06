@@ -9,6 +9,9 @@ const agent = (over: Partial<AgentRow>): AgentRow => ({ id: 'hr', name: 'HR', st
 
 const localPrimaryMigration=readFileSync(new URL('../supabase/migrations/202609060005_ollama_primary_gemini_fallback.sql',import.meta.url),'utf8');
 const localRunner=readFileSync(new URL('../supabase/functions/ai-lap-runner/index.ts',import.meta.url),'utf8');
+const commandCenter=readFileSync(new URL('./agent-command.tsx',import.meta.url),'utf8');
+const telemetryMigration=readFileSync(new URL('../supabase/migrations/202609070002_owner_command_center_metrics.sql',import.meta.url),'utf8');
+const hostRunner=readFileSync(new URL('../infra/ai-lap/reid_agent_runner.py',import.meta.url),'utf8');
 
 describe('agent gateway policy', () => {
   it('orders classifications from public to restricted', () => {
@@ -79,5 +82,15 @@ describe('ai-lap primary runtime contract', () => {
     expect(localRunner).toContain('completeWithGeminiFallback');
     expect(localRunner).toContain('local_failed_gemini_fallback');
     expect(localRunner).toContain("fallback:'gemini'");
+  });
+
+  it('feeds live host telemetry into the Owner-only command center',()=>{
+    expect(hostRunner).toContain('nvidia-smi');
+    expect(hostRunner).toContain('memoryUsedGb');
+    expect(localRunner).toContain('gpu_utilization');
+    expect(telemetryMigration).toContain("agent_runner_status");
+    expect(telemetryMigration).toContain("supabase_realtime");
+    expect(commandCenter).toContain("owner && <SystemOverview");
+    expect(commandCenter).toContain("postgres_changes");
   });
 });
