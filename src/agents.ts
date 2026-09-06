@@ -15,7 +15,10 @@ export type AgentRow = {
   classification: Classification;
   enabled: boolean;
   disabled_reason: string | null;
+  permissions?: string[];
 };
+
+export type AgentToolRow = { id: string; name_ar: string; name_en: string; description: string; operation: 'read'|'create'|'update'|'publish'; approval_level: number; input_schema: { required?: string[] } };
 
 export type AgentTopology = {
   id: string;
@@ -109,6 +112,16 @@ export async function runAgent(agentId: string, input: string, classification: C
   return data as { runId: string; output: string; latencyMs: number; tokenUsage: number | null; status?: string };
 }
 
+export async function runAgentTool(agentId: string, toolName: string, args: Record<string, unknown>, classification: Classification) {
+  if (!supabase) throw new Error('supabase_unavailable');
+  const { data, error } = await supabase.functions.invoke('llm-gateway', {
+    body: { action: 'tool', agentId, toolName, arguments: args, classification },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data as { runId?: string; tool?: string; result?: unknown; status?: string };
+}
+
 export async function setAgentState(agentId: string, patch: { status?: string; enabled?: boolean; disabled_reason?: string | null }) {
   if (!supabase) throw new Error('supabase_unavailable');
   const { error } = await supabase.from('agents').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', agentId);
@@ -126,15 +139,17 @@ export async function decideRun(runId: string, decision: 'approved' | 'rejected'
 }
 
 export async function loadAgentControl() {
-  if (!supabase) return { agents: [] as AgentRow[], providers: [] as ProviderRow[], runs: [] as RunRow[] };
-  const [agents, providers, runs] = await Promise.all([
-    supabase.from('agents').select('id,name,status,model,host,approval_level,provider_id,classification,enabled,disabled_reason').order('name'),
+  if (!supabase) return { agents: [] as AgentRow[], providers: [] as ProviderRow[], runs: [] as RunRow[], tools: [] as AgentToolRow[] };
+  const [agents, providers, runs, tools] = await Promise.all([
+    supabase.from('agents').select('id,name,status,model,host,approval_level,provider_id,classification,enabled,disabled_reason,permissions').order('name'),
     supabase.from('llm_providers').select('id,name,kind,chat_model,max_classification,retains_data,enabled'),
     supabase.from('agent_runs').select('id,agent_id,provider_id,classification,run_state,approval_level,approval_state,latency_ms,token_usage,output_preview,error,created_at').order('created_at', { ascending: false }).limit(20),
+    supabase.from('agent_tools').select('id,name_ar,name_en,description,operation,approval_level,input_schema').eq('enabled', true).order('id'),
   ]);
   return {
     agents: (agents.data || []) as AgentRow[],
     providers: (providers.data || []) as ProviderRow[],
     runs: (runs.data || []) as RunRow[],
+    tools: (tools.data || []) as AgentToolRow[],
   };
 }

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('renders Reid bilingually and opens WhatsApp assistant', async ({ page }) => {
+test('renders Reid bilingually and offers human handoff only when requested', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('ريّد', { exact: true }).first()).toBeVisible();
   // Vite may inline the mark as a data URI or emit a hashed file depending on the
@@ -12,7 +12,9 @@ test('renders Reid bilingually and opens WhatsApp assistant', async ({ page }) =
     .toBeGreaterThan(0);
   await page.getByRole('button', { name: 'EN' }).click();
   await expect(page.getByText('Building the future intelligently.')).toBeVisible();
-  await page.getByRole('button', { name: 'Chat' }).click();
+  await page.getByRole('button', { name: 'Open Reid Assistant' }).click();
+  await expect(page.getByRole('link', { name: /WhatsApp/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Talk to a person' }).click();
   await expect(page.getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /^https:\/\/wa\.me\/96897308003/);
 });
 

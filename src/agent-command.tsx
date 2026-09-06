@@ -1,7 +1,7 @@
 import React from "react";
 import { Activity, Bot, BrainCircuit, CirclePause, Play, Power, RefreshCw, ShieldCheck } from "lucide-react";
-import { loadAgentControl, runAgent, setAgentState, decideRun, canRun, providerAccepts, agentTopology, operationalState, topologyFor } from "./agents";
-import type { AgentRow, ProviderRow, RunRow, Classification } from "./agents";
+import { loadAgentControl, runAgent, runAgentTool, setAgentState, decideRun, canRun, providerAccepts, agentTopology, operationalState, topologyFor } from "./agents";
+import type { AgentRow, ProviderRow, RunRow, Classification, AgentToolRow } from "./agents";
 import { useSession } from "./shell";
 
 type Lang = "ar" | "en";
@@ -18,6 +18,7 @@ export function AgentCommand({ lang }: { lang: Lang }) {
   const [agents, setAgents] = React.useState<AgentRow[]>([]);
   const [providers, setProviders] = React.useState<ProviderRow[]>([]);
   const [runs, setRuns] = React.useState<RunRow[]>([]);
+  const [tools, setTools] = React.useState<AgentToolRow[]>([]);
   const [selectedId, setSelectedId] = React.useState("ceo");
   const [prompt, setPrompt] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -25,7 +26,7 @@ export function AgentCommand({ lang }: { lang: Lang }) {
 
   const refresh = React.useCallback(async () => {
     const value = await loadAgentControl();
-    setAgents(value.agents); setProviders(value.providers); setRuns(value.runs);
+    setAgents(value.agents); setProviders(value.providers); setRuns(value.runs); setTools(value.tools);
   }, []);
   React.useEffect(() => { void refresh(); }, [refresh]);
   React.useEffect(() => {
@@ -84,7 +85,7 @@ export function AgentCommand({ lang }: { lang: Lang }) {
           })}
           {!agents.length && <div className="agent-map-loading"><RefreshCw className="spin" /> Loading</div>}
         </div>
-        {selected && <AgentInspector lang={lang} t={t} selected={selected} provider={providerOf(selected)} runs={selectedRuns} owner={owner} busy={busy} prompt={prompt} message={message} setPrompt={setPrompt} execute={execute} toggle={toggle} decide={decide} />}
+        {selected && <AgentInspector lang={lang} t={t} selected={selected} provider={providerOf(selected)} runs={selectedRuns} tools={tools.filter(tool => selected.permissions?.includes(tool.id))} owner={owner} busy={busy} prompt={prompt} message={message} setMessage={setMessage} setBusy={setBusy} refresh={refresh} setPrompt={setPrompt} execute={execute} toggle={toggle} decide={decide} />}
       </div>
       <p className="agent-map-explanation">{t.explanation}</p>
     </section>
@@ -92,14 +93,26 @@ export function AgentCommand({ lang }: { lang: Lang }) {
 }
 
 type Copy = typeof copy.ar;
-function AgentInspector({ lang, t, selected, provider, runs, owner, busy, prompt, message, setPrompt, execute, toggle, decide }: { lang: Lang; t: Copy; selected: AgentRow; provider: ProviderRow | undefined; runs: RunRow[]; owner: boolean; busy: boolean; prompt: string; message: string; setPrompt: (value: string) => void; execute: (agent: AgentRow) => Promise<void>; toggle: (agent: AgentRow, patch: { status?: string; enabled?: boolean }) => Promise<void>; decide: (run: RunRow, decision: "approved" | "rejected") => Promise<void> }) {
+function AgentInspector({ lang, t, selected, provider, runs, tools, owner, busy, prompt, message, setMessage, setBusy, refresh, setPrompt, execute, toggle, decide }: { lang: Lang; t: Copy; selected: AgentRow; provider: ProviderRow | undefined; runs: RunRow[]; tools: AgentToolRow[]; owner: boolean; busy: boolean; prompt: string; message: string; setMessage:(value:string)=>void; setBusy:(value:boolean)=>void; refresh:()=>Promise<void>; setPrompt: (value: string) => void; execute: (agent: AgentRow) => Promise<void>; toggle: (agent: AgentRow, patch: { status?: string; enabled?: boolean }) => Promise<void>; decide: (run: RunRow, decision: "approved" | "rejected") => Promise<void> }) {
   const node = topologyFor(selected.id)!; const state = operationalState(selected, provider, runs); const runnable = canRun(selected, provider); const latest = runs[0];
+  const invokeTool = async (tool: AgentToolRow) => {
+    let args: Record<string, unknown> = {};
+    if (tool.input_schema.required?.length) {
+      const raw = window.prompt(lang === 'ar' ? `أدخل بيانات JSON المطلوبة: ${tool.input_schema.required.join(', ')}` : `Enter required JSON: ${tool.input_schema.required.join(', ')}`, '{}');
+      if (raw === null) return;
+      try { args = JSON.parse(raw); } catch { setMessage(lang === 'ar' ? 'صيغة JSON غير صحيحة' : 'Invalid JSON'); return; }
+    }
+    setBusy(true); setMessage('');
+    try { const result = await runAgentTool(selected.id, tool.id, args, selected.classification); setMessage(result.status === 'pending_approval' ? t.approval : JSON.stringify(result.result ?? result)); }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'unknown_error'); }
+    finally { setBusy(false); await refresh(); }
+  };
   return <aside className="agent-inspector" data-state={state} aria-label={selected.name}>
     <header><div className="inspector-icon"><Bot /></div><div><small>{node.domain} · L{selected.approval_level}</small><h3>{selected.name}</h3><span className="state-pill"><i />{stateLabel(t, state)}</span></div></header>
     <p className="agent-purpose">{node.purpose[lang]}</p>
     {state === "blocked" && <p className="agent-warning"><ShieldCheck /> {selected.disabled_reason || t.blockedReason}</p>}
     <div className="agent-metrics"><span><small>{t.queue}</small><b>{runs.filter(run => ["queued", "running", "pending_approval"].includes(run.run_state)).length}</b></span><span><small>{t.tasks}</small><b>{runs.length}</b></span><span><small>{t.latency}</small><b>{latest?.latency_ms ? `${latest.latency_ms}ms` : "—"}</b></span><span><small>{t.tokens}</small><b>{latest?.token_usage ?? "—"}</b></span></div>
-    <section><h4>{t.tools}</h4><div className="chip-row">{node.tools.map(tool => <span key={tool}>{tool}</span>)}</div></section>
+    <section><h4>{t.tools}</h4><div className="chip-row">{tools.map(tool => <button type="button" key={tool.id} disabled={busy || !runnable} title={`${tool.description} · L${tool.approval_level}`} onClick={() => void invokeTool(tool)}>{lang === 'ar' ? tool.name_ar : tool.name_en} · L{tool.approval_level}</button>)}</div></section>
     <section><h4>{t.memory}</h4><div className="chip-row memory">{node.memories.map(memory => <span key={memory}>{memory}</span>)}</div></section>
     <dl><div><dt>{t.provider}</dt><dd>{provider?.name || "—"}<small>{provider?.chat_model || selected.model}</small></dd></div><div><dt>{t.permissions}</dt><dd>{selected.classification} · L{selected.approval_level}<small>{provider && providerAccepts(provider, selected.classification) ? "clearance OK" : "clearance denied"}</small></dd></div></dl>
     <section className="manual-run"><h4>{t.run}</h4><textarea value={prompt} onChange={event => setPrompt(event.target.value)} placeholder={t.prompt} rows={3} /><button className="primary" type="button" disabled={busy || !runnable || !prompt.trim()} onClick={() => void execute(selected)}><Play /> {busy ? t.running : t.run}</button></section>

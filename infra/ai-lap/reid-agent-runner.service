@@ -1,0 +1,19 @@
+[Unit]
+Description=Reid outbound local agent runner
+After=network-online.target reid-ollama-adapter.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/reid-ai/reid_agent_runner.py
+EnvironmentFile=%h/.config/reid-ai/runner.env
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+MemoryMax=512M
+TasksMax=32
+
+[Install]
+WantedBy=default.target

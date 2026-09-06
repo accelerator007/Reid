@@ -22,6 +22,8 @@ export type Page =
   | "crm"
   | "dashboard"
   | "privacy"
+  | "terms"
+  | "data-deletion"
   | "not-found";
 
 export type Route = {
@@ -62,6 +64,8 @@ export const routes: readonly Route[] = [
   { page: "login", path: "/login" },
   { page: "apply", path: "/apply" },
   { page: "privacy", path: "/privacy" },
+  { page: "terms", path: "/terms" },
+  { page: "data-deletion", path: "/data-deletion" },
   // A guest has a profile but no workspace: the profile route admits everyone
   // with a session so an approved applicant can complete onboarding.
   { page: "profile", path: "/profile", authenticated: true, allow: [...staff, "guest"] },
