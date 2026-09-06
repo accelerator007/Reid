@@ -97,6 +97,26 @@ function deliveryStatuses(payload:any) {
   return (payload?.entry || []).flatMap((entry:any)=>(entry?.changes || []).flatMap((change:any)=>change?.value?.statuses || []));
 }
 
+const escapeHtml = (value:string) => value.replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]!));
+
+async function notifyOwners(sender:string, name:string|null, message:string|null) {
+  const key=Deno.env.get('RESEND_API_KEY');
+  if(!key) return;
+  const recipients=(Deno.env.get('ADMIN_NOTIFICATION_EMAILS') || 'alialajmi524@gmail.com,sheikhaalmamari4@gmail.com').split(',').map(value=>value.trim()).filter(Boolean);
+  if(!recipients.length) return;
+  const safeName=escapeHtml(name || `+${sender}`);
+  const safeText=escapeHtml((message || 'رسالة غير نصية').slice(0,500));
+  const response=await fetch('https://api.resend.com/emails',{
+    method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},
+    body:JSON.stringify({
+      from:Deno.env.get('REPORT_FROM_EMAIL') || 'Reid <reports@reidpro.com>',to:recipients,
+      subject:`رسالة واتساب جديدة من ${name || `+${sender}`}`,
+      html:`<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><h2>وصلت رسالة جديدة إلى ريّد</h2><p><strong>المرسل:</strong> ${safeName}<br><strong>الرقم:</strong> +${escapeHtml(sender)}</p><blockquote style="border-right:4px solid #6842ae;padding:8px 14px;margin:16px 0">${safeText}</blockquote><p><a href="https://reidpro.com/dashboard">فتح صندوق محادثات المالك</a></p></div>`,
+    }),
+  });
+  if(!response.ok) throw new Error(`owner_email_${response.status}`);
+}
+
 Deno.serve(async request => {
   if (request.method === 'GET') {
     const url = new URL(request.url);
@@ -144,6 +164,7 @@ Deno.serve(async request => {
     const conversationId=conversationResult.data.id;
     const incomingText=message?.text?.body?.trim() || message?.interactive?.button_reply?.title || null;
     await admin.from('whatsapp_messages').insert({ conversation_id:conversationId, meta_message_id:message.id, direction:'inbound', message_type:message.type||'unknown', body:incomingText, delivery_status:'received' });
+    try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
     if(conversationResult.data.bot_mode!=='active') continue;
     const buttonId = message?.interactive?.button_reply?.id || message?.button?.payload || '';
     if (/^(approve|reject):[0-9a-f-]{36}$/i.test(buttonId)) {

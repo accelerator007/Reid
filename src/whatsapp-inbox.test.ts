@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 const component = readFileSync(new URL("./whatsapp-inbox.tsx", import.meta.url), "utf8");
 const endpoint = readFileSync(new URL("../supabase/functions/whatsapp-inbox/index.ts", import.meta.url), "utf8");
+const webhook = readFileSync(new URL("../supabase/functions/whatsapp-webhook/index.ts", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../supabase/migrations/202609060004_whatsapp_owner_inbox.sql", import.meta.url), "utf8");
 
 describe("WhatsApp Owner inbox contract", () => {
@@ -21,5 +22,10 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(migration).toContain("whatsapp_messages_owner_read");
     expect(migration).toContain("enable row level security");
   });
-});
 
+  it("notifies the responsible Owners without breaking WhatsApp delivery", () => {
+    expect(webhook).toContain("notifyOwners");
+    expect(webhook).toContain("ADMIN_NOTIFICATION_EMAILS");
+    expect(webhook).toContain("owner_notification_failed");
+  });
+});

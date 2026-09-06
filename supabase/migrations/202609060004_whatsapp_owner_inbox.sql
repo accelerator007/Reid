@@ -34,11 +34,28 @@ create policy whatsapp_messages_owner_read on public.whatsapp_messages
 revoke all on public.whatsapp_conversations, public.whatsapp_messages from anon, authenticated;
 grant select on public.whatsapp_conversations, public.whatsapp_messages to authenticated;
 
+create function public.audit_whatsapp_inbox() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare row_id text; metadata jsonb; snapshot jsonb;
+begin
+  if tg_op = 'DELETE' then snapshot := to_jsonb(old); else snapshot := to_jsonb(new); end if;
+  row_id := snapshot ->> 'id';
+  metadata := case
+    when tg_table_name = 'whatsapp_conversations' then jsonb_build_object(
+      'bot_mode', snapshot ->> 'bot_mode', 'assigned_to', snapshot ->> 'assigned_to')
+    else jsonb_build_object(
+      'direction', snapshot ->> 'direction', 'delivery_status', snapshot ->> 'delivery_status')
+  end;
+  insert into public.audit_logs(actor_id, action, table_name, record_id, new_data)
+  values (auth.uid(), tg_op, tg_table_name, row_id, metadata);
+  if tg_op = 'DELETE' then return old; else return new; end if;
+end $$;
+
+revoke execute on function public.audit_whatsapp_inbox() from public, anon, authenticated;
 create trigger audit_whatsapp_conversations after insert or update or delete on public.whatsapp_conversations
-for each row execute function public.audit_row();
+for each row execute function public.audit_whatsapp_inbox();
 create trigger audit_whatsapp_messages after insert or update or delete on public.whatsapp_messages
-for each row execute function public.audit_row();
+for each row execute function public.audit_whatsapp_inbox();
 
 alter publication supabase_realtime add table public.whatsapp_conversations;
 alter publication supabase_realtime add table public.whatsapp_messages;
-
