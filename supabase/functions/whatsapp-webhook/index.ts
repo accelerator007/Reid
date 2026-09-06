@@ -60,7 +60,7 @@ const agentFor = (text: string) => {
   const value=text.toLowerCase();
   const routes: Array<[string,string[]]> = [
     ['hr',['hr','الموارد','موظف','سيرة','cv']], ['finance',['finance','مالية','ميزانية']],
-    ['sales',['sales','مبيعات','crm','عميل','صفقة']], ['operations',['operations','عمليات','مشروع','مهمة']],
+    ['sales',['sales','مبيعات','crm','عميل','صفقة']], ['operations',['operations','عمليات','مشروع','مهمة','ذكرني','تذكير','موعد','خطط']],
     ['content',['content','محتوى','انشر','منشور']], ['marketing',['marketing','تسويق']],
     ['analytics',['analytics','تحليل','تقرير']], ['knowledge',['knowledge','معرفة','مستند','ابحث']],
     ['support',['support','دعم','شكوى']], ['competitor',['competitor','منافس']],
@@ -106,7 +106,17 @@ const redactSecrets=(value:string)=>value
 async function personalizedInput(admin:any, conversationId:string, identity:{full_name:string}, current:string) {
   const history=await admin.from('whatsapp_messages').select('direction,body,created_at').eq('conversation_id',conversationId).not('body','is',null).order('created_at',{ascending:false}).limit(12);
   const lines=(history.data || []).reverse().map((item:any)=>`${item.direction==='inbound'?'المسؤول':'ريّد'}: ${redactSecrets(String(item.body))}`);
-  return `أنت تتحدث عبر واتساب مع المسؤول ${identity.full_name}. تعرّف على لغته وأسلوبه من السياق الحديث وطابقهما باحترام وباختصار، مع بقاء الحقائق والصلاحيات ومستويات الموافقة حاكمة. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
+  return `أنت مساعد ${identity.full_name} الشخصي ورئيس مكتبه الرقمي، وفي الوقت نفسه مختص معتمد في نظام شركة ريّد. ساعده في الصياغة والتخطيط وترتيب الأولويات والتذكيرات والمواعيد، وعند ارتباط الطلب بالشركة استخدم سياق ريّد والوكيل والأدوات المصرح بها. تعرّف على لغته وأسلوبه من ذاكرة المستخدم والسياق الحديث وطابقهما باحترام وباختصار. لا تتجاوز L0-L4، ولا تنفذ إجراءً أو تدّعي إنشاء تذكير أو مهمة إلا بعد نتيجة أداة فعلية. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
+}
+
+async function rememberOwnerMessage(admin:any, identity:{id:string}, messageId:string, text:string) {
+  const safe=redactSecrets(text).trim();
+  if(safe.length < 4 || /^(مساعدة|help|menu|القائمة)$/i.test(safe)) return;
+  const stored=await admin.from('memories').insert({
+    scope:'user',scope_id:identity.id,content:safe,title:`WhatsApp ${messageId.slice(-12)}`,
+    classification:'internal',created_by:identity.id,
+  });
+  if(stored.error) console.error('owner_memory_failed',stored.error.code || 'unknown');
 }
 
 function incomingMessages(payload: any) {
@@ -196,6 +206,7 @@ Deno.serve(async request => {
     try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
     if(conversationResult.data.bot_mode!=='active') continue;
     const identity=await ownerIdentity(admin,message.from);
+    if(incomingText) await rememberOwnerMessage(admin,identity,message.id,incomingText);
     const buttonId = message?.interactive?.button_reply?.id || message?.button?.payload || '';
     if (/^(approve|reject):[0-9a-f-]{36}$/i.test(buttonId)) {
       const [decision,runId]=buttonId.split(':');

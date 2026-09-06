@@ -128,6 +128,12 @@ Last verified: 2026-09-06, Asia/Muscat.
 - Each response receives only the last 12 messages from that Owner conversation and is instructed to match the responsible person's Arabic/English language, brevity and tone without inventing familiarity. This uses the normalized message history already protected by Owner-only RLS; it does not broaden agent tools or approval levels.
 - Obvious six-digit OTP values and password/secret/API-key assignments are redacted before conversational context reaches a model. The raw webhook event retention policy remains separate work; responsible users must still never send credentials to the bot.
 
+### 2026-09-06 WhatsApp personal chief of staff
+
+- Work is active on `feature/whatsapp-personal-chief-of-staff`. WhatsApp presents one coherent assistant per responsible Owner: a personal chief of staff for writing, planning and priorities, plus a governed Reid company specialist that routes company work to the correct agent and tool boundary.
+- Every eligible Owner message is redacted for obvious OTP/password/secret/API-key patterns and persisted as an `internal`, `user`-scoped memory owned by the mapped profile. Ali and Sheikha therefore build separate durable preferences and context in addition to the 12-message conversational window.
+- Reminder/task language routes to Operations, but the assistant is forbidden from claiming a task or reminder was created without a successful governed tool result. Existing L0-L4 approvals, provider classification and audit rules remain authoritative.
+
 ### 2026-09-06 ai-lap returned and was audited
 
 - Read-only SSH audit succeeded. `ai-lap` is Ubuntu 22.04 with 31 GiB RAM and an RTX 3080 Ti with 12 GiB VRAM. Ollama 0.33.2 is active and remains correctly bound only to `127.0.0.1:11434`.

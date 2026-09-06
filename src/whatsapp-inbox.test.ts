@@ -35,4 +35,11 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("[OTP محذوف]");
     expect(webhook).toContain("requesterId:identity.id");
   });
+
+  it("acts as a personal chief of staff and persists isolated user memory", () => {
+    expect(webhook).toContain("رئيس مكتبه الرقمي");
+    expect(webhook).toContain("rememberOwnerMessage");
+    expect(webhook).toContain("scope:'user'");
+    expect(webhook).toContain("scope_id:identity.id");
+  });
 });
