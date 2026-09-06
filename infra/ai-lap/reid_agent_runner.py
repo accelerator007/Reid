@@ -3,7 +3,7 @@ import json, os, subprocess, time, urllib.request
 
 RUNNER_URL=os.environ['REID_RUNNER_URL']; RUNNER_TOKEN=os.environ['REID_RUNNER_TOKEN']; ORIGIN_TOKEN=os.environ['REID_ORIGIN_TOKEN']
 ADAPTER=os.environ.get('REID_ADAPTER_URL','http://127.0.0.1:11436')
-VERSION='1.1.0'; last_heartbeat=0.0; last_ping=None
+VERSION='1.1.1'; last_heartbeat=0.0; last_ping=None
 
 def telemetry():
     result={}
@@ -31,7 +31,7 @@ def adapter(path,payload): return post(ADAPTER+path,payload,'x-reid-origin-token
 
 while True:
   try:
-    if time.monotonic()-last_heartbeat > 30:
+    if time.monotonic()-last_heartbeat > 5:
       ping_started=time.monotonic()
       payload={'action':'heartbeat','version':VERSION,'model':'gemma4:12b','gpu':'NVIDIA RTX 3080 Ti 12GB',**telemetry()}
       if last_ping is not None: payload['pingMs']=last_ping

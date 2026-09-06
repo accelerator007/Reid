@@ -34,7 +34,7 @@ export function AgentCommand({ lang }: { lang: Lang }) {
   React.useEffect(() => { void refresh(); }, [refresh]);
   React.useEffect(() => {
     if (!agents.length) return;
-    const timer = window.setInterval(() => void refresh(), 15000);
+    const timer = window.setInterval(() => void refresh(), 5000);
     return () => window.clearInterval(timer);
   }, [agents.length, refresh]);
   React.useEffect(() => {
