@@ -223,6 +223,18 @@ Deno.serve(async request => {
       const replyBody='أرسل أمرًا نصيًا. الأوامر الحساسة ستنتظر موافقة بشرية داخل لوحة ريّد.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       continue;
     }
+    const plainDecision=/^(موافقة|وافق|approve|approved|رفض|ارفض|reject)$/i.exec(text)?.[1];
+    if(plainDecision) {
+      const pending=await admin.from('whatsapp_commands').select('id,agent_run_id,command_text,status').eq('sender_phone',message.from).eq('status','pending_approval').order('created_at',{ascending:false}).limit(1).maybeSingle();
+      if(!pending.data?.agent_run_id) {
+        const replyBody='لا يوجد أمر معلّق ينتظر قرارك.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
+      }
+      const decision=/^(موافقة|وافق|approve|approved)$/i.test(plainDecision)?'approve':'reject';
+      const result=await gateway({action:decision,runId:pending.data.agent_run_id,requesterId:identity.id});
+      await admin.from('whatsapp_commands').update({status:decision==='approve'?(result.status==='queued'?'queued':'completed'):'rejected',updated_at:new Date().toISOString()}).eq('id',pending.data.id);
+      const replyBody=decision==='reject'?`تم رفض الأمر: ${pending.data.command_text}`:result.output?`تم تنفيذ الأمر: ${pending.data.command_text}\n\n${result.output}`:`تمت الموافقة على الأمر: ${pending.data.command_text}\nوُضع في التنفيذ وسأرسل النتيجة عند اكتماله.`;
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
+    }
     if (/^(مساعدة|help|menu|القائمة)$/i.test(text)) {
       const replyBody='أرسل طلبك بشكل طبيعي، أو ابدأ باسم الوكيل مثل: عمليات، مبيعات، HR، مالية، محتوى، معرفة. أوامر L2–L4 ستظهر معها أزرار موافقة ورفض.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       continue;

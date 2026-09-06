@@ -133,6 +133,7 @@ Last verified: 2026-09-06, Asia/Muscat.
 - Work is active on `feature/whatsapp-personal-chief-of-staff`. WhatsApp presents one coherent assistant per responsible Owner: a personal chief of staff for writing, planning and priorities, plus a governed Reid company specialist that routes company work to the correct agent and tool boundary.
 - Every eligible Owner message is redacted for obvious OTP/password/secret/API-key patterns and persisted as an `internal`, `user`-scoped memory owned by the mapped profile. Ali and Sheikha therefore build separate durable preferences and context in addition to the 12-message conversational window.
 - Reminder/task language routes to Operations, but the assistant is forbidden from claiming a task or reminder was created without a successful governed tool result. Existing L0-L4 approvals, provider classification and audit rules remain authoritative.
+- Plain `موافقة`/`رفض` (and English equivalents) now decides the newest pending command for that same Owner phone, matching the existing reply-button path. A typed decision with no pending command gets an explicit refusal instead of being misrouted as a new L3 request.
 
 ### 2026-09-06 ai-lap returned and was audited
 

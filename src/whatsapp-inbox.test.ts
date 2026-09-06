@@ -42,4 +42,10 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("scope:'user'");
     expect(webhook).toContain("scope_id:identity.id");
   });
+
+  it("accepts typed Arabic approval and rejection for the latest pending command", () => {
+    expect(webhook).toContain("plainDecision");
+    expect(webhook).toContain("لا يوجد أمر معلّق");
+    expect(webhook).toContain("تمت الموافقة على الأمر");
+  });
 });
