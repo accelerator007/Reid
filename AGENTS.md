@@ -598,6 +598,15 @@ Work is active on `claude/reid-system-development-bcaz9n`, branched from `develo
 
 A workflow is done only when its happy path, denial path, validation errors, RBAC/RLS, audit log, notification, responsive UI, and automated tests pass in Staging; Production is deployed through a protected PR; and this file is updated with exact evidence and remaining limitations.
 
+### 2026-09-06 WhatsApp real-number activation and permanent credentials
+
+- Meta registered Reid's real Cloud API number `+968 9730 8003` under phone-number ID `1385771684612322` and WABA `1635487314831752`; Graph API verification returns verified name `Reid`. The former consumer WhatsApp registration was removed by the Owner before the Cloud API registration.
+- Created the Admin system user `Reid API` (`61594205189607`), assigned full access to the Reid app and both Reid WABAs, and generated a non-expiring system-user token with only `whatsapp_business_manage_events`, `whatsapp_business_management`, and `whatsapp_business_messaging`.
+- Stored the permanent access token, Meta App Secret, phone-number ID, registration PIN, webhook verification token and Owner allow-list only in Supabase secrets. No secret value is committed. A live authenticated Graph API lookup of the registered number passed.
+- Added public bilingual `/terms` and `/data-deletion` routes, linked them in the footer and sitemap, and retained `/privacy`. Meta is configured for `reidpro.com`; the legal URL save/publish gate cannot complete until those new routes reach Production.
+- PR `#96` passed Cloudflare Staging, both CI/RLS jobs and authenticated Chromium, then merged to `develop` as `56db5ead`. The resulting Production PR is the existing protected PR `#85`; all checks pass and review is requested from `sheikhaalmamari4-cyber`.
+- Remaining human/Production gates: the required reviewer must approve PR `#85`; after merge, verify the three legal URLs on `reidpro.com`, save/publish the Meta app (business verification may be required), and perform a real two-device send/receive test from a WhatsApp number other than the Cloud API number. Never claim end-to-end messaging passed until that external-device test succeeds.
+
 ### 2026-09-06 WhatsApp governed agent dispatch
 
 - Meta app `Reid` already has the Supabase `whatsapp-webhook` callback verified and the `messages` webhook field subscribed. The remote Supabase project already holds the verify token, Owner phone allow-list and phone-number ID; values remain secret and browser-inaccessible.
