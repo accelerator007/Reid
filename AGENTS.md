@@ -109,7 +109,15 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 ## Implemented and verified
 
-Last verified: 2026-09-05, Asia/Muscat.
+Last verified: 2026-09-06, Asia/Muscat.
+
+### 2026-09-06 WhatsApp Owner team inbox
+
+- Work is active on `feature/whatsapp-owner-inbox`. The Owner Dashboard now includes a bilingual, responsive team inbox backed by normalized conversations and messages, Realtime refresh, unread counts, delivery state, assignment to an Owner, and per-conversation `active`/`human` bot handoff.
+- Manual replies use the existing permanent WhatsApp Cloud API token only inside the new `whatsapp-inbox` Edge Function. The function verifies the Supabase session and Owner role, never exposes the Meta token to the browser, and enforces WhatsApp's 24-hour free-form reply window server-side.
+- The webhook now records authorized inbound messages, bot replies and Meta delivery updates in the inbox. When a conversation is in human mode the webhook records the message but does not dispatch an agent, preventing simultaneous human/bot replies.
+- Meta Developer settings were inspected for app `961651950294892`: the account exposes the normal `whatsapp_business_management` and `whatsapp_business_messaging` permissions, but no Groups API permission or group-management surface. The registered Cloud API number therefore cannot be added to an ordinary existing WhatsApp group. A separate bridge requires a second WhatsApp number and must remain isolated from the production Cloud API number.
+- Local verification passes 139/139 Vitest checks, the TypeScript/Vite Production build, schema lint, migration dry run listing only `202609060004`, and `git diff --check`. Remote migration, function/webhook deployment, authenticated Owner Staging test, and a real manual reply remain release gates.
 
 ### 2026-09-06 ai-lap returned and was audited
 

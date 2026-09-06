@@ -17,6 +17,7 @@ import type { Page } from "./routes";
 import { EmployeeWorkspace } from "./employee";
 import { ProjectWorkspace } from "./projects";
 import { AgentCommand } from "./agent-command";
+import { WhatsAppInbox } from "./whatsapp-inbox";
 import { ResearchWorkspace } from "./research";
 import { CrmWorkspace } from "./crm";
 import { Building2, FolderKanban, FlaskConical, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X } from "lucide-react";
@@ -33,6 +34,7 @@ import "./workflow.css";
 import "./agents.css";
 import "./crm.css";
 import "./workspace-shell.css";
+import "./whatsapp-inbox.css";
 
 type Lang = "ar" | "en";
 type ProfileData = {
@@ -1189,6 +1191,7 @@ function Dashboard({
         </div>
       )}
       <AgentCommand lang={lang} />
+      <WhatsAppInbox lang={lang} />
     </main>
   );
 }
