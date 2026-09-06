@@ -1587,6 +1587,26 @@ function Chrome({ session }: { session: Session | null }) {
           </p>
         </main>
       )}{" "}
+      {page === "terms" && (
+        <main className="legal">
+          <h1>{lang === "ar" ? "شروط الاستخدام" : "Terms of Service"}</h1>
+          <p>
+            {lang === "ar"
+              ? "باستخدام خدمات ريّد، توافق على استخدامها بصورة قانونية وعدم إساءة استخدام الحسابات أو الوكلاء أو بيانات الشركة. تخضع الإجراءات الحساسة لصلاحيات المستخدم والموافقة البشرية، ويجوز لريّد تعليق الوصول عند مخالفة هذه الشروط."
+              : "By using Reid services, you agree to use them lawfully and not misuse accounts, agents, or company data. Sensitive actions remain subject to role permissions and human approval, and Reid may suspend access for violations."}
+          </p>
+        </main>
+      )}{" "}
+      {page === "data-deletion" && (
+        <main className="legal">
+          <h1>{lang === "ar" ? "طلب حذف البيانات" : "Data Deletion Request"}</h1>
+          <p>
+            {lang === "ar"
+              ? "لطلب حذف بياناتك المرتبطة بريّد أو WhatsApp، أرسل رسالة من رقمك المسجّل إلى حساب ريّد على WhatsApp واكتب «حذف بياناتي»، أو راسل reid.contact.us@gmail.com. سنؤكد هويتك ونحذف البيانات غير الملزمين بالاحتفاظ بها قانونيًا."
+              : "To request deletion of data connected to Reid or WhatsApp, message Reid from your registered WhatsApp number with “Delete my data”, or email reid.contact.us@gmail.com. We will verify your identity and delete data we are not legally required to retain."}
+          </p>
+        </main>
+      )}{" "}
       {page === "not-found" && (
         <main className="legal">
           <h1>404</h1>
@@ -1599,6 +1619,12 @@ function Chrome({ session }: { session: Session | null }) {
       <footer>
         <button className="text-link" onClick={() => go("privacy")}>
           {lang === "ar" ? "الخصوصية" : "Privacy"}
+        </button>
+        <button className="text-link" onClick={() => go("terms")}>
+          {lang === "ar" ? "الشروط" : "Terms"}
+        </button>
+        <button className="text-link" onClick={() => go("data-deletion")}>
+          {lang === "ar" ? "حذف البيانات" : "Data deletion"}
         </button>
         <b>{t.brand}</b>
         <small>© 2026 · reidpro.com</small>
