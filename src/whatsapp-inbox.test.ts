@@ -63,4 +63,12 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(gateway).toContain("'marketing', 'content', 'competitor', 'knowledge'");
     expect(gateway).toContain("groundingChunks");
   });
+
+  it("renders optional model-selected next steps as WhatsApp buttons", () => {
+    expect(webhook).toContain("sendChoices");
+    expect(webhook).toContain("assistantReply");
+    expect(webhook).toContain("خيارات\\s*");
+    expect(webhook).toContain("slice(0, 3)");
+    expect(webhook).toContain("slice(0, 20)");
+  });
 });
