@@ -47,7 +47,7 @@ begin
       'direction', snapshot ->> 'direction', 'delivery_status', snapshot ->> 'delivery_status')
   end;
   insert into public.audit_logs(actor_id, action, table_name, record_id, new_data)
-  values (auth.uid(), tg_op, tg_table_name, row_id, metadata);
+  values (null, tg_op, tg_table_name, row_id, metadata);
   if tg_op = 'DELETE' then return old; else return new; end if;
 end $$;
 
