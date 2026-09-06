@@ -10,6 +10,8 @@ CONTEXT.md
 
 # Build and local environment
 node_modules/
+__pycache__/
+*.py[cod]
 .vite/
 dist/
 coverage/
