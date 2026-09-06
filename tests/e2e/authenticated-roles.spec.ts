@@ -169,6 +169,7 @@ test.describe('authenticated employee role journeys', () => {
 
   test('Owner exercises every live company tool family and approval gate', async () => {
     test.skip(process.env.LIVE_TOOL_E2E !== '1', 'Live tool verification runs after deployment.');
+    test.setTimeout(180_000);
     const caller = createClient(url!, publishableKey!, { auth: { persistSession: false } });
     const signed = await caller.auth.signInWithPassword({ email: users.owner.email, password });
     if (signed.error) throw signed.error;
