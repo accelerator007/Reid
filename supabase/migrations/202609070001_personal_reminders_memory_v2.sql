@@ -16,10 +16,10 @@ create table public.personal_reminders (
 create index personal_reminders_due on public.personal_reminders(status,due_at);
 alter table public.personal_reminders enable row level security;
 create policy personal_reminders_owner_read on public.personal_reminders for select to authenticated
-using(owner_id=auth.uid() or public.has_any_role(array['owner','super_admin']::public.app_role[]));
+using(owner_id=auth.uid() or public.is_admin());
 create policy personal_reminders_owner_write on public.personal_reminders for all to authenticated
-using(owner_id=auth.uid() or public.has_any_role(array['owner','super_admin']::public.app_role[]))
-with check(owner_id=auth.uid() or public.has_any_role(array['owner','super_admin']::public.app_role[]));
+using(owner_id=auth.uid() or public.is_admin())
+with check(owner_id=auth.uid() or public.is_admin());
 create trigger audit_personal_reminders after insert or update or delete on public.personal_reminders
 for each row execute function public.audit_row();
 
