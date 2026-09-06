@@ -121,7 +121,8 @@ test.describe('authenticated employee role journeys', () => {
       if (run.run_state === 'succeeded' || run.run_state === 'failed') break;
       await new Promise(resolve => setTimeout(resolve, 2_000));
     }
-    expect(run?.provider_id).toBe(process.env.EXPECTED_AGENT_PROVIDER || 'ollama');
+    if (process.env.EXPECTED_AGENT_PROVIDER) expect(run?.provider_id).toBe(process.env.EXPECTED_AGENT_PROVIDER);
+    else expect(['ollama', 'gemini']).toContain(run?.provider_id);
     expect(run?.classification).toBe('internal');
     expect(run?.run_state).toBe('succeeded');
     expect(run?.latency_ms).toBeGreaterThan(0);

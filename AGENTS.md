@@ -606,6 +606,7 @@ A workflow is done only when its happy path, denial path, validation errors, RBA
 - Replaced the tunnel with an outbound HTTPS runner. `ai-lap` claims queued jobs from the private `ai-lap-runner` Edge Function, executes locally, writes the bounded result/768-vector memory back, and emits a 30-second heartbeat. A 15-minute stale-job recovery prevents permanently stranded work.
 - Migration `202609060003` is applied: Ollama is enabled with exact model `gemma4:12b`, all eleven agents use it as primary, and Gemini remains enabled/preserved for deliberate Owner-controlled fallback. Sensitive data never falls back silently.
 - The runner credential was generated locally and stored as a Supabase secret without committing or printing it. `ai-lap-runner` and the queue-aware `llm-gateway` are deployed.
+- Availability routing uses a 90-second heartbeat: fresh `ai-lap` routes to Ollama; a missing/stale heartbeat routes to the already Owner-authorized Gemini provider only after the same classification-ceiling check. Every run persists its actual provider, and a classification that the fallback is not cleared for is refused rather than leaked.
 - Verification passed locally: 131/131 application checks, Production build, 3/3 adapter tests, Python compilation and migration deployment. Final end-to-end model completion is **not yet passed** because `ai-lap` became unreachable over SSH immediately before the runner service installation; agents will queue safely until the host returns.
 
 ### 2026-09-06 governed agent tools and scoped memory V1

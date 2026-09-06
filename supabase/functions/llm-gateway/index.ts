@@ -389,8 +389,25 @@ Deno.serve(async (request) => {
       .maybeSingle();
     if (providerError) throw providerError;
     if (!providerRow) throw new Error('provider_not_found');
-    const provider = providerRow as Provider;
+    let provider = providerRow as Provider;
     if (!provider.enabled) throw new Error('provider_disabled');
+
+    // Ollama is primary, but ai-lap may be powered off or lose Internet. A
+    // fresh heartbeat selects local execution; otherwise use the explicitly
+    // Owner-authorized Gemini provider whose clearance is still enforced below.
+    // This never silently crosses a classification boundary.
+    if (provider.kind === 'local' && action !== 'tool') {
+      const heartbeat = await admin.from('agent_runner_status').select('last_seen_at,status').eq('id','ai-lap').maybeSingle();
+      const fresh = !heartbeat.error && heartbeat.data?.status === 'online'
+        && Date.now() - new Date(heartbeat.data.last_seen_at).getTime() < 90_000;
+      if (!fresh) {
+        const fallback = await admin.from('llm_providers')
+          .select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day')
+          .eq('id','gemini').eq('enabled',true).maybeSingle();
+        if (fallback.error || !fallback.data) throw new Error('local_provider_offline');
+        provider = fallback.data as Provider;
+      }
+    }
 
     // The run inherits the stricter of the agent's ceiling and the caller's
     // declared classification, so a caller can raise sensitivity but never lower it.
