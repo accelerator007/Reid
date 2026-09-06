@@ -53,6 +53,13 @@ type AgentTool = {
 };
 
 const rank: Record<string, number> = { public: 0, internal: 1, confidential: 2, restricted: 3 };
+const secureEqual = (left: string, right: string) => {
+  const a = new TextEncoder().encode(left), b = new TextEncoder().encode(right);
+  if (a.length !== b.length) return false;
+  let difference = 0;
+  for (let index = 0; index < a.length; index += 1) difference |= a[index] ^ b[index];
+  return difference === 0;
+};
 
 // Prompts are correlated by hash so a run is auditable without storing the
 // company text that produced it.
@@ -321,19 +328,31 @@ Deno.serve(async (request) => {
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   let runId: string | null = null;
   try {
+    const body = await request.json();
+    const internalExpected = Deno.env.get('REID_INTERNAL_GATEWAY_TOKEN') || '';
+    const internalSupplied = request.headers.get('x-reid-internal-token') || '';
+    const internal = body.source === 'whatsapp' && internalExpected && internalSupplied
+      ? secureEqual(internalExpected, internalSupplied) : false;
     const authorization = request.headers.get('Authorization');
-    if (!authorization) throw new Error('missing_authorization');
-    const caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
-      global: { headers: { Authorization: authorization } },
-    });
-    const { data: auth, error: authError } = await caller.auth.getUser();
-    if (authError || !auth.user) throw new Error('invalid_session');
+    let requesterId = '';
+    let caller: ReturnType<typeof createClient> | null = null;
+    if (internal) {
+      requesterId = Deno.env.get('WHATSAPP_OWNER_USER_ID') || '';
+      if (!requesterId) throw new Error('whatsapp_owner_not_configured');
+    } else {
+      if (!authorization) throw new Error('missing_authorization');
+      caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+        global: { headers: { Authorization: authorization } },
+      });
+      const { data: auth, error: authError } = await caller.auth.getUser();
+      if (authError || !auth.user) throw new Error('invalid_session');
+      requesterId = auth.user.id;
+    }
 
     // A suspended account keeps its JWT until expiry, so re-check the control row.
-    const control = await admin.from('account_controls').select('status').eq('user_id', auth.user.id).maybeSingle();
+    const control = await admin.from('account_controls').select('status').eq('user_id', requesterId).maybeSingle();
     if (control.data?.status && control.data.status !== 'active') throw new Error('account_not_active');
 
-    const body = await request.json();
     const action: string = body.action || 'run';
     const input: string = action === 'tool'
       ? JSON.stringify({ toolName: body.toolName || '', arguments: body.arguments || {} })
@@ -341,9 +360,22 @@ Deno.serve(async (request) => {
 
     if (action === 'approve' || action === 'reject') {
       const decision = action === 'approve' ? 'approved' : 'rejected';
-      const decided = await caller.rpc('approve_agent_run', { run_id: body.runId, decision, note: body.note || null });
-      if (decided.error) throw decided.error;
-      const approved = decided.data as Run;
+      let approved: Run;
+      if (internal) {
+        const pending = await admin.from('agent_runs').select('*').eq('id',body.runId).eq('approval_state','pending').single();
+        if (pending.error) throw new Error('run_not_pending');
+        const update = await admin.from('agent_runs').update({
+          approval_state:decision, approved_by:requesterId, approved_at:new Date().toISOString(),
+          run_state:decision === 'approved' ? 'queued' : 'cancelled',
+          status:decision === 'approved' ? 'queued' : 'cancelled',
+        }).eq('id',body.runId).eq('approval_state','pending').select().single();
+        if (update.error) throw update.error;
+        approved = update.data as Run;
+      } else {
+        const decided = await caller!.rpc('approve_agent_run', { run_id: body.runId, decision, note: body.note || null });
+        if (decided.error) throw decided.error;
+        approved = decided.data as Run;
+      }
       runId = approved.id;
       if (decision === 'rejected') {
         await admin.from('agent_run_payloads').delete().eq('run_id', approved.id);
@@ -371,7 +403,7 @@ Deno.serve(async (request) => {
 
     // Reading the agent through the caller applies `agents_admin_read`, so a
     // non-admin session cannot execute an agent at all.
-    const { data: agentRow, error: agentError } = await caller
+    const { data: agentRow, error: agentError } = await (internal ? admin : caller!)
       .from('agents')
       .select('id,name,status,enabled,provider_id,classification,approval_level,system_prompt')
       .eq('id', body.agentId)
@@ -425,7 +457,7 @@ Deno.serve(async (request) => {
       const { count } = await admin
         .from('agent_runs')
         .select('id', { count: 'exact', head: true })
-        .eq('requested_by', auth.user.id)
+        .eq('requested_by', requesterId)
         .gte('created_at', since);
       if ((count ?? 0) >= provider.requests_per_hour) throw new Error('rate_limit_exceeded');
 
@@ -454,7 +486,7 @@ Deno.serve(async (request) => {
         agent_id: agent.id,
         task_id: body.taskId || null,
         provider_id: provider.id,
-        requested_by: auth.user.id,
+        requested_by: requesterId,
         classification,
         approval_level: effectiveApproval,
         approval_state: needsApproval ? 'pending' : 'not_required',
