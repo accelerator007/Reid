@@ -19,6 +19,46 @@ async function notifyWhatsApp(admin: ReturnType<typeof createClient>, runId: str
   });
 }
 
+async function completeWithGeminiFallback(admin: ReturnType<typeof createClient>, runId: string, localError: string) {
+  const key=Deno.env.get('GEMINI_API_KEY');
+  if(!key) throw new Error('gemini_fallback_not_configured');
+  const run=await admin.from('agent_runs').select('id,agent_id,requested_by,classification').eq('id',runId).eq('provider_id','ollama').eq('run_state','running').single();
+  if(run.error) throw new Error('run_not_claimed');
+  const [payload,agent,provider]=await Promise.all([
+    admin.from('agent_run_payloads').select('action,input').eq('run_id',runId).single(),
+    admin.from('agents').select('system_prompt').eq('id',run.data.agent_id).single(),
+    admin.from('llm_providers').select('id,endpoint,chat_model,max_classification,enabled,requests_per_day').eq('id','gemini').single(),
+  ]);
+  if(payload.error || agent.error || provider.error || !provider.data.enabled || payload.data.action!=='run') throw new Error('gemini_fallback_unavailable');
+  const classificationRank:Record<string,number>={public:0,internal:1,confidential:2,restricted:3};
+  if(classificationRank[run.data.classification] > classificationRank[provider.data.max_classification]) throw new Error('gemini_fallback_not_cleared');
+  const sinceDay=new Date(Date.now()-24*60*60*1000).toISOString();
+  const usage=await admin.from('agent_runs').select('id',{count:'exact',head:true}).eq('provider_id','gemini').gte('created_at',sinceDay);
+  if((usage.count ?? 0)>=provider.data.requests_per_day) throw new Error('gemini_fallback_quota_exceeded');
+  const grounded=['marketing','content','competitor','knowledge'].includes(run.data.agent_id);
+  const response=await fetch(`${provider.data.endpoint}/models/${provider.data.chat_model}:generateContent`,{
+    method:'POST',headers:{'content-type':'application/json','x-goog-api-key':key},
+    body:JSON.stringify({
+      contents:[{role:'user',parts:[{text:payload.data.input}]}],
+      ...(agent.data.system_prompt?{systemInstruction:{parts:[{text:agent.data.system_prompt}]}}:{}),
+      ...(grounded?{tools:[{google_search:{}}]}:{}),
+    }),
+  });
+  const result=await response.json();
+  if(!response.ok) throw new Error(`gemini_fallback_http_${response.status}`);
+  const output=result?.candidates?.[0]?.content?.parts?.map((part:{text?:string})=>part.text||'').join('').trim()||'';
+  if(!output) throw new Error('gemini_fallback_empty');
+  const updated=await admin.from('agent_runs').update({
+    provider_id:'gemini',run_state:'succeeded',status:'succeeded',token_usage:result?.usageMetadata?.totalTokenCount??null,
+    output_preview:output.slice(0,280),error:null,finished_at:new Date().toISOString(),
+    logs:[{at:new Date().toISOString(),event:'local_failed_gemini_fallback',local_error:localError.slice(0,180)}],
+  }).eq('id',runId).eq('run_state','running');
+  if(updated.error) throw updated.error;
+  await admin.from('memories').insert({scope:'agent',scope_id:run.data.agent_id,title:`Run ${runId}`,content:output.slice(0,4000),classification:run.data.classification,created_by:run.data.requested_by,source_run_id:runId});
+  await admin.from('agent_run_payloads').delete().eq('run_id',runId);
+  await notifyWhatsApp(admin,runId,output,'completed');
+}
+
 Deno.serve(async request => {
   try {
     if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
@@ -80,11 +120,18 @@ Deno.serve(async request => {
     }
 
     if (body.action === 'fail') {
-      const run = await admin.from('agent_runs').update({run_state:'failed',status:'failed',error:String(body.error||'local_runner_failed').slice(0,500),finished_at:new Date().toISOString()}).eq('id',body.runId).eq('provider_id','ollama').eq('run_state','running').select('id').single();
-      if (run.error) throw new Error('run_not_claimed');
-      await admin.from('agent_run_payloads').delete().eq('run_id',run.data.id);
-      await notifyWhatsApp(admin,run.data.id,'تعذر تنفيذ الأمر على الخادم المحلي. راجع لوحة الوكلاء.', 'failed');
-      return json({ok:true});
+      const localError=String(body.error||'local_runner_failed').slice(0,500);
+      try {
+        await completeWithGeminiFallback(admin,String(body.runId),localError);
+        return json({ok:true,fallback:'gemini'});
+      } catch(fallbackError) {
+        const error=`${localError}; ${fallbackError instanceof Error?fallbackError.message:'fallback_failed'}`.slice(0,500);
+        const run = await admin.from('agent_runs').update({run_state:'failed',status:'failed',error,finished_at:new Date().toISOString()}).eq('id',body.runId).eq('provider_id','ollama').eq('run_state','running').select('id').single();
+        if (run.error) throw new Error('run_not_claimed');
+        await admin.from('agent_run_payloads').delete().eq('run_id',run.data.id);
+        await notifyWhatsApp(admin,run.data.id,'تعذر التنفيذ محليًا وتعذر البديل الاحتياطي. تم تسجيل الخطأ في لوحة الوكلاء.', 'failed');
+        return json({ok:false,fallback:'failed'});
+      }
     }
     return json({error:'invalid_action'},400);
   } catch (error) { return json({error:error instanceof Error?error.message:'unknown_error'},400); }
