@@ -358,6 +358,10 @@ Deno.serve(async (request) => {
       if (resumedAgentError) throw resumedAgentError;
       if (resumedProviderError) throw resumedProviderError;
       if (payloadError) throw payloadError;
+      if ((resumedProvider as Provider).kind === 'local' && payload.action !== 'tool') {
+        await admin.from('agent_runs').update({run_state:'queued',status:'queued',started_at:null}).eq('id',approved.id);
+        return Response.json({runId:approved.id,status:'queued',provider:resumedProvider.id},{headers:cors});
+      }
       const result = await executeRun(admin, approved, resumedAgent as Agent, resumedProvider as Provider, payload.action, payload.input);
       await admin.from('agent_run_payloads').delete().eq('run_id', approved.id);
       return Response.json(result, { headers: cors });
@@ -454,6 +458,13 @@ Deno.serve(async (request) => {
       const payload = await admin.from('agent_run_payloads').insert({ run_id: created.id, action, input });
       if (payload.error) throw payload.error;
       return Response.json({ run: created, status: 'pending_approval', approvalLevel: effectiveApproval }, { headers: cors });
+    }
+
+    if (provider.kind === 'local' && action !== 'tool') {
+      await admin.from('agent_runs').update({run_state:'queued',status:'queued',started_at:null}).eq('id',created.id);
+      const payload = await admin.from('agent_run_payloads').insert({run_id:created.id,action,input});
+      if (payload.error) throw payload.error;
+      return Response.json({runId:created.id,status:'queued',provider:provider.id},{headers:cors});
     }
 
     const result = await executeRun(admin, created as Run, agent, provider, action, input);

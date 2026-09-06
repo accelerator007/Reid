@@ -598,6 +598,16 @@ Work is active on `claude/reid-system-development-bcaz9n`, branched from `develo
 
 A workflow is done only when its happy path, denial path, validation errors, RBAC/RLS, audit log, notification, responsive UI, and automated tests pass in Staging; Production is deployed through a protected PR; and this file is updated with exact evidence and remaining limitations.
 
+### 2026-09-06 ai-lap outbound Ollama runtime
+
+- Verified `ai-lap`: Ubuntu 22.04, 31 GiB RAM, NVIDIA RTX 3080 Ti 12 GB, Ollama 0.33.2, `gemma4:12b` and `nomic-embed-text:latest`. A live non-thinking chat returned the requested sentinel and embeddings are exactly 768 dimensions.
+- Installed and live-tested the loopback-only adapter on `127.0.0.1:11436`: correct credential succeeds, missing credential is denied, model administration routes are absent, chat works, and three adapter unit tests pass. Ollama remains bound to loopback.
+- Cloudflare Tunnel was rejected after a real test because the current network blocks its required outbound TCP/UDP 7844 path even with HTTP/2 forced. No public Ollama hostname or inbound port was created.
+- Replaced the tunnel with an outbound HTTPS runner. `ai-lap` claims queued jobs from the private `ai-lap-runner` Edge Function, executes locally, writes the bounded result/768-vector memory back, and emits a 30-second heartbeat. A 15-minute stale-job recovery prevents permanently stranded work.
+- Migration `202609060003` is applied: Ollama is enabled with exact model `gemma4:12b`, all eleven agents use it as primary, and Gemini remains enabled/preserved for deliberate Owner-controlled fallback. Sensitive data never falls back silently.
+- The runner credential was generated locally and stored as a Supabase secret without committing or printing it. `ai-lap-runner` and the queue-aware `llm-gateway` are deployed.
+- Verification passed locally: 131/131 application checks, Production build, 3/3 adapter tests, Python compilation and migration deployment. Final end-to-end model completion is **not yet passed** because `ai-lap` became unreachable over SSH immediately before the runner service installation; agents will queue safely until the host returns.
+
 ### 2026-09-06 governed agent tools and scoped memory V1
 
 - Work is active on `feature/agent-tools-memory-v1`. Migration `202609060001` adds a centrally audited tool catalog, agent-to-tool assignments, execution receipts and bilingual content drafts. Every tool declares its operation, JSON input contract and approval level; the gateway takes the stricter of the agent and tool levels before any mutation runs.
