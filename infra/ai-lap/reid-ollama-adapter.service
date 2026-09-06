@@ -1,0 +1,19 @@
+[Unit]
+Description=Reid restricted Ollama adapter
+After=network-online.target ollama.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/reid-ai/reid_ollama_adapter.py
+EnvironmentFile=%h/.config/reid-ai/adapter.env
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+MemoryMax=2G
+TasksMax=64
+
+[Install]
+WantedBy=default.target

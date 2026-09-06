@@ -20,11 +20,11 @@ Reid browser
   -> Supabase llm-gateway (JWT, RBAC, classification, L0-L4 approval, audit)
     -> Cloudflare Access (service-token authentication)
       -> outbound-only Cloudflare Tunnel from ai-lap
-        -> Reid local Ollama adapter on 127.0.0.1:11435
+        -> Reid local Ollama adapter on 127.0.0.1:11436
           -> Ollama on 127.0.0.1:11434
 ```
 
-Ollama port 11434 remains loopback-only and is never exposed directly. The local adapter is mandatory because a raw Ollama tunnel would expose administrative/model-management endpoints. It will accept only bounded `POST /chat`, `POST /embed`, and `GET /health`, whitelist `gemma4:12b` and `nomic-embed-text`, reject model pulls/deletes and arbitrary URLs, cap request/response sizes, set timeouts/concurrency, redact logs, and require the request identity forwarded by Cloudflare Access.
+Ollama ports remain loopback-only and are never exposed directly. The local adapter uses `127.0.0.1:11436`; `11435` was already held by the Ollama service during installation. The adapter is mandatory because a raw Ollama tunnel would expose administrative/model-management endpoints. It accepts only bounded `POST /api/chat`, `POST /api/embeddings`, and `GET /health`, whitelists `gemma4:12b` and `nomic-embed-text`, rejects model pulls/deletes and arbitrary URLs, caps request/response sizes, sets timeouts, redacts logs, and requires a separate origin token.
 
 ## Provider and routing policy
 
@@ -41,7 +41,7 @@ Ollama port 11434 remains loopback-only and is never exposed directly. The local
 ### 1. Harden ai-lap
 
 1. Create a dedicated non-login `reid-agent` service account.
-2. Install the versioned local adapter as a systemd service on `127.0.0.1:11435`.
+2. Install the versioned local adapter as a systemd user service on `127.0.0.1:11436`.
 3. Enforce model/path allow-lists, `think:false`, request limits, concurrency 1 initially, a 120-second generation timeout and a shorter embedding timeout.
 4. Keep Ollama on `127.0.0.1:11434`; verify firewall rules expose neither 11434 nor 11435 on LAN/WAN.
 5. Add health checks for Ollama, both required models, GPU memory and disk space. Logs must not contain prompts, CV text, HR records or credentials.
@@ -49,7 +49,7 @@ Ollama port 11434 remains loopback-only and is never exposed directly. The local
 ### 2. Private Cloudflare path
 
 1. Create a named Cloudflare Tunnel owned by the Reid Cloudflare account.
-2. Map a dedicated hostname such as `ollama.reidpro.com` to `http://127.0.0.1:11435` through the outbound tunnel only.
+2. Map a dedicated hostname such as `ollama.reidpro.com` to `http://127.0.0.1:11436` through the outbound tunnel only.
 3. Protect the hostname with Cloudflare Access service authentication and default-deny every other request.
 4. Store the Access client ID/secret only as Supabase Edge Function secrets. Do not commit them, expose them to the browser or paste them into chat.
 5. Test denial with no token, a wrong token, disallowed methods/paths, oversized bodies and attempts to call Ollama administration endpoints.

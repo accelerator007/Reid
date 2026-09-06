@@ -79,12 +79,20 @@ async function callGemini(provider: Provider, systemPrompt: string | null, input
 }
 
 async function callOllama(provider: Provider, systemPrompt: string | null, input: string) {
+  const originToken = Deno.env.get('OLLAMA_ORIGIN_TOKEN');
+  if (!originToken) throw new Error('ollama_origin_token_missing');
   const response = await fetch(`${provider.endpoint}/api/chat`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      'x-reid-origin-token': originToken,
+      ...(Deno.env.get('CF_ACCESS_CLIENT_ID') ? { 'CF-Access-Client-Id': Deno.env.get('CF_ACCESS_CLIENT_ID')! } : {}),
+      ...(Deno.env.get('CF_ACCESS_CLIENT_SECRET') ? { 'CF-Access-Client-Secret': Deno.env.get('CF_ACCESS_CLIENT_SECRET')! } : {}),
+    },
     body: JSON.stringify({
       model: provider.chat_model,
       stream: false,
+      think: false,
       messages: [
         ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
         { role: 'user', content: input },
@@ -101,9 +109,15 @@ async function callOllama(provider: Provider, systemPrompt: string | null, input
 async function embed(provider: Provider, input: string) {
   if (!provider.embedding_model) throw new Error('provider_has_no_embedding_model');
   if (provider.id === 'ollama') {
+    const originToken = Deno.env.get('OLLAMA_ORIGIN_TOKEN');
+    if (!originToken) throw new Error('ollama_origin_token_missing');
     const response = await fetch(`${provider.endpoint}/api/embeddings`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json', 'x-reid-origin-token': originToken,
+        ...(Deno.env.get('CF_ACCESS_CLIENT_ID') ? { 'CF-Access-Client-Id': Deno.env.get('CF_ACCESS_CLIENT_ID')! } : {}),
+        ...(Deno.env.get('CF_ACCESS_CLIENT_SECRET') ? { 'CF-Access-Client-Secret': Deno.env.get('CF_ACCESS_CLIENT_SECRET')! } : {}),
+      },
       body: JSON.stringify({ model: provider.embedding_model, prompt: input }),
     });
     const payload = await response.json();
