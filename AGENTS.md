@@ -111,6 +111,13 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-06, Asia/Muscat.
 
+### 2026-09-07 WhatsApp Intelligence V2
+
+- PR `#108` merged to `develop`; migration `202609070001_personal_reminders_memory_v2.sql` was applied to the linked Reid Supabase project and `reminder-dispatch`, `whatsapp-webhook`, and `llm-gateway` were deployed. Owner reminders now have an audited/RLS-protected lifecycle, separate phone/user ownership, Muscat-time parsing, cancellation/listing, bounded retries, and an authenticated minute scheduler. The shared scheduler secret exists only in Supabase and Cloudflare.
+- Explicit personal-memory controls now support durable `preference` memories and expiring seven-day conversational context per Owner: `احفظ`, `وش تتذكر عني؟`, and `انسَ`. Ali and Sheikha remain isolated by their profile UUID, never merely by display name.
+- The next action-planner increment recognizes overdue-project queries and returns live project records/links, and recognizes task-creation commands, resolves the named project, asks one focused question when ambiguous, then executes the audited `tasks.create` L1 tool and returns the project link. WhatsApp uses buttons for two/three choices and a list for four to ten choices.
+- Verification: 150 Vitest checks, TypeScript/Vite production build, and linked-database lint pass. Production PR `#101` was repaired by syncing `main` history through PR `#109`; it is mergeable and still requires the configured independent Owner review before `main`.
+
 ### 2026-09-06 WhatsApp Owner team inbox
 
 - PR `#99` passed both CI/RLS runs, authenticated Chromium and Cloudflare Staging, then merged to `develop`. The Owner Dashboard now includes a bilingual, responsive team inbox backed by normalized conversations and messages, Realtime refresh, unread counts, delivery state, assignment to an Owner, and per-conversation `active`/`human` bot handoff.

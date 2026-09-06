@@ -72,6 +72,16 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("خيارات\\s*");
     expect(webhook).toContain("slice(0, 3)");
     expect(webhook).toContain("slice(0, 20)");
+    expect(webhook).toContain("sendList");
+    expect(webhook).toContain("عرض الخيارات");
+  });
+
+  it("executes project reads and L1 task creation instead of pretending", () => {
+    expect(webhook).toContain("المشاريع المتأخرة");
+    expect(webhook).toContain("matchingProjects");
+    expect(webhook).toContain("toolName:'tasks.create'");
+    expect(webhook).toContain("تم إنشاء المهمة");
+    expect(webhook).toContain("https://reidpro.com/projects/");
   });
 
   it("creates real isolated reminders and dispatches them through an authenticated scheduler", () => {

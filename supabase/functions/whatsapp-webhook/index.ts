@@ -69,10 +69,32 @@ async function sendChoices(to: string, body: string, choices: string[]) {
   return payload?.messages?.[0]?.id as string | undefined;
 }
 
+async function sendList(to: string, body: string, choices: string[]) {
+  const token = Deno.env.get('META_WHATSAPP_ACCESS_TOKEN');
+  const phoneId = Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
+  if (!token || !phoneId) throw new Error('whatsapp_delivery_not_configured');
+  const rows = choices.slice(0, 10).map((choice, index) => ({
+    id: `choice:${index}:${crypto.randomUUID()}`,
+    title: Array.from(choice.trim()).slice(0, 24).join(''),
+  }));
+  const response = await fetch(`https://graph.facebook.com/v26.0/${phoneId}/messages`, {
+    method: 'POST', headers: { authorization:`Bearer ${token}`,'content-type':'application/json' },
+    body: JSON.stringify({ messaging_product:'whatsapp',to,type:'interactive',interactive:{
+      type:'list',body:{text:body.slice(0,1024)},action:{button:'عرض الخيارات',sections:[{title:'اختر الإجراء',rows}]},
+    }}),
+  });
+  if (!response.ok) throw new Error(`whatsapp_delivery_${response.status}`);
+  const payload = await response.json().catch(() => ({}));
+  return payload?.messages?.[0]?.id as string | undefined;
+}
+
+const sendAdaptive = (to:string, body:string, choices:string[]) => choices.length > 3
+  ? sendList(to,body,choices) : choices.length >= 2 ? sendChoices(to,body,choices) : sendText(to,body);
+
 function assistantReply(value: string) {
   const marker = /(?:^|\n)خيارات\s*:\s*([^\n]+)\s*$/i.exec(value);
   if (!marker) return { body:value.trim(), choices:[] as string[] };
-  const choices = marker[1].split('|').map(choice=>choice.trim()).filter(Boolean).slice(0,3);
+  const choices = marker[1].split('|').map(choice=>choice.trim()).filter(Boolean).slice(0,10);
   return { body:value.replace(marker[0], '').trim(), choices:choices.length >= 2 ? choices : [] };
 }
 
@@ -176,6 +198,20 @@ function parseReminder(text:string, now=new Date()) {
 }
 
 const muscatTime=(value:string)=>new Intl.DateTimeFormat('ar-OM',{timeZone:'Asia/Muscat',dateStyle:'medium',timeStyle:'short'}).format(new Date(value));
+
+function taskTitle(text:string, projectName:string) {
+  return text
+    .replace(/^(?:لو سمحت\s*)?(?:أضف|اضف|أنشئ|انشئ|سوي)\s+(?:لي\s+)?(?:مهمة|مهمه)\s*/i,'')
+    .replace(new RegExp(`(?:في|لـ|ل)\\s*(?:مشروع|المشروع)?\\s*${projectName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}`,'i'),'')
+    .replace(/^(?:بعنوان|اسمها|عنوانها)\s*/i,'').trim();
+}
+
+async function matchingProjects(admin:any,text:string) {
+  const result=await admin.from('projects').select('id,name,status,target_date').neq('status','archived').order('name');
+  if(result.error)throw result.error;
+  const normalized=text.toLowerCase();
+  return (result.data||[]).filter((project:any)=>normalized.includes(String(project.name).toLowerCase()));
+}
 
 function incomingMessages(payload: any) {
   return (payload?.entry || []).flatMap((entry: any) =>
@@ -333,6 +369,31 @@ Deno.serve(async request => {
       if(created.error)throw created.error;
       const replyBody=`تم ضبط التذكير ✅\n${created.data.reminder_text}\n${muscatTime(created.data.due_at)}`; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
     }
+    if(/(?:اعرض|اظهر|ورني|وش|ما هي).*(?:المشاريع|مشاريع).*(?:المتأخرة|متأخر)|(?:المشاريع|مشاريع).*(?:المتأخرة|متأخر)/i.test(text)) {
+      const today=new Date().toISOString().slice(0,10);
+      const projects=await admin.from('projects').select('id,name,status,target_date').lt('target_date',today).not('status','in','("completed","archived")').order('target_date').limit(20);
+      if(projects.error)throw projects.error;
+      const replyBody=projects.data?.length
+        ? `المشاريع المتأخرة (${projects.data.length}):\n${projects.data.map((project:any,index:number)=>`${index+1}. ${project.name} — الموعد ${project.target_date} — ${project.status}\nhttps://reidpro.com/projects/${project.id}`).join('\n')}`
+        : 'ممتاز، ما عندنا مشاريع متأخرة حاليًا.';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
+    }
+    if(/(?:أضف|اضف|أنشئ|انشئ|سوي)\s+(?:لي\s+)?(?:مهمة|مهمه)/i.test(text)) {
+      const projects=await matchingProjects(admin,text);
+      if(projects.length!==1) {
+        const all=await admin.from('projects').select('name').neq('status','archived').order('name').limit(10);
+        const names=(all.data||[]).map((project:any)=>String(project.name));
+        const replyBody=projects.length>1?'لقيت أكثر من مشروع مطابق. اكتب اسم المشروع كاملًا.':'أكيد. ما اسم المشروع الذي تريد إضافة المهمة إليه؟';
+        const sent=names.length>=2?await sendAdaptive(message.from,replyBody,names):await sendText(message.from,replyBody);
+        await recordOutbound(admin,conversationId,replyBody,sent); continue;
+      }
+      const title=taskTitle(text,projects[0].name);
+      if(!title) { const replyBody='وش عنوان المهمة التي تريد إضافتها؟'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue; }
+      const result=await gateway({action:'tool',agentId:'operations',toolName:'tasks.create',arguments:{title,project_id:projects[0].id},requesterId:identity.id});
+      const task=result.result;
+      const replyBody=`تم إنشاء المهمة ✅\n${task.title}\nالمشروع: ${projects[0].name}\nhttps://reidpro.com/projects/${projects[0].id}`;
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
+    }
     const command=await admin.from('whatsapp_commands').insert({ sender_phone:message.from,message_id:message.id,command_text:text,status:'received' }).select('id').single();
     if(command.error) throw command.error;
     try {
@@ -348,7 +409,7 @@ Deno.serve(async request => {
       } else {
         await admin.from('whatsapp_commands').update({status:'completed',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
         const parsed=assistantReply(result.output || 'تمت معالجة طلبك.');
-        const sent=parsed.choices.length ? await sendChoices(message.from,parsed.body,parsed.choices) : await sendText(message.from,parsed.body);
+        const sent=await sendAdaptive(message.from,parsed.body,parsed.choices);
         await recordOutbound(admin,conversationId,parsed.body,sent);
       }
     } catch(error) {
