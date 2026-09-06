@@ -5,7 +5,12 @@ import { isAppShellPath, legacyRedirects, normalizePath } from './routes'
 
 type WorkerEnvironment = {
   ASSETS: { fetch(request: Request): Promise<Response> }
+  SUPABASE_FUNCTIONS_URL?: string
+  REID_REMINDER_CRON_TOKEN?: string
 }
+
+type WorkerExecutionContext = { waitUntil(promise: Promise<unknown>): void }
+type WorkerScheduledController = { scheduledTime: number; cron: string }
 
 export default {
   async fetch(request: Request, env: WorkerEnvironment): Promise<Response> {
@@ -21,5 +26,12 @@ export default {
     }
 
     return env.ASSETS.fetch(request)
+  },
+  async scheduled(_controller: WorkerScheduledController, env: WorkerEnvironment, context: WorkerExecutionContext) {
+    if (!env.SUPABASE_FUNCTIONS_URL || !env.REID_REMINDER_CRON_TOKEN) return
+    context.waitUntil(fetch(`${env.SUPABASE_FUNCTIONS_URL}/reminder-dispatch`, {
+      method: 'POST',
+      headers: { 'x-reid-cron-token': env.REID_REMINDER_CRON_TOKEN },
+    }))
   },
 }

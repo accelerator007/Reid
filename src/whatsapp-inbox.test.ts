@@ -5,6 +5,8 @@ const component = readFileSync(new URL("./whatsapp-inbox.tsx", import.meta.url),
 const endpoint = readFileSync(new URL("../supabase/functions/whatsapp-inbox/index.ts", import.meta.url), "utf8");
 const webhook = readFileSync(new URL("../supabase/functions/whatsapp-webhook/index.ts", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../supabase/migrations/202609060004_whatsapp_owner_inbox.sql", import.meta.url), "utf8");
+const reminderMigration = readFileSync(new URL("../supabase/migrations/202609070001_personal_reminders_memory_v2.sql", import.meta.url), "utf8");
+const reminderDispatch = readFileSync(new URL("../supabase/functions/reminder-dispatch/index.ts", import.meta.url), "utf8");
 
 describe("WhatsApp Owner inbox contract", () => {
   it("keeps the permanent Meta token on the server", () => {
@@ -70,5 +72,22 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("خيارات\\s*");
     expect(webhook).toContain("slice(0, 3)");
     expect(webhook).toContain("slice(0, 20)");
+  });
+
+  it("creates real isolated reminders and dispatches them through an authenticated scheduler", () => {
+    expect(reminderMigration).toContain("create table public.personal_reminders");
+    expect(reminderMigration).toContain("personal_reminders_owner_read");
+    expect(webhook).toContain("parseReminder");
+    expect(webhook).toContain("تم ضبط التذكير");
+    expect(reminderDispatch).toContain("REID_REMINDER_CRON_TOKEN");
+    expect(reminderDispatch).toContain("status:'sent'");
+  });
+
+  it("supports explicit durable memory inspection and deletion", () => {
+    expect(reminderMigration).toContain("memory_kind");
+    expect(reminderMigration).toContain("expires_at");
+    expect(webhook).toContain("تفضيل محفوظ من واتساب");
+    expect(webhook).toContain("أتذكر عنك");
+    expect(webhook).toContain("تم حذف");
   });
 });

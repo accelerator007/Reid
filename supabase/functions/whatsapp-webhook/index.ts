@@ -139,10 +139,43 @@ async function rememberOwnerMessage(admin:any, identity:{id:string}, messageId:s
   if(safe.length < 4 || /^(مساعدة|help|menu|القائمة)$/i.test(safe)) return;
   const stored=await admin.from('memories').insert({
     scope:'user',scope_id:identity.id,content:safe,title:`WhatsApp ${messageId.slice(-12)}`,
-    classification:'internal',created_by:identity.id,
+    classification:'internal',created_by:identity.id,memory_kind:'temporary',expires_at:new Date(Date.now()+7*24*60*60_000).toISOString(),
   });
   if(stored.error) console.error('owner_memory_failed',stored.error.code || 'unknown');
 }
+
+function parseReminder(text:string, now=new Date()) {
+  if(!/(ذكرني|ذكّرني|تذكير|remind me)/i.test(text)) return null;
+  let due:Date|null=null;
+  const relative=/بعد\s+(\d+)\s*(دقيق(?:ة|ه|ايق)?|ساع(?:ة|ه|ات)?|يوم|ايام|أيام)/i.exec(text);
+  if(relative) {
+    const amount=Math.max(1,Math.min(365,Number(relative[1])));
+    const unit=relative[2];
+    const milliseconds=/دقيق/.test(unit)?amount*60_000:/ساع/.test(unit)?amount*60*60_000:amount*24*60*60_000;
+    due=new Date(now.getTime()+milliseconds);
+  } else {
+    const clock=/(?:الساعة|الساعه|ساعة|ساعه)\s*(\d{1,2})(?::(\d{2}))?\s*(ص|صباح|م|مساء)?/i.exec(text);
+    if(!clock) return {missing:'time'} as const;
+    let hour=Number(clock[1]),minute=Number(clock[2]||0);
+    if(/^(م|مساء)$/i.test(clock[3]||'')&&hour<12)hour+=12;
+    if(/^(ص|صباح)$/i.test(clock[3]||'')&&hour===12)hour=0;
+    if(hour>23||minute>59)return {missing:'time'} as const;
+    const muscat=new Date(now.getTime()+4*60*60_000);
+    const tomorrow=/(بكرة|باكر|غد[ًاا]?|tomorrow)/i.test(text);
+    const day=muscat.getUTCDate()+(tomorrow?1:0);
+    due=new Date(Date.UTC(muscat.getUTCFullYear(),muscat.getUTCMonth(),day,hour-4,minute));
+    if(due<=now&&!tomorrow)due=new Date(due.getTime()+24*60*60_000);
+  }
+  const reminderText=text
+    .replace(/^(?:لو سمحت\s*)?(?:ذكرني|ذكّرني|سوي\s+تذكير|تذكير)\s*/i,'')
+    .replace(/بعد\s+\d+\s*(?:دقيق(?:ة|ه|ايق)?|ساع(?:ة|ه|ات)?|يوم|ايام|أيام)/i,'')
+    .replace(/(?:اليوم|بكرة|باكر|غد[ًاا]?|tomorrow)/ig,'')
+    .replace(/(?:الساعة|الساعه|ساعة|ساعه)\s*\d{1,2}(?::\d{2})?\s*(?:ص|صباح|م|مساء)?/i,'')
+    .replace(/^\s*(?:اني|أن|إن|بأن|عشان|لـ|لي)\s*/i,'').trim() || 'التذكير المطلوب';
+  return {due,reminderText} as const;
+}
+
+const muscatTime=(value:string)=>new Intl.DateTimeFormat('ar-OM',{timeZone:'Asia/Muscat',dateStyle:'medium',timeStyle:'short'}).format(new Date(value));
 
 function incomingMessages(payload: any) {
   return (payload?.entry || []).flatMap((entry: any) =>
@@ -263,6 +296,42 @@ Deno.serve(async request => {
     if (/^(مساعدة|help|menu|القائمة)$/i.test(text)) {
       const replyBody='أرسل طلبك بشكل طبيعي، أو ابدأ باسم الوكيل مثل: عمليات، مبيعات، HR، مالية، محتوى، معرفة. أوامر L2–L4 ستظهر معها أزرار موافقة ورفض.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       continue;
+    }
+    if(/^(?:احفظ|تذكر|تذكّر)\s+(?:هذا|ان|أن)?\s*/i.test(text)) {
+      const content=redactSecrets(text.replace(/^(?:احفظ|تذكر|تذكّر)\s+(?:هذا|ان|أن)?\s*/i,'')).trim();
+      if(!content) { const replyBody='وش المعلومة أو التفضيل اللي تريدني أحفظه؟'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue; }
+      await admin.from('memories').insert({scope:'user',scope_id:identity.id,content,title:'تفضيل محفوظ من واتساب',classification:'internal',created_by:identity.id,memory_kind:'preference'});
+      const replyBody=`حفظته لك كتفضيل دائم: ${content}`; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
+    }
+    if(/(?:وش|ايش|ماذا)\s+(?:تتذكر|تذكر)\s+(?:عني|عنّي)|what do you remember/i.test(text)) {
+      const memories=await admin.from('memories').select('content,memory_kind').eq('scope','user').eq('scope_id',identity.id).neq('memory_kind','temporary').order('created_at',{ascending:false}).limit(8);
+      const replyBody=memories.data?.length?`أتذكر عنك:\n${memories.data.map((item:any)=>`• ${item.content}`).join('\n')}`:'ما عندي تفضيلات دائمة محفوظة عنك بعد.';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
+    }
+    if(/^(?:انس|انسى|انسَ|احذف من ذاكرتك)\s*/i.test(text)) {
+      const term=text.replace(/^(?:انس|انسى|انسَ|احذف من ذاكرتك)\s*/i,'').trim();
+      if(!term) { const replyBody='وش المعلومة اللي تريدني أنساها؟'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue; }
+      const candidates=await admin.from('memories').select('id,content').eq('scope','user').eq('scope_id',identity.id).neq('memory_kind','temporary').order('created_at',{ascending:false}).limit(50);
+      const matched=(candidates.data||[]).filter((item:any)=>String(item.content).toLowerCase().includes(term.toLowerCase()));
+      if(matched.length) await admin.from('memories').delete().in('id',matched.map((item:any)=>item.id));
+      const replyBody=matched.length?`تم حذف ${matched.length} من ذاكرتي الدائمة.`:'ما لقيت معلومة دائمة مطابقة.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
+    }
+    if(/(?:اعرض|اظهر|ورني|وش)\s+(?:لي\s+)?(?:التذكيرات|تذكيراتي)/i.test(text)) {
+      const reminders=await admin.from('personal_reminders').select('id,reminder_text,due_at').eq('owner_id',identity.id).eq('status','scheduled').order('due_at').limit(10);
+      const replyBody=reminders.data?.length?`تذكيراتك القادمة:\n${reminders.data.map((item:any,index:number)=>`${index+1}. ${item.reminder_text} — ${muscatTime(item.due_at)}`).join('\n')}`:'ما عندك تذكيرات قادمة.';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
+    }
+    if(/^(?:الغ|ألغي|الغي|احذف)\s+(?:آخر\s+)?تذكير/i.test(text)) {
+      const latest=await admin.from('personal_reminders').select('id,reminder_text').eq('owner_id',identity.id).eq('status','scheduled').order('created_at',{ascending:false}).limit(1).maybeSingle();
+      if(latest.data)await admin.from('personal_reminders').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('id',latest.data.id);
+      const replyBody=latest.data?`تم إلغاء التذكير: ${latest.data.reminder_text}`:'ما عندك تذكير نشط لإلغائه.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
+    }
+    const reminder=parseReminder(text);
+    if(reminder) {
+      if('missing' in reminder) { const replyBody='أكيد. في أي يوم وساعة تريد التذكير؟ مثال: غدًا الساعة 9 صباحًا.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue; }
+      const created=await admin.from('personal_reminders').insert({owner_id:identity.id,whatsapp_phone:message.from,reminder_text:reminder.reminderText,due_at:reminder.due.toISOString()}).select('id,due_at,reminder_text').single();
+      if(created.error)throw created.error;
+      const replyBody=`تم ضبط التذكير ✅\n${created.data.reminder_text}\n${muscatTime(created.data.due_at)}`; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
     }
     const command=await admin.from('whatsapp_commands').insert({ sender_phone:message.from,message_id:message.id,command_text:text,status:'received' }).select('id').single();
     if(command.error) throw command.error;
