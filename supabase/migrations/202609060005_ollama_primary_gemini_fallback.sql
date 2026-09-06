@@ -3,11 +3,11 @@
 update public.llm_providers set
   chat_model='gemma4:12b', embedding_model='nomic-embed-text:latest', enabled=true,
   max_classification='restricted', retains_data=false,
-  notes='Primary Reid runtime on ai-lap; Gemini is availability fallback only.', updated_at=now()
+  notes='Primary Reid runtime on ai-lap; Gemini is availability fallback only.'
 where id='ollama';
 
 update public.llm_providers set enabled=true,
-  notes='Fallback only when ai-lap heartbeat is stale or a local generation fails.', updated_at=now()
+  notes='Fallback only when ai-lap heartbeat is stale or a local generation fails.'
 where id='gemini';
 
 update public.agents set
