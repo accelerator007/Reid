@@ -111,6 +111,10 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-06, Asia/Muscat.
 
+### 2026-09-07 live multi-agent action matrix
+
+- The dedicated authenticated live workflow now exercises the real tool families for Operations, Sales, HR, Finance, Content, and Knowledge against isolated synthetic project/CRM/employee records. It covers eight read tools; L1 task, CRM follow-up, onboarding, and content-draft creation; L2 content-publish rejection; and L3 budget-change rejection with an unchanged-budget assertion. Test records and runs are deleted in `finally` cleanup.
+
 ### 2026-09-07 WhatsApp Intelligence V2
 
 - PR `#108` merged to `develop`; migration `202609070001_personal_reminders_memory_v2.sql` was applied to the linked Reid Supabase project and `reminder-dispatch`, `whatsapp-webhook`, and `llm-gateway` were deployed. Owner reminders now have an audited/RLS-protected lifecycle, separate phone/user ownership, Muscat-time parsing, cancellation/listing, bounded retries, and an authenticated minute scheduler. The shared scheduler secret exists only in Supabase and Cloudflare.
