@@ -37,14 +37,14 @@ select t_true(:'suite', 'the Owner-approved Gemini runtime accepts all classific
 select t_true(:'suite', 'the temporary free tier uses 3.8 with a protected reserve',
   $q$select chat_model = 'gemini-3.8-flash' and requests_per_hour = 5 and requests_per_day = 18
      from public.llm_providers where id = 'gemini'$q$, true);
-select t_true(:'suite', 'the local provider ships disabled',
-  $q$select not enabled and kind = 'local' from public.llm_providers where id = 'ollama'$q$, true);
-select t_true(:'suite', 'a public agent is enabled on the free tier',
+select t_true(:'suite', 'the local provider is enabled through the outbound runner',
+  $q$select enabled and kind = 'local' and chat_model = 'gemma4:12b' from public.llm_providers where id = 'ollama'$q$, true);
+select t_true(:'suite', 'a public agent is enabled',
   $q$select enabled and status = 'idle' from public.agents where id = 'marketing'$q$, true);
-select t_true(:'suite', 'Operations is enabled on the temporary Gemini runtime',
-  $q$select enabled and status = 'idle' and provider_id = 'gemini' from public.agents where id = 'operations'$q$, true);
-select t_true(:'suite', 'HR keeps restricted classification while using Gemini',
-  $q$select enabled and classification = 'restricted' and provider_id = 'gemini' from public.agents where id = 'hr'$q$, true);
+select t_true(:'suite', 'Operations is enabled on the local runtime',
+  $q$select enabled and status = 'idle' and provider_id = 'ollama' from public.agents where id = 'operations'$q$, true);
+select t_true(:'suite', 'HR keeps restricted classification while using Ollama',
+  $q$select enabled and classification = 'restricted' and provider_id = 'ollama' from public.agents where id = 'hr'$q$, true);
 select t_true(:'suite', 'each agent mirrors its provider model',
   $q$select a.model = p.chat_model and a.host = p.id
      from public.agents a join public.llm_providers p on p.id = a.provider_id where a.id = 'marketing'$q$, true);
@@ -69,9 +69,9 @@ select t_allowed(:'suite', 'Owner-approved Gemini accepts a restricted HR run',
 select t_allowed(:'suite', 'Owner-approved Gemini accepts internal Operations data',
   format($$insert into public.agent_runs(agent_id, provider_id, classification, requested_by, status, run_state)
            values ('operations', 'gemini', 'internal', %L, 'queued', 'queued')$$, :'owner_id'));
-select t_rejected(:'suite', 'a disabled provider is refused even within its ceiling',
+select t_allowed(:'suite', 'the enabled local provider accepts restricted work',
   format($$insert into public.agent_runs(agent_id, provider_id, classification, requested_by, status, run_state)
-           values ('hr', 'ollama', 'restricted', %L, 'queued', 'queued')$$, :'owner_id'), 'P0001');
+           values ('hr', 'ollama', 'restricted', %L, 'queued', 'queued')$$, :'owner_id'));
 select t_allowed(:'suite', 'public data is accepted against the external provider',
   format($$insert into public.agent_runs(id, agent_id, provider_id, classification, requested_by, status, run_state)
            values (%L, 'marketing', 'gemini', 'public', %L, 'succeeded', 'succeeded')$$, :'run_public', :'admin_id'));
@@ -96,16 +96,20 @@ select t_visible(:'suite', 'an employee cannot enumerate tool assignments',
   'select 1 from public.agent_tool_assignments', 0);
 select t_visible(:'suite', 'an employee cannot read tool execution audits',
   'select 1 from public.agent_tool_executions', 0);
+select t_visible(:'suite', 'an employee cannot read runner health',
+  'select 1 from public.agent_runner_status', 0);
 
 select test_sign_in(:'admin_id');
 select t_visible(:'suite', 'an admin reads the whole agent roster',
   'select 1 from public.agents', 11);
 select t_visible(:'suite', 'an admin reads the whole run stream',
-  'select 1 from public.agent_runs', 4);
+  'select 1 from public.agent_runs', 5);
 select t_visible(:'suite', 'an admin reads the governed tool catalog',
   'select 1 from public.agent_tools', 14);
 select t_visible(:'suite', 'an admin cannot read transient payloads',
   'select 1 from public.agent_run_payloads', 0);
+select t_visible(:'suite', 'an admin reads runner health',
+  'select 1 from public.agent_runner_status', 1);
 
 select test_sign_out();
 select t_visible(:'suite', 'an anonymous visitor sees no agents',
@@ -118,6 +122,8 @@ select t_visible(:'suite', 'an anonymous visitor sees no transient payloads',
   'select 1 from public.agent_run_payloads', 0);
 select t_visible(:'suite', 'an anonymous visitor sees no governed tools',
   'select 1 from public.agent_tools', 0);
+select t_visible(:'suite', 'an anonymous visitor sees no runner health',
+  'select 1 from public.agent_runner_status', 0);
 
 -- ----------------------------------------------------------------- agent control
 select test_sign_in(:'admin_id');
