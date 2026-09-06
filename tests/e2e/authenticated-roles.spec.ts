@@ -132,7 +132,7 @@ test.describe('authenticated employee role journeys', () => {
     expect(run?.latency_ms).toBeGreaterThan(0);
   });
 
-  test('Owner executes governed read and approved content tools', async () => {
+  test('Owner executes governed read and L1 content draft tools', async () => {
     test.skip(process.env.LIVE_TOOL_E2E !== '1', 'Live tool verification runs after deployment.');
     const caller = createClient(url!, publishableKey!, { auth: { persistSession: false } });
     const signed = await caller.auth.signInWithPassword({ email: users.owner.email, password });
@@ -149,17 +149,14 @@ test.describe('authenticated employee role journeys', () => {
     let runId: string | undefined;
     let draftId: string | undefined;
     try {
-      const queued = await caller.functions.invoke('llm-gateway', { body: {
+      const created = await caller.functions.invoke('llm-gateway', { body: {
         action: 'tool', agentId: 'content', toolName: 'content.draft.create', classification: 'public',
         arguments: { title_ar: `مسودة تحقق ${stamp}`, title_en: `Verification draft ${stamp}`, body_ar: 'مسودة اختبار تحذف تلقائيًا.', body_en: 'Disposable verification draft.' },
       }});
-      if (queued.error) throw queued.error;
-      expect(queued.data.status).toBe('pending_approval');
-      runId = queued.data.run.id;
-      const approved = await caller.functions.invoke('llm-gateway', { body: { action: 'approve', runId }});
-      if (approved.error) throw approved.error;
-      expect(approved.data.tool).toBe('content.draft.create');
-      draftId = approved.data.result.id;
+      if (created.error) throw created.error;
+      expect(created.data.tool).toBe('content.draft.create');
+      runId = created.data.runId;
+      draftId = created.data.result.id;
       const receipt = await admin.from('agent_tool_executions').select('tool_id,status').eq('run_id',runId).single();
       if (receipt.error) throw receipt.error;
       expect(receipt.data).toEqual({ tool_id:'content.draft.create', status:'succeeded' });
