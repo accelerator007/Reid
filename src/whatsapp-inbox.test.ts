@@ -48,4 +48,19 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("لا يوجد أمر معلّق");
     expect(webhook).toContain("تمت الموافقة على الأمر");
   });
+
+  it("keeps normal conversation natural and reserves approval for real tools", () => {
+    const gateway = readFileSync(new URL("../supabase/functions/llm-gateway/index.ts", import.meta.url), "utf8");
+    expect(webhook).toContain("أجب مباشرة عن التحية");
+    expect(webhook).not.toContain("`رد الوكيل:\\n${result.output}`");
+    expect(gateway).toContain("let effectiveApproval = 0");
+    expect(gateway).toContain("effectiveApproval = tool.approval_level");
+  });
+
+  it("grounds external-facing specialists with live Google Search sources", () => {
+    const gateway = readFileSync(new URL("../supabase/functions/llm-gateway/index.ts", import.meta.url), "utf8");
+    expect(gateway).toContain("google_search");
+    expect(gateway).toContain("'marketing', 'content', 'competitor', 'knowledge'");
+    expect(gateway).toContain("groundingChunks");
+  });
 });

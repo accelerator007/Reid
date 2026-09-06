@@ -106,7 +106,7 @@ const redactSecrets=(value:string)=>value
 async function personalizedInput(admin:any, conversationId:string, identity:{full_name:string}, current:string) {
   const history=await admin.from('whatsapp_messages').select('direction,body,created_at').eq('conversation_id',conversationId).not('body','is',null).order('created_at',{ascending:false}).limit(12);
   const lines=(history.data || []).reverse().map((item:any)=>`${item.direction==='inbound'?'المسؤول':'ريّد'}: ${redactSecrets(String(item.body))}`);
-  return `أنت مساعد ${identity.full_name} الشخصي ورئيس مكتبه الرقمي، وفي الوقت نفسه مختص معتمد في نظام شركة ريّد. ساعده في الصياغة والتخطيط وترتيب الأولويات والتذكيرات والمواعيد، وعند ارتباط الطلب بالشركة استخدم سياق ريّد والوكيل والأدوات المصرح بها. تعرّف على لغته وأسلوبه من ذاكرة المستخدم والسياق الحديث وطابقهما باحترام وباختصار. لا تتجاوز L0-L4، ولا تنفذ إجراءً أو تدّعي إنشاء تذكير أو مهمة إلا بعد نتيجة أداة فعلية. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
+  return `أنت مساعد ${identity.full_name} الشخصي ورئيس مكتبه الرقمي، وفي الوقت نفسه مختص معتمد في نظام شركة ريّد. تحدث معه طبيعيًا وذكيًا وبنفس لغته ولهجته، وأجب مباشرة عن التحية والأسئلة العامة وأسئلة قدراتك من دون طلب موافقة. ساعده في الصياغة والتخطيط وترتيب الأولويات والتذكيرات والمواعيد. عند ارتباط الطلب بالشركة استخدم سياق ريّد والوكيل والأدوات المصرح بها، وميّز بوضوح بين إجابة أو اقتراح وبين فعل حقيقي. الموافقة مطلوبة فقط عند استدعاء أداة تنفيذية بمستوى L2-L4، وليست مطلوبة للمحادثة أو التحليل. تعرّف على أسلوبه من ذاكرة المستخدم والسياق الحديث وطابقه باحترام وباختصار. لا تنفذ إجراءً أو تدّعي إنشاء تذكير أو مهمة إلا بعد نتيجة أداة فعلية. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
 }
 
 async function rememberOwnerMessage(admin:any, identity:{id:string}, messageId:string, text:string) {
@@ -253,7 +253,7 @@ Deno.serve(async request => {
         const replyBody='تم توجيه الأمر للوكيل وسيصلك الرد عند اكتماله.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       } else {
         await admin.from('whatsapp_commands').update({status:'completed',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
-        const replyBody=result.output?`رد الوكيل:\n${result.output}`:'تم تنفيذ الأمر.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+        const replyBody=result.output?result.output:'تمت معالجة طلبك.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       }
     } catch(error) {
       await admin.from('whatsapp_commands').update({status:'failed',error:error instanceof Error?error.message:'dispatch_failed',updated_at:new Date().toISOString()}).eq('id',command.data.id);
