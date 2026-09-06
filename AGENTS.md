@@ -117,6 +117,7 @@ Last verified: 2026-09-06, Asia/Muscat.
 - Explicit personal-memory controls now support durable `preference` memories and expiring seven-day conversational context per Owner: `احفظ`, `وش تتذكر عني؟`, and `انسَ`. Ali and Sheikha remain isolated by their profile UUID, never merely by display name.
 - The next action-planner increment recognizes overdue-project queries and returns live project records/links, and recognizes task-creation commands, resolves the named project, asks one focused question when ambiguous, then executes the audited `tasks.create` L1 tool and returns the project link. WhatsApp uses buttons for two/three choices and a list for four to ten choices.
 - Verification: 150 Vitest checks, TypeScript/Vite production build, and linked-database lint pass. Production PR `#101` was repaired by syncing `main` history through PR `#109`; it is mergeable and still requires the configured independent Owner review before `main`.
+- Live scheduler verification on 2026-09-07 returned HTTP `200` with `{ok:true,sent:0,failed:0}` from the deployed `reminder-dispatch` using a freshly rotated shared secret. Zero was the correct result because no reminder was due; the secret value was neither logged nor committed.
 
 ### 2026-09-06 WhatsApp Owner team inbox
 
