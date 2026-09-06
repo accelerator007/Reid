@@ -111,6 +111,13 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-05, Asia/Muscat.
 
+### 2026-09-06 ai-lap returned and was audited
+
+- Read-only SSH audit succeeded. `ai-lap` is Ubuntu 22.04 with 31 GiB RAM and an RTX 3080 Ti with 12 GiB VRAM. Ollama 0.33.2 is active and remains correctly bound only to `127.0.0.1:11434`.
+- The requested model exists under the exact local tag `gemma4:12b` (7.6 GB); `nomic-embed-text:latest` is also installed. A live warm chat returned the exact sentinel `REID_OK` in about seven seconds with `think:false`. A bounded run with default thinking returned empty content after spending its output ceiling on hidden thinking, so the future adapter must explicitly disable thinking for normal agent runs.
+- `cloudflared` is installed but its service/tunnel configuration was not changed. No Ollama port was exposed and no provider was enabled during this audit.
+- The complete gated rollout, private tunnel/Access design, provider routing, RAG verification and rollback plan is recorded in `docs/AI_LAP_INTEGRATION.md`. Implementation remains pending Cloudflare Access setup and the sudo-required local adapter service.
+
 ### 2026-09-05 WhatsApp Cloud API setup
 
 - Meta developer account verification is complete for the Reid company account. Meta app `Reid` (`961651950294892`), business portfolio `Reid` (`999137349850382`), and WhatsApp Business test account (`3774337566038468`) were created. The claimed test Phone Number ID is `1270966392773395`; access tokens are never recorded in this repository.
