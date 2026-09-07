@@ -133,7 +133,7 @@ export function toAppError(raw: unknown): AppError {
     return { kind: "not_found", message: messages.not_found, detail };
   }
   // Anything the browser could not send at all reads as an outage, not a bug.
-  if (/failed to fetch|networkerror|load failed/i.test(detail)) {
+  if (/failed to fetch|networkerror|load failed|failed to send a request to the edge function/i.test(detail)) {
     return { kind: "offline", message: messages.offline, detail };
   }
 
@@ -168,6 +168,21 @@ export async function list<T>(
 
 export function messageFor(error: AppError, lang: "ar" | "en"): string {
   return error.message[lang];
+}
+
+const serviceMessages: Record<string, Message> = {
+  outside_24h_window: { ar: "انتهت نافذة 24 ساعة. أرسل قالبًا معتمدًا أولًا.", en: "The 24-hour window ended. Send an approved template first." },
+  owner_required: { ar: "هذا الإجراء متاح للمالك فقط.", en: "This action is available to the Owner only." },
+  unauthenticated: messages.unauthenticated,
+  invalid_session: messages.unauthenticated,
+  conversation_not_found: messages.not_found,
+  invalid_message: { ar: "الرسالة فارغة أو أطول من الحد المسموح.", en: "The message is empty or exceeds the allowed length." },
+  whatsapp_delivery_not_configured: { ar: "إرسال واتساب غير مهيأ حاليًا. أبلغ المالك.", en: "WhatsApp delivery is not configured. Notify the Owner." },
+};
+
+export function messageForRaw(raw: unknown, lang: "ar" | "en"): string {
+  const code = typeof raw === "string" ? raw : "";
+  return serviceMessages[code]?.[lang] ?? messageFor(toAppError(raw), lang);
 }
 
 /**

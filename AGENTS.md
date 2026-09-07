@@ -111,6 +111,14 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-06, Asia/Muscat.
 
+### 2026-09-07 Stability foundation
+
+- Work is active on `chore/stability-foundation`. Synced `main` into the release history to remove the Production divergence that conflicted with PR `#117` while preserving the verified WhatsApp browser-send repair.
+- Standardized browser-call preflight headers across account management, application decisions, the agent gateway, the public assistant and the Owner WhatsApp inbox. The UI now translates transport/service failures into safe Arabic or English guidance while retaining technical detail only in the console.
+- Upgraded the scheduled database backup to require encrypted output, restore every dump into an isolated PostgreSQL 16 service before upload, retain only AES-256 encrypted artifacts, and fail when credentials or artifacts are missing. Uptime failures now open or update one GitHub incident, allowing repository notification rules to alert the Owners without adding another external monitoring secret.
+- Generated and stored a dedicated backup-encryption credential directly in GitHub Actions secrets without printing it. Local verification passes 155/155 application tests, the Production TypeScript/Vite build, diff validation, and the complete Production/Staging routing, security-header, asset and Supabase uptime probe.
+- Deployed the stabilized browser contracts for `manage-account`, `decide-application`, `llm-gateway`, and `public-assistant` to the linked Supabase project. No secret values are recorded in Git or this file.
+
 ### 2026-09-07 WhatsApp Owner inbox browser-send repair
 
 - Fixed the production Owner inbox preflight contract: `whatsapp-inbox` now explicitly permits authenticated browser `POST` requests and the Supabase client information header, so the dashboard can reach the Edge Function instead of failing at the browser boundary.
