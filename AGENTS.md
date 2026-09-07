@@ -184,6 +184,13 @@ Last verified: 2026-09-06, Asia/Muscat.
 - Each response receives only the last 12 messages from that Owner conversation and is instructed to match the responsible person's Arabic/English language, brevity and tone without inventing familiarity. This uses the normalized message history already protected by Owner-only RLS; it does not broaden agent tools or approval levels.
 - Obvious six-digit OTP values and password/secret/API-key assignments are redacted before conversational context reaches a model. The raw webhook event retention policy remains separate work; responsible users must still never send credentials to the bot.
 
+### 2026-09-07 WhatsApp QR group bridge hardening
+
+- The isolated Baileys bridge is paired and running as an enabled `systemd --user` service on `ai-lap`; the only allowed group is `120363412585944970@g.us`.
+- Inbound and outbound bridge access is temporarily restricted to Owner Ali (`+968 9670 9444`) only. Sheikha is intentionally excluded until the Owner requests reactivation.
+- Group decryption recovery now uses a cacheable Signal key store, bounded message lookup, retry counters, five delayed retry attempts and recent history synchronization. Multi-device group authorization resolves `participantPn` before LID identifiers so the allow-list checks the actual phone number.
+- The local bridge suite passes 6/6 tests and `npm audit --omit=dev` reports zero vulnerabilities. The deployed service is enabled, active and emitted `reid_whatsapp_bridge_ready` after restart. No outbound WhatsApp acceptance message was sent because the Owner explicitly prohibited a test message; live end-to-end group reply validation remains pending a future inbound message from Ali.
+
 ### 2026-09-06 WhatsApp personal chief of staff
 
 - Work is active on `feature/whatsapp-personal-chief-of-staff`. WhatsApp presents one coherent assistant per responsible Owner: a personal chief of staff for writing, planning and priorities, plus a governed Reid company specialist that routes company work to the correct agent and tool boundary.

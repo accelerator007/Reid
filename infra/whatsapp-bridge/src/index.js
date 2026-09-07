@@ -1,5 +1,5 @@
 import { mkdir, chmod } from 'node:fs/promises';
-import { openSocket } from './socket.js';
+import { openSocket, rememberMessage } from './socket.js';
 import { boundedHistory, digits, shouldHandle } from './policy.js';
 
 const required = (name) => {
@@ -60,6 +60,7 @@ async function run() {
   socket.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
     for (const item of messages) {
+      rememberMessage(item);
       const id = item.key?.id;
       if (!id || seen.has(id)) continue;
       seen.set(id, Date.now());

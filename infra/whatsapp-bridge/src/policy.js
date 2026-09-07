@@ -13,7 +13,9 @@ export function shouldHandle({ key, message, botJid, owners, groups, trigger = '
   if (!key || key.fromMe || !key.remoteJid || !message) return { allow: false, reason: 'ignored' };
   const text = messageText(message);
   if (!text) return { allow: false, reason: 'unsupported' };
-  const sender = jidPhone(key.participant || key.remoteJid);
+  // Multi-device group events commonly expose a LID in `participant` and the
+  // actual phone identity in `participantPn`. Authorization must use the PN.
+  const sender = jidPhone(key.participantPn || key.participantAlt || key.participant || key.remoteJid);
   if (!owners.has(sender)) return { allow: false, reason: 'owner_denied' };
   const isGroup = key.remoteJid.endsWith('@g.us');
   if (!isGroup) return { allow: true, text, sender, chatId: key.remoteJid };
