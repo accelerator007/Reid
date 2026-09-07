@@ -12,6 +12,11 @@ test('allows an owner in an allowed group only when addressed', () => {
   assert.equal(shouldHandle({ ...base, botJid: '96890000000@s.whatsapp.net', owners, groups }).allow, true);
   assert.equal(shouldHandle({ ...base, message: { conversation: 'كلام عام' }, botJid: '96890000000@s.whatsapp.net', owners, groups }).allow, false);
 });
+test('recognizes Arabic invocation with a shadda', () => {
+  const result = shouldHandle({ ...base, message: { conversation: 'ريّد ساعدني' }, botJid: '96890000000@s.whatsapp.net', owners, groups });
+  assert.equal(result.allow, true);
+  assert.equal(result.text, 'ساعدني');
+});
 test('denies unlisted senders and groups', () => {
   assert.equal(shouldHandle({ ...base, key: { ...base.key, participant: '96890000001@s.whatsapp.net' }, owners, groups }).reason, 'owner_denied');
   assert.equal(shouldHandle({ ...base, key: { ...base.key, remoteJid: '999@g.us' }, owners, groups }).reason, 'group_denied');
