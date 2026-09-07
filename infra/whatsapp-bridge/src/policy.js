@@ -1,0 +1,36 @@
+export const digits = (value = '') => String(value).replace(/\D/g, '');
+
+export function jidPhone(jid = '') {
+  return digits(String(jid).split('@')[0].split(':')[0]);
+}
+
+export function messageText(message = {}) {
+  const value = message.ephemeralMessage?.message || message.viewOnceMessage?.message || message;
+  return String(value.conversation || value.extendedTextMessage?.text || value.imageMessage?.caption || value.videoMessage?.caption || '').trim();
+}
+
+export function shouldHandle({ key, message, botJid, owners, groups, trigger = 'ريد' }) {
+  if (!key || key.fromMe || !key.remoteJid || !message) return { allow: false, reason: 'ignored' };
+  const text = messageText(message);
+  if (!text) return { allow: false, reason: 'unsupported' };
+  const sender = jidPhone(key.participant || key.remoteJid);
+  if (!owners.has(sender)) return { allow: false, reason: 'owner_denied' };
+  const isGroup = key.remoteJid.endsWith('@g.us');
+  if (!isGroup) return { allow: true, text, sender, chatId: key.remoteJid };
+  if (!groups.has(key.remoteJid)) return { allow: false, reason: 'group_denied' };
+  const context = message.extendedTextMessage?.contextInfo || {};
+  const mentioned = (context.mentionedJid || []).some((jid) => jidPhone(jid) === jidPhone(botJid));
+  const replied = jidPhone(context.participant || '') === jidPhone(botJid);
+  const named = new RegExp(`^(?:@?${trigger}|reid)[\\s,:،-]+`, 'i').test(text);
+  if (!mentioned && !replied && !named) return { allow: false, reason: 'not_addressed' };
+  return {
+    allow: true,
+    text: text.replace(new RegExp(`^(?:@?${trigger}|reid)[\\s,:،-]+`, 'i'), '').trim() || 'مساعدة',
+    sender,
+    chatId: key.remoteJid,
+  };
+}
+
+export function boundedHistory(items, limit = 12) {
+  return items.slice(-limit).map(({ role, content }) => ({ role, content: String(content).slice(0, 2000) }));
+}

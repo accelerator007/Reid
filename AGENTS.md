@@ -118,6 +118,14 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-06, Asia/Muscat.
 
+### 2026-09-07 isolated WhatsApp QR bridge
+
+- Work is active on `feature/whatsapp-qr-bridge`. The bridge is deliberately a separate Node 20 service for a secondary WhatsApp number; Reid's official Cloud API number must never be paired with it.
+- The service uses patched Baileys `6.7.24`; `6.7.18` was rejected before deployment after `npm audit` exposed the critical message-spoofing advisory `GHSA-qvv5-jq5g-4cgg`. Authentication stays only on `ai-lap` with mode `0700`; senders are restricted to Ali/Sheikha, groups by exact JID, and group replies require Reid to be named, mentioned, or replied to. Each Owner/group history is isolated and capped at twelve turns.
+- Conversation generation uses the existing loopback-only Reid Ollama adapter and `gemma4:12b`; no Ollama port is exposed. The service refuses startup without an Owner list, group allow-list, adapter URL, and origin credential.
+- Baileys `6.7.24` removed the deprecated automatic terminal QR renderer. Pairing listens to `connection.update.qr` and renders that ephemeral value locally through `qrcode-terminal`; it is never logged to GitHub, Supabase, or application storage.
+- This unofficial bridge may be blocked by Meta and therefore cannot replace Cloud API for customer conversations. Installation, one-time human QR scan with a second number, exact group allow-list discovery, service activation, and a live group send/receive test remain release gates.
+
 ### 2026-09-07 Stability foundation
 
 - Work is active on `chore/stability-foundation`. Synced `main` into the release history to remove the Production divergence that conflicted with PR `#117` while preserving the verified WhatsApp browser-send repair.

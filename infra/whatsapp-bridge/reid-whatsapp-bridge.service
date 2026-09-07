@@ -1,0 +1,21 @@
+[Unit]
+Description=Reid isolated WhatsApp QR bridge
+After=network-online.target reid-ollama-adapter.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/reid-whatsapp-bridge
+EnvironmentFile=%h/.config/reid-ai/whatsapp-bridge.env
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/state/reid-whatsapp-bridge
+UMask=0077
+
+[Install]
+WantedBy=default.target
