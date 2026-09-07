@@ -8,7 +8,10 @@ const required = (name) => {
   return value;
 };
 const list = (name) => new Set((process.env[name] || '').split(',').map((value) => value.trim()).filter(Boolean));
-const owners = new Set([...list('REID_BRIDGE_ALLOWED_OWNERS')].map(digits));
+const owners = new Set([
+  ...[...list('REID_BRIDGE_ALLOWED_OWNERS')].map(digits),
+  ...[...list('REID_BRIDGE_ALLOWED_OWNER_LIDS')].map(digits),
+]);
 const groups = list('REID_BRIDGE_ALLOWED_GROUPS');
 if (!owners.size) throw new Error('REID_BRIDGE_ALLOWED_OWNERS is required');
 if (!groups.size) throw new Error('REID_BRIDGE_ALLOWED_GROUPS is required');

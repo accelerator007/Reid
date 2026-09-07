@@ -20,6 +20,11 @@ test('authorizes multi-device group senders by participantPn instead of LID', ()
   const key = { ...base.key, participant: '123456789@lid', participantPn: '96896709444@s.whatsapp.net' };
   assert.equal(shouldHandle({ ...base, key, owners, groups }).allow, true);
 });
+test('authorizes a verified direct-chat Owner LID', () => {
+  const lidOwners = new Set([...owners, '142185194344519']);
+  const key = { id: 'm2', remoteJid: '142185194344519@lid' };
+  assert.equal(shouldHandle({ key, message: { conversation: 'هلا' }, owners: lidOwners, groups }).allow, true);
+});
 test('accepts live notify and only fresh append events', () => {
   const now = 2_000_000;
   assert.equal(shouldProcessUpsert('notify'), true);
