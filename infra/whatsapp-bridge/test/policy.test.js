@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boundedHistory, jidPhone, messageAgeMs, messageText, shouldHandle, shouldProcessUpsert } from '../src/policy.js';
+import { boundedHistory, jidPhone, mediaKind, messageAgeMs, messageText, shouldHandle, shouldProcessUpsert } from '../src/policy.js';
 
 const owners = new Set(['96896709444', '96892797586']);
 const groups = new Set(['123@g.us']);
@@ -8,6 +8,12 @@ const base = { key: { id: 'm1', remoteJid: '123@g.us', participant: '96896709444
 
 test('normalizes device-qualified JIDs', () => assert.equal(jidPhone('96896709444:12@s.whatsapp.net'), '96896709444'));
 test('unwraps ephemeral text', () => assert.equal(messageText({ ephemeralMessage: { message: { conversation: 'هلا' } } }), 'هلا'));
+test('recognizes image and audio media with useful fallback instructions', () => {
+  assert.equal(mediaKind({ imageMessage: {} }), 'image');
+  assert.equal(messageText({ imageMessage: {} }), 'حلل هذه الصورة');
+  assert.equal(mediaKind({ ephemeralMessage: { message: { audioMessage: {} } } }), 'audio');
+  assert.equal(messageText({ audioMessage: {} }), 'حلل هذا التسجيل الصوتي');
+});
 test('allows an owner in an allowed group only when addressed', () => {
   assert.equal(shouldHandle({ ...base, botJid: '96890000000@s.whatsapp.net', owners, groups }).allow, true);
   assert.equal(shouldHandle({ ...base, message: { conversation: 'كلام عام' }, botJid: '96890000000@s.whatsapp.net', owners, groups }).allow, false);
@@ -58,6 +64,14 @@ test('can trust every member only inside the exact allow-listed Owner group', ()
   assert.equal(result.allow, true);
   assert.equal(result.isOwner, true);
   const denied = shouldHandle({ key: { ...key, remoteJid: '999@g.us' }, message: { conversation: 'اعرض التفاصيل' }, owners, groups, groupParticipation: true, groupReplyAll: true, trustGroupMembers: true });
+  assert.equal(denied.reason, 'group_denied');
+});
+test('treats owner-group media as addressed while keeping other groups denied', () => {
+  const key = { id: 'm6', remoteJid: '123@g.us', participantPn: '96890000004@s.whatsapp.net' };
+  const accepted = shouldHandle({ key, message: { audioMessage: {} }, owners, groups, trustGroupMembers: true });
+  assert.equal(accepted.allow, true);
+  assert.equal(accepted.addressed, true);
+  const denied = shouldHandle({ key: { ...key, remoteJid: '999@g.us' }, message: { imageMessage: {} }, owners, groups, trustGroupMembers: true });
   assert.equal(denied.reason, 'group_denied');
 });
 test('accepts live notify and only fresh append events', () => {

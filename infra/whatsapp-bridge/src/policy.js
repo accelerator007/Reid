@@ -4,9 +4,29 @@ export function jidPhone(jid = '') {
   return digits(String(jid).split('@')[0].split(':')[0]);
 }
 
+export function messageContent(message = {}) {
+  return message.ephemeralMessage?.message || message.viewOnceMessage?.message || message.viewOnceMessageV2?.message || message;
+}
+
+export function mediaKind(message = {}) {
+  const value = messageContent(message);
+  if (value.imageMessage) return 'image';
+  if (value.audioMessage) return 'audio';
+  return null;
+}
+
 export function messageText(message = {}) {
-  const value = message.ephemeralMessage?.message || message.viewOnceMessage?.message || message;
-  return String(value.conversation || value.extendedTextMessage?.text || value.imageMessage?.caption || value.videoMessage?.caption || '').trim();
+  const value = messageContent(message);
+  const text = String(value.conversation || value.extendedTextMessage?.text || value.imageMessage?.caption || value.videoMessage?.caption || value.documentMessage?.caption || '').trim();
+  if (text) return text;
+  if (value.imageMessage) return 'حلل هذه الصورة';
+  if (value.audioMessage) return 'حلل هذا التسجيل الصوتي';
+  return '';
+}
+
+export function messageContext(message = {}) {
+  const value = messageContent(message);
+  return value.extendedTextMessage?.contextInfo || value.imageMessage?.contextInfo || value.audioMessage?.contextInfo || value.videoMessage?.contextInfo || value.documentMessage?.contextInfo || {};
 }
 
 export function messageAgeMs(timestamp, now = Date.now()) {
@@ -36,13 +56,13 @@ export function shouldHandle({ key, message, botJid, owners, groups, trigger = '
   if (!groups.has(key.remoteJid)) return { allow: false, reason: 'group_denied' };
   if (trustGroupMembers) isOwner = true;
   if (!isOwner && !groupParticipation) return { allow: false, reason: 'owner_denied' };
-  const context = message.extendedTextMessage?.contextInfo || {};
+  const context = messageContext(message);
   const botPhones = new Set((Array.isArray(botJid) ? botJid : [botJid]).map(jidPhone).filter(Boolean));
   const mentioned = (context.mentionedJid || []).some((jid) => botPhones.has(jidPhone(jid)));
   const replied = Boolean(context.participant) && botPhones.has(jidPhone(context.participant));
   const invocation = new RegExp(`(?:^|[\\s,:،-])@?(?:${trigger}|ر[يی]ّ?د|reid)(?=[\\s,:،-]|$)`, 'i');
   const named = invocation.test(text);
-  const addressed = mentioned || replied || named;
+  const addressed = mentioned || replied || named || (trustGroupMembers && Boolean(mediaKind(message)));
   if (!addressed && !groupParticipation) return { allow: false, reason: 'not_addressed' };
   return {
     allow: true,
