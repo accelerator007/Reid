@@ -119,6 +119,7 @@ Last verified: 2026-09-06, Asia/Muscat.
 ### 2026-09-07 live multi-agent action matrix
 
 - The dedicated authenticated live workflow now exercises the real tool families for Operations, Sales, HR, Finance, Content, and Knowledge against isolated synthetic project/CRM/employee records. It covers eight read tools; L1 task, CRM follow-up, onboarding, and content-draft creation; L2 content-publish rejection; and L3 budget-change rejection with an unchanged-budget assertion. Test records and runs are deleted in `finally` cleanup.
+- GitHub Actions run `34064860674` executed that complete matrix against the live linked Supabase project and live `ai-lap`/Ollama provider on 2026-09-07. It passed in 2m04s, including the authenticated Owner browser journey and automatic cleanup. The earlier baseline run `34063981492` also passed Operations generation on the required `ollama` provider plus project-read and content-draft tool receipts.
 
 ### 2026-09-07 WhatsApp Intelligence V2
 
