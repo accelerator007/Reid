@@ -101,7 +101,7 @@ async function run() {
       if (!id || seen.has(id)) continue;
       seen.set(id, Date.now());
       for (const [known, at] of seen) if (Date.now() - at > 3600000) seen.delete(known);
-      const decision = shouldHandle({ key: item.key, message: item.message, botJid: socket.user?.id, owners, groups, trigger, groupParticipation, groupReplyAll, trustGroupMembers });
+      const decision = shouldHandle({ key: item.key, message: item.message, botJid: [socket.user?.id, socket.user?.lid], owners, groups, trigger, groupParticipation, groupReplyAll, trustGroupMembers });
       if (!decision.allow) {
         console.log('bridge_message_skipped', JSON.stringify({ reason: decision.reason, type, chatKind: item.key?.remoteJid?.endsWith('@g.us') ? 'group' : 'direct' }));
         continue;

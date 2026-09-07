@@ -37,16 +37,16 @@ export function shouldHandle({ key, message, botJid, owners, groups, trigger = '
   if (trustGroupMembers) isOwner = true;
   if (!isOwner && !groupParticipation) return { allow: false, reason: 'owner_denied' };
   const context = message.extendedTextMessage?.contextInfo || {};
-  const botPhone = jidPhone(botJid);
-  const mentioned = Boolean(botPhone) && (context.mentionedJid || []).some((jid) => jidPhone(jid) === botPhone);
-  const replied = Boolean(botPhone && context.participant) && jidPhone(context.participant) === botPhone;
-  const invocation = new RegExp(`^(?:@?(?:${trigger}|ر[يی]ّ?د)|reid)(?:[\\s,:،-]+|$)`, 'i');
+  const botPhones = new Set((Array.isArray(botJid) ? botJid : [botJid]).map(jidPhone).filter(Boolean));
+  const mentioned = (context.mentionedJid || []).some((jid) => botPhones.has(jidPhone(jid)));
+  const replied = Boolean(context.participant) && botPhones.has(jidPhone(context.participant));
+  const invocation = new RegExp(`(?:^|[\\s,:،-])@?(?:${trigger}|ر[يی]ّ?د|reid)(?=[\\s,:،-]|$)`, 'i');
   const named = invocation.test(text);
   const addressed = mentioned || replied || named;
   if (!addressed && !groupParticipation) return { allow: false, reason: 'not_addressed' };
   return {
     allow: true,
-    text: text.replace(invocation, '').trim() || 'مساعدة',
+    text: text.replace(invocation, ' ').replace(/\s{2,}/g, ' ').trim() || 'مساعدة',
     sender,
     chatId: key.remoteJid,
     isOwner,

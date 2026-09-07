@@ -17,6 +17,13 @@ test('recognizes Arabic invocation with a shadda', () => {
   assert.equal(result.allow, true);
   assert.equal(result.text, 'ساعدني');
 });
+test('recognizes Reid anywhere in the sentence and both phone and LID mentions', () => {
+  const middle = shouldHandle({ ...base, message: { conversation: 'هلا ريد كيفك؟' }, botJid: ['96897308003@s.whatsapp.net', '12589320921250@lid'], owners, groups });
+  assert.equal(middle.allow, true);
+  assert.equal(middle.text, 'هلا كيفك؟');
+  const mentioned = shouldHandle({ ...base, message: { extendedTextMessage: { text: 'هلا', contextInfo: { mentionedJid: ['12589320921250@lid'] } } }, botJid: ['96897308003@s.whatsapp.net', '12589320921250@lid'], owners, groups });
+  assert.equal(mentioned.allow, true);
+});
 test('denies unlisted senders and groups', () => {
   assert.equal(shouldHandle({ ...base, key: { ...base.key, participant: '96890000001@s.whatsapp.net' }, owners, groups }).reason, 'owner_denied');
   assert.equal(shouldHandle({ ...base, key: { ...base.key, remoteJid: '999@g.us' }, owners, groups }).reason, 'group_denied');
