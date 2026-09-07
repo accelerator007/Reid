@@ -2,6 +2,7 @@ import React from "react";
 import { Bot, BotOff, MessageCircle, RefreshCw, Send, UserRoundCheck } from "lucide-react";
 import { supabase } from "./supabase";
 import { useSession } from "./shell";
+import { messageForRaw } from "./db";
 
 type Lang = "ar" | "en";
 type Conversation = { id:string; sender_phone:string; display_name:string|null; bot_mode:"active"|"paused"|"human"; assigned_to:string|null; last_inbound_at:string|null; last_outbound_at:string|null; unread_count:number; updated_at:string };
@@ -47,7 +48,12 @@ export function WhatsAppInbox({ lang }:{ lang:Lang }) {
     setBusy(true);setError("");
     const result=await supabase.functions.invoke("whatsapp-inbox",{body:{action,conversationId:active.id,...extra}});
     setBusy(false);
-    if(result.error||result.data?.error){setError(result.data?.error||result.error?.message||"request_failed");return;}
+    if(result.error||result.data?.error){
+      const raw=result.data?.error||result.error;
+      console.error("whatsapp_inbox_request_failed",raw);
+      setError(messageForRaw(raw,lang));
+      return;
+    }
     await load();await loadMessages();
   };
   if(!owner)return null;
@@ -58,7 +64,7 @@ export function WhatsAppInbox({ lang }:{ lang:Lang }) {
       <aside aria-label={lang==="ar"?"المحادثات":"Conversations"}>{conversations.length?conversations.map(chat=><button type="button" key={chat.id} data-selected={chat.id===selected} onClick={()=>setSelected(chat.id)}><b>{chat.display_name||`+${chat.sender_phone}`}</b><small>{chat.bot_mode==="active"?(lang==="ar"?"الوكيل نشط":"Bot active"):(lang==="ar"?"تدخل بشري":"Human mode")}</small>{chat.unread_count>0&&<em>{chat.unread_count}</em>}</button>):<p>{lang==="ar"?"لا توجد محادثات بعد. أرسل «مساعدة» للرقم أولًا.":"No conversations yet. Message the number first."}</p>}</aside>
       <article className="whatsapp-thread">
         {active?<><header><div><b>{active.display_name||`+${active.sender_phone}`}</b><small>{withinWindow?(lang==="ar"?"نافذة الإرسال مفتوحة":"24-hour window open"):(lang==="ar"?"تحتاج رسالة قالب معتمدة":"Approved template required")}</small></div><div className="whatsapp-controls"><button type="button" disabled={busy} onClick={()=>void invoke("mark_read")}>{lang==="ar"?"تعليم كمقروء":"Mark read"}</button><button type="button" disabled={busy} onClick={()=>void invoke("configure",{botMode:active.bot_mode==="active"?"human":"active"})}>{active.bot_mode==="active"?<><BotOff/>{lang==="ar"?"استلام بشري":"Take over"}</>:<><Bot/>{lang==="ar"?"تشغيل الوكيل":"Enable bot"}</>}</button><label><UserRoundCheck/><span>{lang==="ar"?"المسؤول":"Assigned"}</span><select value={active.assigned_to||""} onChange={event=>void invoke("configure",{assignedTo:event.target.value||null})}><option value="">—</option>{owners.map(person=><option value={person.id} key={person.id}>{person.full_name||person.email}</option>)}</select></label></div></header><div className="whatsapp-messages">{messages.map(message=><div key={message.id} data-direction={message.direction}><p>{message.body||"—"}</p><small>{new Date(message.created_at).toLocaleString(lang==="ar"?"ar-OM":"en-OM")} · {message.delivery_status}</small></div>)}</div><form onSubmit={event=>{event.preventDefault();if(text.trim()){void invoke("send",{text:text.trim()});setText("")}}}><textarea value={text} onChange={event=>setText(event.target.value)} placeholder={lang==="ar"?"اكتب رسالة باسم ريّد…":"Write as Reid…"}/><button type="submit" disabled={busy||!withinWindow||!text.trim()}><Send/>{lang==="ar"?"إرسال":"Send"}</button></form></>:<p>{lang==="ar"?"اختر محادثة":"Select a conversation"}</p>}
-        {error&&<p className="whatsapp-error" role="alert">{error==="outside_24h_window"?(lang==="ar"?"انتهت نافذة 24 ساعة. أرسل قالبًا معتمدًا من Meta أولًا.":"The 24-hour window is closed. Send an approved Meta template first."):error}</p>}
+        {error&&<p className="whatsapp-error" role="alert">{error}</p>}
       </article>
     </div>
   </section>;
