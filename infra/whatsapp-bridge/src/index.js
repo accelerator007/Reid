@@ -19,17 +19,22 @@ const adapterUrl = required('REID_ADAPTER_URL').replace(/\/$/, '');
 const originToken = required('REID_ORIGIN_TOKEN');
 const authDir = process.env.REID_BRIDGE_AUTH_DIR || './auth';
 const trigger = process.env.REID_BRIDGE_TRIGGER || 'ريد';
+const groupParticipation = process.env.REID_BRIDGE_GROUP_PARTICIPATION === 'true';
+const groupReplyAll = process.env.REID_BRIDGE_GROUP_REPLY_MODE === 'all';
+const trustGroupMembers = process.env.REID_BRIDGE_TRUST_ALLOWED_GROUP_MEMBERS === 'true';
+const groupReplyCooldownMs = Math.max(30000, Number(process.env.REID_BRIDGE_GROUP_REPLY_COOLDOWN_MS || 90000));
 const conversations = new Map();
 const seen = new Map();
+const lastGroupReply = new Map();
 
 await mkdir(authDir, { recursive: true, mode: 0o700 });
 await chmod(authDir, 0o700);
 
-async function answer(sender, chatId, input) {
+async function answer(sender, chatId, input, context = {}) {
   const key = `${sender}:${chatId}`;
   const history = boundedHistory(conversations.get(key) || []);
   const messages = [
-    { role: 'system', content: `أنت ريّد، مساعد شخصي ذكي للمسؤول الحالي ومختص بنظام شركة Reid. افهم العربية العُمانية والأخطاء الإملائية. أجب مباشرة وباختصار، واسأل سؤالًا واحدًا فقط إذا نقصت معلومة مهمة. لا تدّع تنفيذ مهمة أو تعديل بيانات الشركة من هذه القناة؛ وضّح أن التنفيذ الحساس يمر عبر نظام الموافقات. سياق كل مسؤول ومجموعة معزول.` },
+    { role: 'system', content: `أنت ريّد، مساعد ذكي ومختص بنظام شركة Reid. افهم اللهجة العُمانية والخليجية والأخطاء الإملائية، وتكلم بلهجة خليجية بطابع عُماني طبيعي من غير تصنع. تكلم بطبيعية ودفء، وطابق نبرة المحادثة. استخدم من صفر إلى إيموجيين مناسبين عندما يضيفان معنى أو ودًا، ويمكن أن يكون الرد إيموجيًا قصيرًا عندما يكفي، لكن لا تبالغ ولا تكرر نفس الإيموجي. أجب مباشرة وباختصار، واسأل سؤالًا واحدًا فقط إذا نقصت معلومة مهمة. ناقش الطلبات العادية والحساسة وساعد في توضيحها، ولا تعرض كلمات مرور أو رموز OTP أو مفاتيح وصول مطلقًا. لا تدّع تنفيذ مهمة أو تعديل بيانات الشركة؛ التنفيذ الفعلي يمر عبر الأدوات ويسجل للتدقيق. سياق كل شخص ومجموعة معزول. ${context.proactive ? 'هذه رسالة عامة في مجموعة ولم ينادك أحد مباشرة. شارك فقط إن كانت لديك إضافة مفيدة وواضحة للمحادثة؛ وإلا أخرج النص الحرفي <NO_REPLY> دون أي كلام آخر.' : ''} ${context.isOwner ? 'المرسل مالك مصرح؛ استخدم معه سياق الشركة الداخلي المتاح لك ضمن الأدوات.' : 'المرسل عضو مجموعة عادي؛ رد عليه وساعده بالمحادثة، ولا تمنحه صلاحيات أو معلومات داخلية.'}` },
     ...history,
     { role: 'user', content: input.slice(0, 3000) },
   ];
@@ -43,6 +48,7 @@ async function answer(sender, chatId, input) {
   const payload = await response.json();
   const output = String(payload?.message?.content || '').trim().slice(0, 4000);
   if (!output) throw new Error('empty_model_output');
+  if (output === '<NO_REPLY>') return null;
   conversations.set(key, boundedHistory([...history, { role: 'user', content: input }, { role: 'assistant', content: output }]));
   return output;
 }
@@ -69,16 +75,19 @@ async function run() {
       if (!id || seen.has(id)) continue;
       seen.set(id, Date.now());
       for (const [known, at] of seen) if (Date.now() - at > 3600000) seen.delete(known);
-      const decision = shouldHandle({ key: item.key, message: item.message, botJid: socket.user?.id, owners, groups, trigger });
+      const decision = shouldHandle({ key: item.key, message: item.message, botJid: socket.user?.id, owners, groups, trigger, groupParticipation, groupReplyAll, trustGroupMembers });
       if (!decision.allow) {
         console.log('bridge_message_skipped', JSON.stringify({ reason: decision.reason, type, chatKind: item.key?.remoteJid?.endsWith('@g.us') ? 'group' : 'direct' }));
         continue;
       }
       console.log('bridge_message_accepted', JSON.stringify({ type, chatKind: decision.chatId.endsWith('@g.us') ? 'group' : 'direct' }));
       try {
+        if (decision.proactive && Date.now() - (lastGroupReply.get(decision.chatId) || 0) < groupReplyCooldownMs) continue;
         await socket.sendPresenceUpdate('composing', decision.chatId);
-        const output = await answer(decision.sender, decision.chatId, decision.text);
+        const output = await answer(decision.sender, decision.chatId, decision.text, decision);
+        if (!output) continue;
         await socket.sendMessage(decision.chatId, { text: output }, { quoted: item });
+        if (decision.chatId.endsWith('@g.us')) lastGroupReply.set(decision.chatId, Date.now());
       } catch (error) {
         console.error('bridge_request_failed', error instanceof Error ? error.message : 'unknown');
         await socket.sendMessage(decision.chatId, { text: 'تعذر الرد الآن. تم تسجيل المشكلة وسأحاول عند عودة خدمة ريّد.' }, { quoted: item });

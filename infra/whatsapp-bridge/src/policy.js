@@ -21,27 +21,36 @@ export function shouldProcessUpsert(type, timestamp, maxAppendAgeMs = 120000, no
   return type === 'notify' || (type === 'append' && messageAgeMs(timestamp, now) <= maxAppendAgeMs);
 }
 
-export function shouldHandle({ key, message, botJid, owners, groups, trigger = 'ريد' }) {
+export function shouldHandle({ key, message, botJid, owners, groups, trigger = 'ريد', groupParticipation = false, groupReplyAll = false, trustGroupMembers = false }) {
   if (!key || key.fromMe || !key.remoteJid || !message) return { allow: false, reason: 'ignored' };
   const text = messageText(message);
   if (!text) return { allow: false, reason: 'unsupported' };
   // Multi-device group events commonly expose a LID in `participant` and the
   // actual phone identity in `participantPn`. Authorization must use the PN.
   const sender = jidPhone(key.participantPn || key.participantAlt || key.participant || key.remoteJid);
-  if (!owners.has(sender)) return { allow: false, reason: 'owner_denied' };
   const isGroup = key.remoteJid.endsWith('@g.us');
-  if (!isGroup) return { allow: true, text, sender, chatId: key.remoteJid };
+  let isOwner = owners.has(sender);
+  if (!isGroup) return isOwner
+    ? { allow: true, text, sender, chatId: key.remoteJid, isOwner, addressed: true, proactive: false }
+    : { allow: false, reason: 'owner_denied' };
   if (!groups.has(key.remoteJid)) return { allow: false, reason: 'group_denied' };
+  if (trustGroupMembers) isOwner = true;
+  if (!isOwner && !groupParticipation) return { allow: false, reason: 'owner_denied' };
   const context = message.extendedTextMessage?.contextInfo || {};
-  const mentioned = (context.mentionedJid || []).some((jid) => jidPhone(jid) === jidPhone(botJid));
-  const replied = jidPhone(context.participant || '') === jidPhone(botJid);
+  const botPhone = jidPhone(botJid);
+  const mentioned = Boolean(botPhone) && (context.mentionedJid || []).some((jid) => jidPhone(jid) === botPhone);
+  const replied = Boolean(botPhone && context.participant) && jidPhone(context.participant) === botPhone;
   const named = new RegExp(`^(?:@?${trigger}|reid)[\\s,:،-]+`, 'i').test(text);
-  if (!mentioned && !replied && !named) return { allow: false, reason: 'not_addressed' };
+  const addressed = mentioned || replied || named;
+  if (!addressed && !groupParticipation) return { allow: false, reason: 'not_addressed' };
   return {
     allow: true,
     text: text.replace(new RegExp(`^(?:@?${trigger}|reid)[\\s,:،-]+`, 'i'), '').trim() || 'مساعدة',
     sender,
     chatId: key.remoteJid,
+    isOwner,
+    addressed,
+    proactive: !addressed && !groupReplyAll,
   };
 }
 

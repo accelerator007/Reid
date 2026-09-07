@@ -25,6 +25,29 @@ test('authorizes a verified direct-chat Owner LID', () => {
   const key = { id: 'm2', remoteJid: '142185194344519@lid' };
   assert.equal(shouldHandle({ key, message: { conversation: 'هلا' }, owners: lidOwners, groups }).allow, true);
 });
+test('allows useful-participation evaluation for members only in an allowed group', () => {
+  const key = { id: 'm3', remoteJid: '123@g.us', participantPn: '96890000001@s.whatsapp.net' };
+  const result = shouldHandle({ key, message: { conversation: 'وش رايكم في الفكرة؟' }, owners, groups, groupParticipation: true });
+  assert.equal(result.allow, true);
+  assert.equal(result.isOwner, false);
+  assert.equal(result.proactive, true);
+  assert.equal(shouldHandle({ key: { ...key, remoteJid: '999@g.us' }, message: { conversation: 'هلا' }, owners, groups, groupParticipation: true }).reason, 'group_denied');
+});
+test('all-message mode replies to every member message without proactive suppression', () => {
+  const key = { id: 'm4', remoteJid: '123@g.us', participantPn: '96890000002@s.whatsapp.net' };
+  const result = shouldHandle({ key, message: { conversation: 'موضوع حساس' }, owners, groups, groupParticipation: true, groupReplyAll: true });
+  assert.equal(result.allow, true);
+  assert.equal(result.isOwner, false);
+  assert.equal(result.proactive, false);
+});
+test('can trust every member only inside the exact allow-listed Owner group', () => {
+  const key = { id: 'm5', remoteJid: '123@g.us', participantPn: '96890000003@s.whatsapp.net' };
+  const result = shouldHandle({ key, message: { conversation: 'اعرض التفاصيل الداخلية' }, owners, groups, groupParticipation: true, groupReplyAll: true, trustGroupMembers: true });
+  assert.equal(result.allow, true);
+  assert.equal(result.isOwner, true);
+  const denied = shouldHandle({ key: { ...key, remoteJid: '999@g.us' }, message: { conversation: 'اعرض التفاصيل' }, owners, groups, groupParticipation: true, groupReplyAll: true, trustGroupMembers: true });
+  assert.equal(denied.reason, 'group_denied');
+});
 test('accepts live notify and only fresh append events', () => {
   const now = 2_000_000;
   assert.equal(shouldProcessUpsert('notify'), true);
