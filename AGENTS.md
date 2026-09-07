@@ -2,6 +2,13 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-09-07 stability monitoring correction
+
+- Production monitoring now checks Supabase through the public GoTrue `/auth/v1/health` endpoint. The previous `/rest/v1/` root probe correctly returned `401` because this project restricts that endpoint to `service_role`; monitoring no longer requires or risks an administrative database credential.
+- Cloudflare's WAF challenge from GitHub-hosted runners is treated only as edge reachability. Application routes, security headers and authenticated behavior remain enforced independently by deployment and browser CI rather than being falsely reported as downtime.
+- GitHub `main` protection was reverified live: strict `test` status, one approving review, CODEOWNER review, stale-review dismissal, conversation resolution and admin enforcement are active; force-pushes and deletion are disabled.
+- The weekly encrypted restore drill remains blocked by a malformed `SUPABASE_DB_URL` GitHub secret. Replace it with the complete connection URI copied from Supabase **Connect** (do not paste the password into chat), then rerun `weekly-backup.yml` manually.
+
 ## Mandatory status-update rule
 
 Every change must update this file before its PR is merged. At minimum update:
