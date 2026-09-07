@@ -1,6 +1,6 @@
 import { mkdir, chmod } from 'node:fs/promises';
 import { openSocket, rememberMessage } from './socket.js';
-import { boundedHistory, digits, shouldHandle } from './policy.js';
+import { boundedHistory, digits, shouldHandle, shouldProcessUpsert } from './policy.js';
 
 const required = (name) => {
   const value = process.env[name]?.trim();
@@ -58,15 +58,20 @@ async function run() {
     }
   });
   socket.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
+    console.log('bridge_upsert', JSON.stringify({ type, count: messages.length }));
     for (const item of messages) {
       rememberMessage(item);
+      if (!shouldProcessUpsert(type, item.messageTimestamp)) continue;
       const id = item.key?.id;
       if (!id || seen.has(id)) continue;
       seen.set(id, Date.now());
       for (const [known, at] of seen) if (Date.now() - at > 3600000) seen.delete(known);
       const decision = shouldHandle({ key: item.key, message: item.message, botJid: socket.user?.id, owners, groups, trigger });
-      if (!decision.allow) continue;
+      if (!decision.allow) {
+        console.log('bridge_message_skipped', JSON.stringify({ reason: decision.reason, type, chatKind: item.key?.remoteJid?.endsWith('@g.us') ? 'group' : 'direct' }));
+        continue;
+      }
+      console.log('bridge_message_accepted', JSON.stringify({ type, chatKind: decision.chatId.endsWith('@g.us') ? 'group' : 'direct' }));
       try {
         await socket.sendPresenceUpdate('composing', decision.chatId);
         const output = await answer(decision.sender, decision.chatId, decision.text);

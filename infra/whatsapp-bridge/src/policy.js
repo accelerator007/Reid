@@ -9,6 +9,18 @@ export function messageText(message = {}) {
   return String(value.conversation || value.extendedTextMessage?.text || value.imageMessage?.caption || value.videoMessage?.caption || '').trim();
 }
 
+export function messageAgeMs(timestamp, now = Date.now()) {
+  if (timestamp == null) return Number.POSITIVE_INFINITY;
+  const seconds = typeof timestamp === 'number'
+    ? timestamp
+    : Number(timestamp?.toNumber?.() ?? timestamp);
+  return Number.isFinite(seconds) ? Math.max(0, now - (seconds * 1000)) : Number.POSITIVE_INFINITY;
+}
+
+export function shouldProcessUpsert(type, timestamp, maxAppendAgeMs = 120000, now = Date.now()) {
+  return type === 'notify' || (type === 'append' && messageAgeMs(timestamp, now) <= maxAppendAgeMs);
+}
+
 export function shouldHandle({ key, message, botJid, owners, groups, trigger = 'ريد' }) {
   if (!key || key.fromMe || !key.remoteJid || !message) return { allow: false, reason: 'ignored' };
   const text = messageText(message);

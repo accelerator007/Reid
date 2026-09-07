@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boundedHistory, jidPhone, messageText, shouldHandle } from '../src/policy.js';
+import { boundedHistory, jidPhone, messageAgeMs, messageText, shouldHandle, shouldProcessUpsert } from '../src/policy.js';
 
 const owners = new Set(['96896709444', '96892797586']);
 const groups = new Set(['123@g.us']);
@@ -19,5 +19,12 @@ test('denies unlisted senders and groups', () => {
 test('authorizes multi-device group senders by participantPn instead of LID', () => {
   const key = { ...base.key, participant: '123456789@lid', participantPn: '96896709444@s.whatsapp.net' };
   assert.equal(shouldHandle({ ...base, key, owners, groups }).allow, true);
+});
+test('accepts live notify and only fresh append events', () => {
+  const now = 2_000_000;
+  assert.equal(shouldProcessUpsert('notify'), true);
+  assert.equal(shouldProcessUpsert('append', (now - 30_000) / 1000, 120_000, now), true);
+  assert.equal(shouldProcessUpsert('append', (now - 180_000) / 1000, 120_000, now), false);
+  assert.equal(messageAgeMs({ toNumber: () => (now - 10_000) / 1000 }, now), 10_000);
 });
 test('keeps bounded isolated history', () => assert.deepEqual(boundedHistory(Array.from({ length: 20 }, (_, i) => ({ role: 'user', content: String(i) })), 2).map((x) => x.content), ['18', '19']));
