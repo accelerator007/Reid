@@ -125,6 +125,7 @@ Last verified: 2026-09-06, Asia/Muscat.
 - Conversation generation uses the existing loopback-only Reid Ollama adapter and `gemma4:12b`; no Ollama port is exposed. The service refuses startup without an Owner list, group allow-list, adapter URL, and origin credential.
 - Baileys `6.7.24` removed the deprecated automatic terminal QR renderer. Pairing listens to `connection.update.qr` and renders that ephemeral value locally through `qrcode-terminal`; it is never logged to GitHub, Supabase, or application storage.
 - This unofficial bridge may be blocked by Meta and therefore cannot replace Cloud API for customer conversations. Installation, one-time human QR scan with a second number, exact group allow-list discovery, service activation, and a live group send/receive test remain release gates.
+- At the Owner's explicit request, Meta deletion was completed for the former Cloud API number `+968 9730 8003`. WhatsApp Manager now authoritatively shows “Reid hasn't added any phone numbers yet.” Cloud API delivery for that number is intentionally offline; its old credentials remain unusable operational history and must not be treated as a live transport. The next gate is human registration of the number in the WhatsApp mobile app, followed by a fresh linked-device QR scan on `ai-lap`.
 
 ### 2026-09-07 Stability foundation
 
