@@ -1,9 +1,11 @@
-import makeWASocket, { DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, fetchLatestWaWebVersion, useMultiFileAuthState } from '@whiskeysockets/baileys';
 import pino from 'pino';
 
 export async function openSocket(authDir) {
   const { state, saveCreds } = await useMultiFileAuthState(authDir);
-  const { version } = await fetchLatestBaileysVersion();
+  // Pairing is sensitive to WhatsApp Web's rapidly moving protocol version.
+  // The library release version may lag even when reported as latest.
+  const { version } = await fetchLatestWaWebVersion();
   const socket = makeWASocket({
     auth: state,
     version,
