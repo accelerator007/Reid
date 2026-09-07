@@ -19,6 +19,12 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(endpoint).toContain("outside_24h_window");
   });
 
+  it("allows the authenticated browser POST preflight", () => {
+    expect(endpoint).toContain("'access-control-allow-methods': 'POST, OPTIONS'");
+    expect(endpoint).toContain("authorization, apikey, content-type, x-client-info");
+    expect(endpoint).toContain("request.method === 'OPTIONS'");
+  });
+
   it("ships RLS for both normalized inbox tables", () => {
     expect(migration).toContain("whatsapp_conversations_owner_read");
     expect(migration).toContain("whatsapp_messages_owner_read");

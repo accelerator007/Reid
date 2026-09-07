@@ -1,6 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, apikey, content-type' } });
+const corsHeaders = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-headers': 'authorization, apikey, content-type, x-client-info',
+  'access-control-allow-methods': 'POST, OPTIONS',
+};
+
+const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: corsHeaders });
 
 Deno.serve(async request => {
   if (request.method === 'OPTIONS') return reply({ ok: true });
@@ -59,4 +65,3 @@ Deno.serve(async request => {
   await admin.from('whatsapp_conversations').update({ last_outbound_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', conversationId);
   return reply({ ok: true, messageId });
 });
-
