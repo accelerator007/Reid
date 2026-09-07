@@ -98,6 +98,11 @@ test.describe('authenticated employee role journeys', () => {
     await page.locator('input[name="password"]').fill(password);
     await page.locator('form button.primary').click();
     await expect(page.getByRole('heading', { name: 'خريطة قيادة الوكلاء' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'مركز قيادة النظام' })).toBeVisible();
+    const runnerCard=page.locator('.runner-card');
+    await expect(runnerCard).toContainText('gemma4:12b');
+    await expect(runnerCard).toContainText('متصل', { timeout:15_000 });
+    await expect(runnerCard.locator('.telemetry')).toHaveCount(5);
     await page.getByRole('button', { name: /Operations:/ }).click();
     await expect(page.getByRole('button', { name: 'تشغيل يدوي' })).toBeVisible();
     const caller = createClient(url!, publishableKey!, { auth: { persistSession: false } });
@@ -132,7 +137,7 @@ test.describe('authenticated employee role journeys', () => {
     expect(run?.latency_ms).toBeGreaterThan(0);
   });
 
-  test('Owner executes governed read and approved content tools', async () => {
+  test('Owner executes governed read and L1 content draft tools', async () => {
     test.skip(process.env.LIVE_TOOL_E2E !== '1', 'Live tool verification runs after deployment.');
     const caller = createClient(url!, publishableKey!, { auth: { persistSession: false } });
     const signed = await caller.auth.signInWithPassword({ email: users.owner.email, password });
@@ -149,17 +154,14 @@ test.describe('authenticated employee role journeys', () => {
     let runId: string | undefined;
     let draftId: string | undefined;
     try {
-      const queued = await caller.functions.invoke('llm-gateway', { body: {
+      const created = await caller.functions.invoke('llm-gateway', { body: {
         action: 'tool', agentId: 'content', toolName: 'content.draft.create', classification: 'public',
         arguments: { title_ar: `مسودة تحقق ${stamp}`, title_en: `Verification draft ${stamp}`, body_ar: 'مسودة اختبار تحذف تلقائيًا.', body_en: 'Disposable verification draft.' },
       }});
-      if (queued.error) throw queued.error;
-      expect(queued.data.status).toBe('pending_approval');
-      runId = queued.data.run.id;
-      const approved = await caller.functions.invoke('llm-gateway', { body: { action: 'approve', runId }});
-      if (approved.error) throw approved.error;
-      expect(approved.data.tool).toBe('content.draft.create');
-      draftId = approved.data.result.id;
+      if (created.error) throw created.error;
+      expect(created.data.tool).toBe('content.draft.create');
+      runId = created.data.runId;
+      draftId = created.data.result.id;
       const receipt = await admin.from('agent_tool_executions').select('tool_id,status').eq('run_id',runId).single();
       if (receipt.error) throw receipt.error;
       expect(receipt.data).toEqual({ tool_id:'content.draft.create', status:'succeeded' });
@@ -167,6 +169,72 @@ test.describe('authenticated employee role journeys', () => {
       if (draftId) await admin.from('content_drafts').delete().eq('id',draftId);
       if (runId) await admin.from('agent_runs').delete().eq('id',runId);
       if (read.data?.runId) await admin.from('agent_runs').delete().eq('id',read.data.runId);
+    }
+  });
+
+  test('Owner exercises every live company tool family and approval gate', async () => {
+    test.skip(process.env.LIVE_TOOL_E2E !== '1', 'Live tool verification runs after deployment.');
+    test.setTimeout(180_000);
+    const caller = createClient(url!, publishableKey!, { auth: { persistSession: false } });
+    const signed = await caller.auth.signInWithPassword({ email: users.owner.email, password });
+    if (signed.error) throw signed.error;
+    const runIds:string[] = [];
+    let projectId:string|undefined, companyId:string|undefined, leadId:string|undefined;
+    let taskId:string|undefined, activityId:string|undefined, onboardingId:string|undefined, draftId:string|undefined;
+    const invoke = async (agentId:string,toolName:string,args:Record<string,unknown>={}) => {
+      const response=await caller.functions.invoke('llm-gateway',{body:{action:'tool',agentId,toolName,arguments:args}});
+      if(response.error)throw response.error;
+      expect(response.data.error,JSON.stringify(response.data)).toBeFalsy();
+      if(response.data.runId)runIds.push(response.data.runId);
+      else if(response.data.run?.id)runIds.push(response.data.run.id);
+      return response.data;
+    };
+    try {
+      const project=await admin.from('projects').insert({name:`Agent matrix ${stamp}`,type:'internal',status:'active',manager_id:users.owner.id,budget:1000,currency:'OMR'}).select('id').single();
+      if(project.error)throw project.error; projectId=project.data.id;
+      const company=await admin.from('crm_companies').insert({name:`Agent matrix ${stamp}`,owner_id:users.owner.id}).select('id').single();
+      if(company.error)throw company.error; companyId=company.data.id;
+      const lead=await admin.from('crm_leads').insert({title:`Agent matrix lead ${stamp}`,company_id:companyId,owner_id:users.owner.id}).select('id').single();
+      if(lead.error)throw lead.error; leadId=lead.data.id;
+
+      for(const [agent,tool] of [
+        ['operations','projects.list'],['operations','tasks.list'],['sales','crm.pipeline'],
+        ['hr','people.list'],['hr','applications.list'],['finance','finance.budgets'],
+        ['content','content.context'],['knowledge','knowledge.search'],
+      ] as const) {
+        const result=await invoke(agent,tool,tool==='knowledge.search'?{query:'Agent matrix'}:{});
+        expect(result.tool).toBe(tool);
+      }
+
+      const task=await invoke('operations','tasks.create',{title:`Live tool task ${stamp}`,project_id:projectId});
+      taskId=task.result.id; expect(task.result.project_id).toBe(projectId);
+      const followUp=await invoke('sales','crm.follow_up.create',{subject:`Live follow-up ${stamp}`,lead_id:leadId,owner_id:users.owner.id});
+      activityId=followUp.result.id; expect(followUp.result.subject).toContain('Live follow-up');
+      const onboarding=await invoke('hr','onboarding.create',{user_id:users.employee.id,title_ar:`تهيئة ${stamp}`,title_en:`Onboarding ${stamp}`});
+      onboardingId=onboarding.result.id; expect(onboarding.result.user_id).toBe(users.employee.id);
+      const draft=await invoke('content','content.draft.create',{title_ar:`مسودة ${stamp}`,title_en:`Draft ${stamp}`,body_ar:'اختبار',body_en:'Test'});
+      draftId=draft.result.id; expect(draft.result.status).toBe('draft');
+
+      const publish=await invoke('content','content.publish',{draft_id:draftId});
+      expect(publish.status).toBe('pending_approval'); expect(publish.approvalLevel).toBe(2);
+      const rejectedPublish=await caller.functions.invoke('llm-gateway',{body:{action:'reject',runId:publish.run.id}});
+      if(rejectedPublish.error)throw rejectedPublish.error; expect(rejectedPublish.data.status).toBe('cancelled');
+
+      const budget=await invoke('finance','projects.budget.update',{project_id:projectId,budget:9999,currency:'OMR'});
+      expect(budget.status).toBe('pending_approval'); expect(budget.approvalLevel).toBe(3);
+      const rejectedBudget=await caller.functions.invoke('llm-gateway',{body:{action:'reject',runId:budget.run.id}});
+      if(rejectedBudget.error)throw rejectedBudget.error; expect(rejectedBudget.data.status).toBe('cancelled');
+      const unchanged=await admin.from('projects').select('budget').eq('id',projectId).single();
+      expect(Number(unchanged.data?.budget)).toBe(1000);
+    } finally {
+      if(activityId)await admin.from('crm_activities').delete().eq('id',activityId);
+      if(taskId)await admin.from('tasks').delete().eq('id',taskId);
+      if(onboardingId)await admin.from('onboarding_items').delete().eq('id',onboardingId);
+      if(draftId)await admin.from('content_drafts').delete().eq('id',draftId);
+      if(leadId)await admin.from('crm_leads').delete().eq('id',leadId);
+      if(companyId)await admin.from('crm_companies').delete().eq('id',companyId);
+      if(projectId)await admin.from('projects').delete().eq('id',projectId);
+      if(runIds.length)await admin.from('agent_runs').delete().in('id',runIds);
     }
   });
 });

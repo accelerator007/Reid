@@ -1,10 +1,17 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { providerAccepts, effectiveClassification, needsApproval, canRun, rank, agentTopology, operationalState } from './agents';
 import type { AgentRow, ProviderRow } from './agents';
 
 const gemini: ProviderRow = { id: 'gemini', name: 'Google Gemini API', kind: 'external', chat_model: 'gemini-2.5-flash', max_classification: 'public', retains_data: true, enabled: true };
 const ollama: ProviderRow = { id: 'ollama', name: 'Ollama on ai-lap', kind: 'local', chat_model: 'gemma3:12b', max_classification: 'restricted', retains_data: false, enabled: false };
 const agent = (over: Partial<AgentRow>): AgentRow => ({ id: 'hr', name: 'HR', status: 'idle', model: 'gemini-2.5-flash', host: 'gemini', approval_level: 3, provider_id: 'gemini', classification: 'restricted', enabled: true, disabled_reason: null, ...over });
+
+const localPrimaryMigration=readFileSync(new URL('../supabase/migrations/202609060005_ollama_primary_gemini_fallback.sql',import.meta.url),'utf8');
+const localRunner=readFileSync(new URL('../supabase/functions/ai-lap-runner/index.ts',import.meta.url),'utf8');
+const commandCenter=readFileSync(new URL('./agent-command.tsx',import.meta.url),'utf8');
+const telemetryMigration=readFileSync(new URL('../supabase/migrations/202609070002_owner_command_center_metrics.sql',import.meta.url),'utf8');
+const hostRunner=readFileSync(new URL('../infra/ai-lap/reid_agent_runner.py',import.meta.url),'utf8');
 
 describe('agent gateway policy', () => {
   it('orders classifications from public to restricted', () => {
@@ -61,5 +68,29 @@ describe('agent gateway policy', () => {
     expect(operationalState(agent({ enabled: false }), gemini, [])).toBe('blocked');
     expect(operationalState(agent({ id: 'marketing', classification: 'public', status: 'paused' }), gemini, [])).toBe('paused');
     expect(operationalState(agent({ id: 'marketing', classification: 'public' }), gemini, [{ id: 'r', agent_id: 'marketing', provider_id: 'gemini', classification: 'public', run_state: 'pending_approval', approval_level: 2, approval_state: 'pending', latency_ms: null, token_usage: null, output_preview: null, error: null, created_at: '' }])).toBe('approval');
+  });
+});
+
+describe('ai-lap primary runtime contract', () => {
+  it('assigns every governed agent to the verified local model',()=>{
+    expect(localPrimaryMigration).toContain("provider_id='ollama'");
+    expect(localPrimaryMigration).toContain("model='gemma4:12b'");
+    expect(localPrimaryMigration).toContain("'fallback_provider','gemini'");
+  });
+
+  it('uses Gemini only after a claimed local generation fails',()=>{
+    expect(localRunner).toContain('completeWithGeminiFallback');
+    expect(localRunner).toContain('local_failed_gemini_fallback');
+    expect(localRunner).toContain("fallback:'gemini'");
+  });
+
+  it('feeds live host telemetry into the Owner-only command center',()=>{
+    expect(hostRunner).toContain('nvidia-smi');
+    expect(hostRunner).toContain('memoryUsedGb');
+    expect(localRunner).toContain('gpu_utilization');
+    expect(telemetryMigration).toContain("agent_runner_status");
+    expect(telemetryMigration).toContain("supabase_realtime");
+    expect(commandCenter).toContain("owner && <SystemOverview");
+    expect(commandCenter).toContain("postgres_changes");
   });
 });

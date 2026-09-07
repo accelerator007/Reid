@@ -85,6 +85,17 @@ export type RunRow = {
   created_at: string;
 };
 
+export type RunnerStatusRow = {
+  id:string; status:'online'|'offline'|'degraded'; version:string|null; model:string|null; gpu:string|null;
+  ping_ms:number|null; cpu_percent:number|null; memory_used_gb:number|null; memory_total_gb:number|null;
+  gpu_utilization:number|null; vram_used_mb:number|null; vram_total_mb:number|null; last_seen_at:string;
+};
+
+export type SystemMetrics = {
+  activeProjects:number; openTasks:number; employees:number; pendingApprovals:number;
+  failedRuns:number; queuedRuns:number;
+};
+
 export const rank = (value: Classification) => classifications.indexOf(value);
 
 // A provider may only receive data at or below its own ceiling. Mirrors
@@ -139,17 +150,27 @@ export async function decideRun(runId: string, decision: 'approved' | 'rejected'
 }
 
 export async function loadAgentControl() {
-  if (!supabase) return { agents: [] as AgentRow[], providers: [] as ProviderRow[], runs: [] as RunRow[], tools: [] as AgentToolRow[] };
-  const [agents, providers, runs, tools] = await Promise.all([
+  const emptyMetrics:SystemMetrics={activeProjects:0,openTasks:0,employees:0,pendingApprovals:0,failedRuns:0,queuedRuns:0};
+  if (!supabase) return { agents: [] as AgentRow[], providers: [] as ProviderRow[], runs: [] as RunRow[], tools: [] as AgentToolRow[], runner:null as RunnerStatusRow|null, metrics:emptyMetrics };
+  const [agents, providers, runs, tools, runner, activeProjects, openTasks, employees, pendingApprovals, failedRuns, queuedRuns] = await Promise.all([
     supabase.from('agents').select('id,name,status,model,host,approval_level,provider_id,classification,enabled,disabled_reason,permissions').order('name'),
     supabase.from('llm_providers').select('id,name,kind,chat_model,max_classification,retains_data,enabled'),
     supabase.from('agent_runs').select('id,agent_id,provider_id,classification,run_state,approval_level,approval_state,latency_ms,token_usage,output_preview,error,created_at').order('created_at', { ascending: false }).limit(20),
     supabase.from('agent_tools').select('id,name_ar,name_en,description,operation,approval_level,input_schema').eq('enabled', true).order('id'),
+    supabase.from('agent_runner_status').select('id,status,version,model,gpu,ping_ms,cpu_percent,memory_used_gb,memory_total_gb,gpu_utilization,vram_used_mb,vram_total_mb,last_seen_at').eq('id','ai-lap').maybeSingle(),
+    supabase.from('projects').select('id',{count:'exact',head:true}).eq('status','active').is('archived_at',null),
+    supabase.from('tasks').select('id',{count:'exact',head:true}).not('status','in','("done","completed")'),
+    supabase.from('user_roles').select('user_id',{count:'exact',head:true}).eq('role','employee'),
+    supabase.from('agent_runs').select('id',{count:'exact',head:true}).eq('approval_state','pending'),
+    supabase.from('agent_runs').select('id',{count:'exact',head:true}).eq('run_state','failed').gte('created_at',new Date(Date.now()-24*60*60_000).toISOString()),
+    supabase.from('agent_runs').select('id',{count:'exact',head:true}).in('run_state',['queued','running']),
   ]);
   return {
     agents: (agents.data || []) as AgentRow[],
     providers: (providers.data || []) as ProviderRow[],
     runs: (runs.data || []) as RunRow[],
     tools: (tools.data || []) as AgentToolRow[],
+    runner: (runner.data || null) as RunnerStatusRow|null,
+    metrics:{activeProjects:activeProjects.count||0,openTasks:openTasks.count||0,employees:employees.count||0,pendingApprovals:pendingApprovals.count||0,failedRuns:failedRuns.count||0,queuedRuns:queuedRuns.count||0},
   };
 }

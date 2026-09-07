@@ -68,7 +68,7 @@ async function hash(value: string) {
   return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-async function callGemini(provider: Provider, systemPrompt: string | null, input: string) {
+async function callGemini(provider: Provider, systemPrompt: string | null, input: string, googleSearch = false) {
   const key = Deno.env.get('GEMINI_API_KEY');
   if (!key) throw new Error('provider_key_missing');
   const response = await fetch(`${provider.endpoint}/models/${provider.chat_model}:generateContent`, {
@@ -77,12 +77,21 @@ async function callGemini(provider: Provider, systemPrompt: string | null, input
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: input }] }],
       ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
+      ...(googleSearch ? { tools: [{ google_search: {} }] } : {}),
     }),
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload?.error?.message || `provider_http_${response.status}`);
-  const text = payload?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || '').join('') || '';
-  return { text, tokens: payload?.usageMetadata?.totalTokenCount ?? null };
+  const candidate = payload?.candidates?.[0];
+  const text = candidate?.content?.parts?.map((part: { text?: string }) => part.text || '').join('') || '';
+  const sources = (candidate?.groundingMetadata?.groundingChunks || [])
+    .map((chunk: { web?: { title?: string; uri?: string } }) => chunk.web)
+    .filter((source: { title?: string; uri?: string } | undefined) => source?.uri)
+    .slice(0, 3);
+  const sourceText = sources.length
+    ? `\n\nالمصادر:\n${sources.map((source: { title?: string; uri?: string }) => `- ${source.title || 'مصدر'}: ${source.uri}`).join('\n')}`
+    : '';
+  return { text: `${text}${sourceText}`, tokens: payload?.usageMetadata?.totalTokenCount ?? null };
 }
 
 async function callOllama(provider: Provider, systemPrompt: string | null, input: string) {
@@ -237,6 +246,18 @@ async function executeTool(admin: ReturnType<typeof createClient>, tool: AgentTo
       const match = (row: Record<string, unknown>) => JSON.stringify(row).toLowerCase().includes(query);
       return { projectDocuments: projectDocuments.filter(match).slice(0, 12), researchDocuments: researchDocuments.filter(match).slice(0, 12), memory: memory.filter(match).slice(0, 12) };
     }
+    case 'reminders.list': {
+      const result=await admin.from('personal_reminders').select('id,reminder_text,due_at,status,timezone').eq('owner_id',requesterId).eq('status','scheduled').order('due_at').limit(30);
+      if(result.error)throw new Error('tool_reminders_list_failed'); return result.data||[];
+    }
+    case 'reminders.create': {
+      const result=await admin.from('personal_reminders').insert({owner_id:requesterId,whatsapp_phone:text(args.whatsapp_phone,30),reminder_text:text(args.reminder_text,1000),due_at:text(args.due_at,40)}).select('id,reminder_text,due_at,status').single();
+      if(result.error)throw new Error('tool_reminder_create_failed'); return result.data;
+    }
+    case 'reminders.cancel': {
+      const result=await admin.from('personal_reminders').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('id',uuid(args.reminder_id)).eq('owner_id',requesterId).eq('status','scheduled').select('id,status').single();
+      if(result.error)throw new Error('tool_reminder_cancel_failed'); return result.data;
+    }
     case 'tasks.create': {
       const payload = { title: text(args.title, 200), description: text(args.description, 2000), project_id: uuid(args.project_id), research_id: uuid(args.research_id), assignee_id: uuid(args.assignee_id), priority: Math.max(0, Math.min(4, Number(args.priority ?? 2))), due_at: text(args.due_at, 40), created_by: requesterId };
       if (!payload.project_id && !payload.research_id) throw new Error('tool_argument_missing:project_id_or_research_id');
@@ -302,9 +323,10 @@ async function executeRun(admin: ReturnType<typeof createClient>, run: Run, agen
 
   const companyContext = await buildAgentContext(admin, agent.id, run.requested_by);
   const governedInput = `USER REQUEST:\n${input}\n\nAUTHORIZED COMPANY CONTEXT (read-only, bounded for this agent):\n${companyContext}\n\nUse only this context. Never claim an external action was completed. Clearly label recommendations and any action that still needs approval.`;
+  const groundedAgent = ['marketing', 'content', 'competitor', 'knowledge'].includes(agent.id);
   const result = provider.kind === 'local'
     ? await callOllama(provider, agent.system_prompt, governedInput)
-    : await callGemini(provider, agent.system_prompt, governedInput);
+    : await callGemini(provider, agent.system_prompt, governedInput, groundedAgent);
   const latency = Date.now() - startedAt;
   await admin.from('agent_runs').update({
     run_state: 'succeeded', status: 'succeeded', latency_ms: latency,
@@ -337,8 +359,10 @@ Deno.serve(async (request) => {
     let requesterId = '';
     let caller: ReturnType<typeof createClient> | null = null;
     if (internal) {
-      requesterId = Deno.env.get('WHATSAPP_OWNER_USER_ID') || '';
+      requesterId = typeof body.requesterId === 'string' ? body.requesterId : (Deno.env.get('WHATSAPP_OWNER_USER_ID') || '');
       if (!requesterId) throw new Error('whatsapp_owner_not_configured');
+      const ownerRole = await admin.from('user_roles').select('role').eq('user_id', requesterId).eq('role', 'owner').maybeSingle();
+      if (!ownerRole.data) throw new Error('whatsapp_owner_invalid');
     } else {
       if (!authorization) throw new Error('missing_authorization');
       caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
@@ -470,13 +494,16 @@ Deno.serve(async (request) => {
       if ((dailyCount ?? 0) >= provider.requests_per_day) throw new Error('daily_quota_exceeded');
     }
 
-    let effectiveApproval = agent.approval_level;
+    // A model conversation is read/analyse only (L0). The agent row stores the
+    // highest governed capability it can own, not a requirement to approve a
+    // greeting or an explanation. Mutations inherit their assigned tool level.
+    let effectiveApproval = 0;
     if (action === 'tool') {
       const requestedTool = body.toolName?.toString() || '';
       const assignment = await admin.from('agent_tool_assignments').select('tool:agent_tools(id,approval_level,enabled)').eq('agent_id',agent.id).eq('tool_id',requestedTool).single();
       const tool = assignment.data?.tool as unknown as Pick<AgentTool,'id'|'approval_level'|'enabled'> | undefined;
       if (assignment.error || !tool?.enabled) throw new Error('tool_not_assigned_or_disabled');
-      effectiveApproval = Math.max(effectiveApproval, tool.approval_level);
+      effectiveApproval = tool.approval_level;
     }
     const promptHash = await hash(`${agent.id}:${input}`);
     const needsApproval = effectiveApproval >= 2;
