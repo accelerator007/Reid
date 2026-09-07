@@ -40,6 +40,7 @@ fi
 if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_PUBLISHABLE_KEY:-}" ]; then
   curl --fail-with-body --silent --show-error --max-time 20 \
     -H "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+    -H "Authorization: Bearer ${SUPABASE_PUBLISHABLE_KEY}" \
     "${SUPABASE_URL}/rest/v1/" >/dev/null
 fi
 
