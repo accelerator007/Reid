@@ -119,6 +119,8 @@ Last verified: 2026-09-06, Asia/Muscat.
 - Generated and stored a dedicated backup-encryption credential directly in GitHub Actions secrets without printing it. Local verification passes 155/155 application tests, the Production TypeScript/Vite build, diff validation, and the complete Production/Staging routing, security-header, asset and Supabase uptime probe.
 - Deployed the stabilized browser contracts for `manage-account`, `decide-application`, `llm-gateway`, and `public-assistant` to the linked Supabase project. No secret values are recorded in Git or this file.
 - The backup workflow permits explicit manual restore drills from a reviewed branch while scheduled backups remain bound to `main`; this allows recovery failures to be caught before Production release.
+- The first remote uptime drill correctly opened incident `#120`, but Cloudflare returned 403 only to GitHub's generic curl identity while the same Production probe passed locally. The probe now uses a stable, explicitly identified browser-compatible Reid monitoring user agent; the incident remains open until the remote rerun passes.
+- The encrypted restore drill reached the live dump step and rejected the existing malformed `SUPABASE_DB_URL` before reading data. Replace that GitHub secret with the complete URI copied from Supabase **Connect** (which safely encodes special password characters), then rerun the weekly-backup workflow; never paste the database password into chat or documentation.
 
 ### 2026-09-07 WhatsApp Owner inbox browser-send repair
 
