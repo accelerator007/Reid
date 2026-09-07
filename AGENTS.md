@@ -115,6 +115,7 @@ Last verified: 2026-09-06, Asia/Muscat.
 
 - The Owner Dashboard command map now begins with a live system overview sourced from the real database: active projects, open tasks, employees, pending approvals, active queue, and 24-hour agent failures. It subscribes to Realtime changes for agents, runs, and the `ai-lap` heartbeat, with a five-second reconciliation poll as a resilience fallback.
 - `ai-lap` runner telemetry version 1.1.1 publishes every five seconds and reports heartbeat age, round-trip ping, CPU load, used/total RAM, GPU utilization, and used/total VRAM. Realtime pushes each database change immediately; the five-second interval is the bounded hardware sampling rate, not a page refresh delay. The Owner-only RLS row contains operational measurements only—never secrets, prompts, or document data. The command map retains per-agent live state, queue, tools, permissions, memory scopes, provider/model, latency, token usage, errors, controls, approvals, and retry.
+- Telemetry uses one `agent_runner_status` row keyed by `ai-lap`; each heartbeat overwrites that row rather than appending samples, so continuous monitoring cannot fill the database. The browser contract explicitly requires the Owner view to show the command-center heading, `gemma4:12b`, an online state, and all five telemetry gauges.
 
 ### 2026-09-07 live multi-agent action matrix
 

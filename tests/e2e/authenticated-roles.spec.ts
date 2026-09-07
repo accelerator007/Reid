@@ -98,6 +98,11 @@ test.describe('authenticated employee role journeys', () => {
     await page.locator('input[name="password"]').fill(password);
     await page.locator('form button.primary').click();
     await expect(page.getByRole('heading', { name: 'خريطة قيادة الوكلاء' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'مركز قيادة النظام' })).toBeVisible();
+    const runnerCard=page.locator('.runner-card');
+    await expect(runnerCard).toContainText('gemma4:12b');
+    await expect(runnerCard).toContainText('متصل', { timeout:15_000 });
+    await expect(runnerCard.locator('.telemetry')).toHaveCount(5);
     await page.getByRole('button', { name: /Operations:/ }).click();
     await expect(page.getByRole('button', { name: 'تشغيل يدوي' })).toBeVisible();
     const caller = createClient(url!, publishableKey!, { auth: { persistSession: false } });
