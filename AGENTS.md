@@ -111,6 +111,12 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-06, Asia/Muscat.
 
+### 2026-09-07 WhatsApp Owner inbox browser-send repair
+
+- Fixed the production Owner inbox preflight contract: `whatsapp-inbox` now explicitly permits authenticated browser `POST` requests and the Supabase client information header, so the dashboard can reach the Edge Function instead of failing at the browser boundary.
+- Added a regression contract test for the required CORS methods/headers. Deployed Edge Function version 5 and verified its live preflight from `https://reidpro.com` returns HTTP 200 with `POST, OPTIONS` allowed.
+- Real production Owner-inbox test passed: `اختبار إرسال من لوحة ريّد ✅` was sent to Ali through Meta and the live Reid timeline recorded it as `delivered` at 2026-09-07 13:02 Asia/Muscat.
+
 ### 2026-09-07 Owner system command center
 
 - The Owner Dashboard command map now begins with a live system overview sourced from the real database: active projects, open tasks, employees, pending approvals, active queue, and 24-hour agent failures. It subscribes to Realtime changes for agents, runs, and the `ai-lap` heartbeat, with a five-second reconciliation poll as a resilience fallback.
