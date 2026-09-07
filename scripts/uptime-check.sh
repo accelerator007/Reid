@@ -37,11 +37,12 @@ else
   done
 fi
 
-if [ -n "${SUPABASE_URL:-}" ]; then
+if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_PUBLISHABLE_KEY:-}" ]; then
   # The REST API root is intentionally service-role-only in this project. Probe
   # GoTrue's public health endpoint so monitoring never needs an administrative
   # database credential and cannot mistake a secure 401 response for downtime.
   curl --fail-with-body --silent --show-error --max-time 20 \
+    -H "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
     "${SUPABASE_URL}/auth/v1/health" >/dev/null
 fi
 

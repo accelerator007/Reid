@@ -17,6 +17,7 @@ jobs:
       - run: scripts/uptime-check.sh
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           ALLOW_EDGE_CHALLENGE: '1'
       - name: Open or update an incident
         if: failure()
