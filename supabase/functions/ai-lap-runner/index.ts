@@ -21,6 +21,53 @@ async function bridgeOwner(admin:ReturnType<typeof createClient>,sender:unknown)
   return profile.data;
 }
 
+const allowedRatios=new Set(['1:1','4:5','9:16','16:9','3:2','2:3']);
+const imageData=(payload:any)=>payload?.output_image?.data||payload?.outputs?.find((item:any)=>item?.type==='image')?.data||payload?.candidates?.[0]?.content?.parts?.find((part:any)=>part?.inlineData)?.inlineData?.data||'';
+
+async function generateContentImage(admin:ReturnType<typeof createClient>,owner:{id:string},args:Record<string,unknown>){
+  const key=Deno.env.get('GEMINI_API_KEY'); if(!key) throw new Error('image_provider_not_configured');
+  const count=Math.min(3,Math.max(1,Number(args.count)||1)), dailyLimit=Math.max(1,Number(Deno.env.get('CONTENT_IMAGE_DAILY_LIMIT')||10));
+  const budget=await admin.rpc('claim_content_image_budget',{wanted:count,daily_limit:dailyLimit});
+  if(budget.error) throw budget.error; if(!budget.data?.[0]?.allowed) throw new Error(`image_daily_limit_reached:${budget.data?.[0]?.remaining??0}`);
+  const model=Deno.env.get('GEMINI_IMAGE_MODEL')||'gemini-3.1-flash-image';
+  const ratio=allowedRatios.has(String(args.aspect_ratio))?String(args.aspect_ratio):'1:1';
+  const prompt=String(args.prompt||'').trim().slice(0,4000); if(!prompt) throw new Error('image_prompt_required');
+  const brand=`Create a polished production-ready visual for Reid (ريّد), an Omani technology and AI company. Brand palette: deep plum #2B1D3C, Reid purple #5E3F9E and #7C5AB5, pale lavender #F0EBF7, warm white. Minimal premium Apple-like composition, clear hierarchy, generous whitespace. Use the Reid bar-mark only if a supplied reference contains it; never invent or distort a logo. Arabic and English text must be exactly as supplied, legible, and free of spelling changes. No third-party marks. Request: ${prompt}`;
+  const reference=String(args.image||''); const mime=String(args.mime_type||'image/png');
+  const results=[];
+  try{
+    for(let index=0;index<count;index++){
+      const input:any[]=[{type:'text',text:`${brand}\nVariation ${index+1} of ${count}.`}];
+      if(reference) input.push({type:'image',mime_type:mime,data:reference});
+      const response=await fetch('https://generativelanguage.googleapis.com/v1beta/interactions',{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':key},body:JSON.stringify({model,input,response_format:{type:'image',aspect_ratio:ratio,image_size:String(args.image_size||'1K')}})});
+      const payload=await response.json();
+      if(!response.ok){ const reason=response.status===429?'image_provider_quota_unavailable':`image_provider_http_${response.status}`; throw new Error(reason); }
+      const data=imageData(payload); if(!data) throw new Error('image_provider_empty'); results.push(data);
+    }
+  }catch(error){ const unused=count-results.length; if(unused) await admin.rpc('release_content_image_budget',{wanted:unused}); throw error; }
+  let assetId=args.asset_id?String(args.asset_id):crypto.randomUUID(); let projectId=args.project_id?String(args.project_id):null; let firstVersion=1; let assetData:any;
+  if(!projectId&&args.project){ const project=await admin.from('projects').select('id').ilike('name',`%${String(args.project).replace(/[%_]/g,'')}%`).is('archived_at',null).limit(1).maybeSingle(); projectId=project.data?.id||null; }
+  if(args.asset_id){
+    const existing=await admin.from('content_assets').select('id,title,status,project_id,active_version').eq('id',assetId).eq('created_by',owner.id).single(); if(existing.error) throw new Error('image_asset_not_found');
+    assetData=existing.data; projectId=existing.data.project_id; firstVersion=existing.data.active_version+1;
+  }else{
+    const asset=await admin.from('content_assets').insert({id:assetId,project_id:projectId,title:String(args.title||'صورة ريّد').slice(0,180),prompt,platforms:Array.isArray(args.platforms)?args.platforms.slice(0,5):[],aspect_ratio:ratio,active_version:results.length,created_by:owner.id}).select('id,title,status,project_id').single();
+    if(asset.error) throw asset.error; assetData=asset.data;
+  }
+  const bucket=projectId?'project-files':'content-assets', versions=[];
+  for(const [index,data] of results.entries()){
+    const versionNumber=firstVersion+index;
+    const path=projectId?`${projectId}/content/${assetId}/v${versionNumber}.png`:`${owner.id}/${assetId}/v${versionNumber}.png`;
+    const bytes=Uint8Array.from(atob(data),char=>char.charCodeAt(0));
+    const upload=await admin.storage.from(bucket).upload(path,bytes,{contentType:'image/png',upsert:false}); if(upload.error) throw upload.error;
+    const version=await admin.from('content_asset_versions').insert({asset_id:assetId,version:versionNumber,storage_bucket:bucket,storage_path:path,mime_type:'image/png',prompt,model,created_by:owner.id}).select('id,version,storage_path').single(); if(version.error) throw version.error;
+    versions.push({...version.data,data});
+    if(projectId) await admin.from('project_files').insert({project_id:projectId,title:`${assetData.title} v${versionNumber}`,storage_path:path,category:'content-image',restricted:false,uploaded_by:owner.id});
+  }
+  if(args.asset_id){ const updated=await admin.from('content_assets').update({active_version:firstVersion+results.length-1,prompt,status:'draft',approved_by:null,approved_at:null,updated_at:new Date().toISOString()}).eq('id',assetId).select('id,title,status,project_id').single(); if(updated.error) throw updated.error; assetData=updated.data; }
+  return {asset:assetData,versions,remaining:budget.data[0].remaining,url:`https://reidpro.com/dashboard#content-asset-${assetId}`};
+}
+
 async function bridgeOperation(admin:ReturnType<typeof createClient>,body:Record<string,unknown>){
   const owner=await bridgeOwner(admin,body.sender);
   const operation=String(body.operation||''), args=(body.args&&typeof body.args==='object'?body.args:{}) as Record<string,unknown>;
@@ -87,6 +134,25 @@ async function bridgeOperation(admin:ReturnType<typeof createClient>,body:Record
   if(operation==='content.draft.create'){
     const row=await admin.from('content_drafts').insert({title_ar:String(args.title_ar||args.title||'مسودة ريّد').slice(0,180),title_en:String(args.title_en||args.title||'Reid draft').slice(0,180),body_ar:String(args.body_ar||args.body||'').slice(0,12000),body_en:String(args.body_en||'').slice(0,12000),created_by:owner.id}).select('id,title_ar,status').single();
     if(row.error) throw row.error; return {...row.data,url:`https://reidpro.com/dashboard#content-${row.data.id}`,publishing:'requires_connected_platform_and_L2_approval'};
+  }
+  if(operation==='image.generate'||operation==='image.edit') return await generateContentImage(admin,owner,args);
+  if(operation==='image.approve'){
+    const id=String(args.asset_id||'');
+    const row=await admin.from('content_assets').update({status:'approved',approved_by:owner.id,approved_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',id).in('status',['draft','pending_approval']).select('id,status').single();
+    if(row.error) throw row.error; return {...row.data,note:'L2 approval recorded; no external publication was performed.'};
+  }
+  if(operation==='image.rollback'){
+    const id=String(args.asset_id||''), version=Math.max(1,Number(args.version)||1);
+    const exists=await admin.from('content_asset_versions').select('id').eq('asset_id',id).eq('version',version).maybeSingle(); if(!exists.data) throw new Error('image_version_not_found');
+    const row=await admin.from('content_assets').update({active_version:version,status:'draft',approved_by:null,approved_at:null,updated_at:new Date().toISOString()}).eq('id',id).select('id,status,active_version').single(); if(row.error) throw row.error; return row.data;
+  }
+  if(operation==='image.versions'){
+    const id=String(args.asset_id||''); const asset=await admin.from('content_assets').select('id,title,status,active_version,created_by').eq('id',id).eq('created_by',owner.id).single(); if(asset.error) throw new Error('image_asset_not_found');
+    const versions=await admin.from('content_asset_versions').select('version,prompt,model,created_at').eq('asset_id',id).order('version',{ascending:false}); if(versions.error) throw versions.error; return {asset:asset.data,versions:versions.data};
+  }
+  if(operation==='image.schedule'){
+    const id=String(args.asset_id||''), scheduled=String(args.scheduled_at||''); if(!scheduled||Number.isNaN(new Date(scheduled).getTime())) throw new Error('valid_schedule_required');
+    const row=await admin.from('content_assets').update({status:'scheduled',scheduled_at:scheduled,updated_at:new Date().toISOString()}).eq('id',id).eq('status','approved').select('id,status,scheduled_at').single(); if(row.error) throw new Error('image_must_be_approved_before_schedule'); return {...row.data,note:'Schedule recorded; external connector must deliver it.'};
   }
   throw new Error('bridge_operation_not_allowed');
 }

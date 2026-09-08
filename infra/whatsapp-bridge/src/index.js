@@ -87,7 +87,7 @@ async function answer(sender, chatId, input, context = {}, images = []) {
   return output;
 }
 
-const actionLike = (text) => /(اجتماع|مشروع|المشاريع|تتذكر|احفظ|انس|ملف|عرض سعر|اتفقنا|محتوى|منشور|انستغرام|instagram|linkedin|لينكد|فاتور|لقطة|خطأ|تقرير)/i.test(text);
+const actionLike = (text) => /(اجتماع|مشروع|المشاريع|تتذكر|احفظ|انس|ملف|عرض سعر|اتفقنا|محتوى|منشور|صورة|صور|صمم|تصميم|ستوري|بنر|خلفية|انستغرام|instagram|linkedin|لينكد|فاتور|لقطة|خطأ|تقرير)/i.test(text);
 const approval = (text) => /^(?:اعتمد|موافق|موافقة|نفذ|انشره)\s*[.!؟]*$/i.test(text.trim());
 const rejection = (text) => /^(?:رفض|الغ|إلغاء|لا)\s*[.!؟]*$/i.test(text.trim());
 
@@ -95,6 +95,16 @@ async function smartAction(decision, prepared) {
   if (!company.enabled || (!actionLike(prepared.input) && !approval(prepared.input) && !rejection(prepared.input))) return null;
   const key = `${decision.sender}:${decision.chatId}`;
   const previousArtifact = await actionStore.artifact(key);
+  const previousImage = await actionStore.artifact(`image:${key}`);
+  const rollback = prepared.input.match(/(?:ارجع|استرجع).*(?:إصدار|نسخة)\s*(\d+)/i);
+  if (previousImage?.assetId && rollback) {
+    const result = await company.call(decision.sender, 'image.rollback', { asset_id: previousImage.assetId, version: Number(rollback[1]) }, decision.chatId);
+    return `رجعت الأصل للإصدار ${result.active_version}، وألغيت اعتماده السابق حتى تراجعه من جديد ✅`;
+  }
+  if (previousImage?.assetId && /(?:اعرض|وش|ما هي).*(?:الإصدارات|النسخ)/i.test(prepared.input)) {
+    const result = await company.call(decision.sender, 'image.versions', { asset_id: previousImage.assetId }, decision.chatId);
+    return `إصدارات ${result.asset.title} (النشط ${result.asset.active_version}):\n${result.versions.map((row) => `v${row.version} — ${new Date(row.created_at).toLocaleString('ar-OM', { timeZone: 'Asia/Muscat' })}`).join('\n')}`;
+  }
   if (previousArtifact && /(عدّل|عدل|أضف|اضف|احذف|غيّر|غير).*(?:تقرير|ملف|مقارنة)|(?:تقرير|ملف).*(عدّل|عدل|أضف|اضف|احذف|غيّر|غير)/i.test(prepared.input)) {
     const body = await chatModel('عدّل التقرير السابق حسب تعليمات المستخدم. أعد التقرير كاملًا فقط، منظمًا بعناوين ونقاط، وحافظ على الأرقام التي لم يطلب تغييرها.', `التقرير السابق:\n${previousArtifact.body}\n\nالتعديل المطلوب:\n${prepared.input}`);
     return { artifact: { type: previousArtifact.type, body }, text: 'حدثت نفس التقرير حسب طلبك ✅' };
@@ -107,13 +117,20 @@ async function smartAction(decision, prepared) {
       let result;
       if (pending.kind === 'meeting') result = await company.call(decision.sender, 'tasks.create_batch', { project: pending.project, tasks: pending.tasks }, decision.chatId);
       else if (pending.kind === 'content') result = await company.call(decision.sender, 'content.draft.create', pending.draft, decision.chatId);
+      else if (pending.kind === 'image_approval') result = await company.call(decision.sender, 'image.approve', { asset_id: pending.assetId }, decision.chatId);
       else return null;
       await actionStore.pending(key, null); await actionStore.finish(job.id, 'completed', result);
+      if (pending.kind === 'image_approval') return `✅ سُجل اعتماد L2 للصورة (${job.id}). ما تم نشرها تلقائيًا. تقدر الحين تطلب جدولتها بعد ربط المنصة.`;
       return `✅ اكتمل (${job.id})\n${pending.kind === 'meeting' ? `حفظت ${result.created.length} مهام في مشروع ${result.project.name}.` : `حفظت المسودة: ${result.title_ar}. النشر الخارجي يحتاج ربط المنصة وموافقة L2.`}\n${result.url}`;
     } catch (error) { await actionStore.finish(job.id, 'failed', String(error)); return `❌ فشل الطلب (${job.id}): ${error.message}\nتقدر تقول: أعد المحاولة.`; }
   }
 
   const plan = await planAction(chatModel, prepared.input, prepared.images);
+  if (plan.intent === 'image_schedule') {
+    if (!previousImage?.assetId) return 'ما لقيت صورة سابقة في هذه المحادثة عشان أجدولها.';
+    const result = await company.call(decision.sender, 'image.schedule', { asset_id: previousImage.assetId, scheduled_at: plan.scheduled_at }, decision.chatId);
+    return `سجلت الجدولة بتاريخ ${new Date(result.scheduled_at).toLocaleString('ar-OM', { timeZone: 'Asia/Muscat' })}. الإرسال للمنصة يبدأ بعد ربط حسابها؛ ما نشرت شيء الآن.`;
+  }
   if (plan.intent === 'project_status') {
     const data = await company.call(decision.sender, 'projects.summary', { query: plan.query || prepared.input, project: plan.project }, decision.chatId);
     return chatModel('أنت مدير عمليات. لخّص بيانات المشاريع التالية بالعربية بوضوح: الحالة، المتأخر، السبب المستنتج فقط إن كان مدعومًا، والخطوة التالية. اذكر رابط المشروع. لا تخترع.', JSON.stringify(data));
@@ -142,6 +159,21 @@ async function smartAction(decision, prepared) {
     const value = { kind: 'content', draft: { title_ar: 'مسودة محتوى ريّد', title_en: 'Reid content draft', body_ar: draftText, body_en: draftText } };
     await actionStore.pending(key, value);
     return `${draftText}\n\nاكتب «اعتمد» لحفظها كمسودة، أو «إلغاء». النشر والجدولة الخارجية يظهران بعد ربط حسابات المنصات.`;
+  }
+  if (plan.intent === 'image_generate' || plan.intent === 'image_edit') {
+    const prior = await actionStore.artifact(`image:${key}`);
+    const source = prepared.images[0] || (plan.intent === 'image_edit' ? prior?.data : '');
+    if (plan.intent === 'image_edit' && !source) return 'أرسل الصورة أو رد عليها، واكتب التعديل اللي تريده.';
+    const result = await company.call(decision.sender, plan.intent === 'image_edit' ? 'image.edit' : 'image.generate', {
+      prompt: plan.prompt || prepared.input, title: plan.title || 'تصميم ريّد', project: plan.project || '',
+      platforms: plan.platforms || [], aspect_ratio: plan.aspect_ratio || '1:1', count: Math.min(3, Math.max(1, Number(plan.count) || 1)),
+      image: source || undefined, mime_type: 'image/png', image_size: '1K',
+      asset_id: plan.intent === 'image_edit' ? prior?.assetId : undefined,
+    }, decision.chatId);
+    const images = result.versions.map((version) => ({ data: version.data, caption: `اقتراح ${version.version} • ${result.asset.title}\nالأصل ${result.asset.id.slice(0, 8)} • المتبقي اليوم ${result.remaining}` }));
+    await actionStore.artifact(`image:${key}`, { assetId: result.asset.id, data: result.versions.at(-1)?.data, updatedAt: new Date().toISOString() });
+    await actionStore.pending(key, { kind: 'image_approval', assetId: result.asset.id });
+    return { images, text: `جهزت ${images.length} اقتراح. اكتب «اعتمد» لتسجيل موافقة L2 على الأصل ${result.asset.id.slice(0, 8)}، أو أرسل تعديلك. ما راح يُنشر تلقائيًا.\n${result.url}` };
   }
   if (plan.intent === 'invoice') return chatModel('استخرج بيانات الفاتورة من الصورة: المورد، الرقم، التاريخ، البنود، الضريبة، الإجمالي، العملة. ضع علامة يحتاج مراجعة أمام أي قيمة غير مؤكدة. لا تدّع حفظها.', prepared.input, prepared.images);
   if (plan.intent === 'troubleshoot') return chatModel('حلل لقطة الخطأ كمختص تقني: ما الظاهر، السبب المرجح، خطوات آمنة مرتبة، وما الدليل الإضافي المطلوب. لا تخترع نصًا غير ظاهر.', prepared.input, prepared.images);
@@ -228,7 +260,10 @@ async function respond(socket, item, decision) {
     }
     const actionOutput = await smartAction(decision, prepared);
     if (actionOutput) {
-      if (typeof actionOutput === 'object' && actionOutput.artifact) {
+      if (typeof actionOutput === 'object' && actionOutput.images) {
+        for (const generated of actionOutput.images) await socket.sendMessage(decision.chatId, { image: Buffer.from(generated.data, 'base64'), caption: generated.caption }, { quoted: item });
+        await socket.sendMessage(decision.chatId, { text: actionOutput.text }, { quoted: item });
+      } else if (typeof actionOutput === 'object' && actionOutput.artifact) {
         const artifact = await generateArtifact(actionOutput.artifact.type, actionOutput.artifact.body);
         await actionStore.artifact(`${decision.sender}:${decision.chatId}`, { ...actionOutput.artifact, updatedAt: new Date().toISOString() });
         await socket.sendMessage(decision.chatId, { document: artifact.buffer, mimetype: artifact.mimetype, fileName: artifact.fileName, caption: actionOutput.text }, { quoted: item });
@@ -254,7 +289,10 @@ async function respond(socket, item, decision) {
     console.log('bridge_reply_sent', JSON.stringify({ chatKind: decision.chatId.endsWith('@g.us') ? 'group' : 'direct' }));
   } catch (error) {
     console.error('bridge_request_failed', error instanceof Error ? error.message : 'unknown');
-    await socket.sendMessage(decision.chatId, { text: 'تعذر الرد الحين، جرّب مرة ثانية بعد شوي 🙏' }, { quoted: item });
+    const message = error instanceof Error && error.message.includes('image_provider_quota_unavailable')
+      ? 'مولّد الصور مربوط، لكن حصة صور Gemini غير متاحة حاليًا. ما خصمت الطلب من حد ريّد؛ جرّب بعد تفعيل الحصة أو رجوعها.'
+      : 'تعذر الرد الحين، جرّب مرة ثانية بعد شوي 🙏';
+    await socket.sendMessage(decision.chatId, { text: message }, { quoted: item });
   } finally {
     await socket.sendPresenceUpdate('paused', decision.chatId);
   }

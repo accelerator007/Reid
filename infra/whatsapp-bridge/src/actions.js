@@ -9,7 +9,7 @@ const cleanJson = (value) => {
 };
 
 export async function planAction(chat, input, images = []) {
-  const system = `حلل رسالة واتساب وأخرج JSON فقط بلا markdown. الأنواع: chat,meeting,project_status,memory_list,memory_save,memory_delete,knowledge,content,report_edit,invoice,troubleshoot. البنية {"intent":"...","query":"...","project":"...","memory":"...","tasks":[{"title":"","assignee":"","due_at":null}],"summary":"","decisions":[]}. الاجتماع يستخرج ملخصًا وقرارات ومهام. لا تخترع أسماء أو مواعيد.`;
+  const system = `حلل رسالة واتساب وأخرج JSON فقط بلا markdown. الأنواع: chat,meeting,project_status,memory_list,memory_save,memory_delete,knowledge,content,image_generate,image_edit,image_schedule,report_edit,invoice,troubleshoot. البنية {"intent":"...","query":"...","project":"...","memory":"...","prompt":"...","title":"...","platforms":[],"aspect_ratio":"1:1","count":1,"scheduled_at":null,"tasks":[{"title":"","assignee":"","due_at":null}],"summary":"","decisions":[]}. مقاسات Instagram post=1:1 أو 4:5 وStory=9:16 وLinkedIn/banner=16:9. scheduled_at بصيغة ISO مع +04:00. الاجتماع يستخرج ملخصًا وقرارات ومهام. لا تخترع أسماء أو مواعيد.`;
   return cleanJson(await chat(system, input, images));
 }
 
@@ -27,4 +27,3 @@ export class ActionStore {
   async job(kind, request) { const row = { id: randomUUID().slice(0, 8), kind, status: 'running', request, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; this.state.jobs.push(row); await this.save(); return row; }
   async finish(id, status, result) { const row = this.state.jobs.find((x) => x.id === id); if (row) { row.status = status; row.result = result; row.updatedAt = new Date().toISOString(); await this.save(); } return row; }
 }
-

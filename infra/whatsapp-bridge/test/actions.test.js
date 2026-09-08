@@ -11,6 +11,13 @@ test('planner extracts strict JSON from a model response', async () => {
   assert.equal(plan.intent, 'project_status');
 });
 
+test('planner preserves image studio controls', async () => {
+  const plan = await planAction(async () => '{"intent":"image_generate","prompt":"إعلان ريّد","platforms":["instagram"],"aspect_ratio":"4:5","count":3}', 'صمم لي ثلاث صور');
+  assert.equal(plan.intent, 'image_generate');
+  assert.equal(plan.aspect_ratio, '4:5');
+  assert.equal(plan.count, 3);
+});
+
 test('action store persists approval and lifecycle state', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'reid-actions-'));
   const store = new ActionStore(join(directory, 'actions.json'));
