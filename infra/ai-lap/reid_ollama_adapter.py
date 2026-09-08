@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("REID_ADAPTER_PORT", "11436"))
 OLLAMA = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+IMAGE_SERVER = os.environ.get("REID_IMAGE_URL", "http://127.0.0.1:11437")
 TOKEN = os.environ.get("REID_ORIGIN_TOKEN", "")
 CHAT_MODEL = os.environ.get("REID_CHAT_MODEL", "gemma4:12b")
 EMBED_MODEL = os.environ.get("REID_EMBED_MODEL", "nomic-embed-text:latest")
@@ -69,7 +70,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(503, {"ok": False, "error": "ollama_unavailable"})
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path not in ("/api/chat", "/api/embeddings", "/api/transcribe"):
+        if self.path not in ("/api/chat", "/api/embeddings", "/api/transcribe", "/api/images"):
             return self.reply(404, {"error": "endpoint_not_allowed"})
         if not self.authorized():
             return self.reply(401, {"error": "unauthorized"})
@@ -83,6 +84,27 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length))
         except (ValueError, json.JSONDecodeError):
             return self.reply(400, {"error": "invalid_json"})
+
+        if self.path == "/api/images":
+            prompt = body.get("prompt")
+            if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 4000:
+                return self.reply(400, {"error": "invalid_image_prompt"})
+            request = urllib.request.Request(
+                f"{IMAGE_SERVER}/generate", data=json.dumps(body).encode(),
+                headers={"content-type": "application/json"}, method="POST"
+            )
+            try:
+                # Image inference and gemma4 share one 12 GB GPU. Explicitly
+                # release Ollama's resident model before handing it to SDXL.
+                self.request_ollama("/api/generate", {"model": CHAT_MODEL, "keep_alive": 0})
+                # First boot may include a one-time model download. Normal warm
+                # generations complete much sooner, but do not fail that setup.
+                with urllib.request.urlopen(request, timeout=900) as response:
+                    return self.reply(200, json.load(response))
+            except urllib.error.HTTPError as error:
+                return self.reply(502, {"error": "image_server_rejected", "status": error.code})
+            except Exception:
+                return self.reply(504, {"error": "image_server_unavailable"})
 
         if self.path == "/api/chat":
             messages = body.get("messages")

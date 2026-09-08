@@ -12,8 +12,15 @@ async function pair() {
   socket.ev.on('connection.update', ({ connection, qr, lastDisconnect }) => {
     if (qr) qrcode.generate(qr, { small: true });
     if (connection === 'open') {
-      console.log('تم ربط حساب واتساب بنجاح. أوقف هذا الأمر وشغّل الخدمة.');
-      setTimeout(() => process.exit(0), 1000);
+      // QR companion sessions in Baileys 6 can remain `registered=false` even
+      // after a valid multi-device login. An open socket plus the persisted
+      // `me` identity is the reliable completion signal. Keep the process
+      // alive briefly so the final creds.update/key writes finish on disk.
+      console.log('تم الاتصال بواتساب؛ جارٍ حفظ مفاتيح الجهاز…');
+      setTimeout(() => {
+        console.log('تم ربط حساب واتساب وحفظ مفاتيح الجهاز بنجاح. شغّل الخدمة الآن.');
+        process.exit(0);
+      }, 5000);
     }
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode;

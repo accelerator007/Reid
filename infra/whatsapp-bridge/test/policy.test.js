@@ -43,6 +43,13 @@ test('authorizes a verified direct-chat Owner LID', () => {
   const key = { id: 'm2', remoteJid: '142185194344519@lid' };
   assert.equal(shouldHandle({ key, message: { conversation: 'هلا' }, owners: lidOwners, groups }).allow, true);
 });
+test('accepts a public direct chat without granting Owner authority', () => {
+  const key = { id: 'public-1', remoteJid: '96890000111@s.whatsapp.net' };
+  const result = shouldHandle({ key, message: { conversation: 'مرحبا، ساعدني' }, owners, groups });
+  assert.equal(result.allow, true);
+  assert.equal(result.isOwner, false);
+  assert.equal(result.chatId, key.remoteJid);
+});
 test('allows useful-participation evaluation for members only in an allowed group', () => {
   const key = { id: 'm3', remoteJid: '123@g.us', participantPn: '96890000001@s.whatsapp.net' };
   const result = shouldHandle({ key, message: { conversation: 'وش رايكم في الفكرة؟' }, owners, groups, groupParticipation: true });

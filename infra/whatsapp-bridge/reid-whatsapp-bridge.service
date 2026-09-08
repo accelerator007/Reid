@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=%h/reid-whatsapp-bridge
 EnvironmentFile=%h/.config/reid-ai/whatsapp-bridge.env
+EnvironmentFile=-%h/.config/reid-ai/runner.env
 ExecStart=/usr/bin/node src/index.js
 Restart=on-failure
 RestartSec=5

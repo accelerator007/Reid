@@ -37,3 +37,16 @@ test('persists, claims and completes reminders without duplicate delivery', asyn
   await store.complete(created.id);
   assert.equal(JSON.parse(await readFile(path, 'utf8'))[0].status, 'sent');
 });
+
+test('supports weekly reminders, listing, snoozing and cancellation', async () => {
+  const weekly = parseReminder('ريد ذكرني كل أحد الساعة 9 صباحا بالتقرير', now);
+  assert.equal(weekly.recurrence.type, 'weekly');
+  const directory = await mkdtemp(join(tmpdir(), 'reid-reminders-actions-'));
+  const store = new ReminderStore(join(directory, 'reminders.json'));
+  await store.load();
+  const row = await store.create({ sender: '9681', chatId: 'direct', text: weekly.text, due: weekly.due, recurrence: weekly.recurrence });
+  assert.equal(store.list('9681', 'direct').length, 1);
+  const snoozed = await store.snooze('9681', 'direct', 7_200_000);
+  assert.equal(snoozed.id, row.id);
+  assert.equal((await store.cancel('9681', 'direct', row.id.slice(0, 8))).status, 'cancelled');
+});

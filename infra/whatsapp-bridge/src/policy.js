@@ -50,9 +50,9 @@ export function shouldHandle({ key, message, botJid, owners, groups, trigger = '
   const sender = jidPhone(key.participantPn || key.participantAlt || key.participant || key.remoteJid);
   const isGroup = key.remoteJid.endsWith('@g.us');
   let isOwner = owners.has(sender);
-  if (!isGroup) return isOwner
-    ? { allow: true, text, sender, chatId: key.remoteJid, isOwner, addressed: true, proactive: false }
-    : { allow: false, reason: 'owner_denied' };
+  // Direct chats are public support conversations. Authorization is carried
+  // separately in `isOwner`; accepting a message never promotes its sender.
+  if (!isGroup) return { allow: true, text, sender, chatId: key.remoteJid, isOwner, addressed: true, proactive: false };
   if (!groups.has(key.remoteJid)) return { allow: false, reason: 'group_denied' };
   if (trustGroupMembers) isOwner = true;
   if (!isOwner && !groupParticipation) return { allow: false, reason: 'owner_denied' };
