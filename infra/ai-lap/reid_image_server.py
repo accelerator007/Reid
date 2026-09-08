@@ -19,7 +19,7 @@ from PIL import Image
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("REID_IMAGE_PORT", "11437"))
-MODEL = os.environ.get("REID_IMAGE_MODEL", "stabilityai/sdxl-turbo")
+MODEL = os.environ.get("REID_IMAGE_MODEL", "stabilityai/stable-diffusion-xl-base-1.0")
 MAX_BODY = 8 * 1024 * 1024
 LOCK = threading.Lock()
 _text_pipe = None
@@ -31,7 +31,8 @@ def text_pipe():
     if _text_pipe is None:
         _text_pipe = AutoPipelineForText2Image.from_pretrained(
             MODEL, torch_dtype=torch.float16, variant="fp16", use_safetensors=True
-        ).to("cuda")
+        )
+        _text_pipe.enable_model_cpu_offload()
         _text_pipe.enable_vae_slicing()
     return _text_pipe
 
@@ -80,14 +81,21 @@ class Handler(BaseHTTPRequestHandler):
             if not prompt or len(prompt) > 4000:
                 return self.reply(400, {"error": "invalid_prompt"})
             width, height = dimensions(str(body.get("aspect_ratio", "1:1")))
-            kwargs = dict(prompt=prompt, width=width, height=height, num_inference_steps=4, guidance_scale=0.0)
+            kwargs = dict(
+                prompt=prompt, width=width, height=height,
+                negative_prompt="blurry, low quality, collage, mood board, color swatches, duplicate subject, malformed anatomy, watermark, logo, gibberish text, typography",
+                num_inference_steps=28, guidance_scale=7.0,
+            )
             encoded_source = body.get("image")
             with LOCK, torch.inference_mode():
                 if encoded_source:
                     source = Image.open(io.BytesIO(base64.b64decode(encoded_source, validate=True))).convert("RGB").resize((width, height))
-                    image = edit_pipe()(image=source, strength=0.65, **kwargs).images[0]
+                    pipe = edit_pipe()
+                    image = pipe(image=source, strength=0.65, **kwargs).images[0]
                 else:
-                    image = text_pipe()(**kwargs).images[0]
+                    pipe = text_pipe()
+                    image = pipe(**kwargs).images[0]
+                pipe.maybe_free_model_hooks()
             output = io.BytesIO()
             image.save(output, "PNG", optimize=True)
             self.reply(200, {"image": base64.b64encode(output.getvalue()).decode(), "model": MODEL})

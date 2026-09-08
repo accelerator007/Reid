@@ -26,7 +26,7 @@ async function generateContentImage(admin:ReturnType<typeof createClient>,owner:
   const count=Math.min(3,Math.max(1,Number(args.count)||1)), dailyLimit=Math.max(1,Number(Deno.env.get('CONTENT_IMAGE_DAILY_LIMIT')||10));
   const budget=await admin.rpc('claim_content_image_budget',{wanted:count,daily_limit:dailyLimit});
   if(budget.error) throw budget.error; if(!budget.data?.[0]?.allowed) throw new Error(`image_daily_limit_reached:${budget.data?.[0]?.remaining??0}`);
-  let model='stabilityai/sdxl-turbo';
+  let model='stabilityai/stable-diffusion-xl-base-1.0';
   const ratio=allowedRatios.has(String(args.aspect_ratio))?String(args.aspect_ratio):'1:1';
   const prompt=String(args.prompt||'').trim().slice(0,4000); if(!prompt) throw new Error('image_prompt_required');
   const supplied=Array.isArray(args.generated_images)?args.generated_images.map(String).filter(Boolean).slice(0,count):[];

@@ -65,7 +65,7 @@ async function chatModel(system, input, images = []) {
 }
 
 async function generateLocalImages(prompt, aspectRatio, count, source = '') {
-  const brand = `Create a polished production-ready visual for Reid (ريّد), an Omani technology and AI company. Brand palette: deep plum #2B1D3C, Reid purple #5E3F9E and #7C5AB5, pale lavender #F0EBF7, warm white. Minimal premium composition, clear hierarchy and generous whitespace. Never invent or distort a logo. Do not render text unless the request provides the exact text. No third-party marks. Request: ${prompt}`;
+  const brand = `PRIMARY SUBJECT AND ACTION (must be clearly visible): ${prompt}. Create one coherent high-quality image, not a collage or mood board. Apply Reid's deep plum, purple and pale-lavender palette only as subtle art direction where appropriate. Never add a logo, color chart, labels, watermark or text unless explicitly requested.`;
   const results = [];
   for (let index = 0; index < count; index += 1) {
     const response = await fetch(`${adapterUrl}/api/images`, {
@@ -78,6 +78,14 @@ async function generateLocalImages(prompt, aspectRatio, count, source = '') {
     results.push(payload.image);
   }
   return results;
+}
+
+async function enhanceImagePrompt(input) {
+  const translated = await chatModel(
+    'You are a precise image-prompt translator. Translate the request into concise English. Preserve the exact subject, count, action, setting, camera/style and exclusions. Never replace the subject with brand decor. Output only the final English prompt, no heading or explanation.',
+    input,
+  );
+  return translated.slice(0, 1800);
 }
 
 async function answer(sender, chatId, input, context = {}, images = []) {
@@ -142,6 +150,16 @@ async function smartAction(decision, prepared) {
   }
 
   const plan = await planAction(chatModel, prepared.input, prepared.images);
+  if (!decision.isOwner) {
+    if (plan.intent !== 'image_generate' && plan.intent !== 'image_edit') return null;
+    const allowance = await actionStore.claimPublicImage(decision.sender, 2);
+    if (!allowance.allowed) return 'وصلت الحد المجاني للصور اليوم (صورتين). جرّب باكر 🌟';
+    const source = prepared.images[0] || '';
+    if (plan.intent === 'image_edit' && !source) return 'أرسل الصورة مع التعديل اللي تريده.';
+    const imagePrompt = await enhanceImagePrompt(plan.prompt || prepared.input);
+    const generated = await generateLocalImages(imagePrompt, plan.aspect_ratio || '1:1', 1, source);
+    return { images: [{ data: generated[0], caption: `صممتها لك محليًا ✨ • المتبقي اليوم ${allowance.remaining}` }], text: 'إذا تبي تعديل، أرسل الصورة مرة ثانية واكتب التغيير المطلوب.' };
+  }
   if (plan.intent === 'image_schedule') {
     if (!previousImage?.assetId) return 'ما لقيت صورة سابقة في هذه المحادثة عشان أجدولها.';
     const result = await company.call(decision.sender, 'image.schedule', { asset_id: previousImage.assetId, scheduled_at: plan.scheduled_at }, decision.chatId);
@@ -182,13 +200,14 @@ async function smartAction(decision, prepared) {
     if (plan.intent === 'image_edit' && !source) return 'أرسل الصورة أو رد عليها، واكتب التعديل اللي تريده.';
     const count = Math.min(3, Math.max(1, Number(plan.count) || 1));
     const aspectRatio = plan.aspect_ratio || '1:1';
-    const generatedImages = await generateLocalImages(plan.prompt || prepared.input, aspectRatio, count, source);
+    const imagePrompt = await enhanceImagePrompt(plan.prompt || prepared.input);
+    const generatedImages = await generateLocalImages(imagePrompt, aspectRatio, count, source);
     const result = await company.call(decision.sender, plan.intent === 'image_edit' ? 'image.edit' : 'image.generate', {
       prompt: plan.prompt || prepared.input, title: plan.title || 'تصميم ريّد', project: plan.project || '',
       platforms: plan.platforms || [], aspect_ratio: aspectRatio, count,
       image: source || undefined, mime_type: 'image/png', image_size: '1K',
       asset_id: plan.intent === 'image_edit' ? prior?.assetId : undefined,
-      generated_images: generatedImages, generated_model: 'stabilityai/sdxl-turbo',
+      generated_images: generatedImages, generated_model: 'stabilityai/stable-diffusion-xl-base-1.0',
     }, decision.chatId);
     const images = result.versions.map((version) => ({ data: version.data, caption: `اقتراح ${version.version} • ${result.asset.title}\nالأصل ${result.asset.id.slice(0, 8)} • المتبقي اليوم ${result.remaining}` }));
     await actionStore.artifact(`image:${key}`, { assetId: result.asset.id, data: result.versions.at(-1)?.data, updatedAt: new Date().toISOString() });

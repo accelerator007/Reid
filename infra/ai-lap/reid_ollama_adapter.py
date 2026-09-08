@@ -94,6 +94,9 @@ class Handler(BaseHTTPRequestHandler):
                 headers={"content-type": "application/json"}, method="POST"
             )
             try:
+                # Image inference and gemma4 share one 12 GB GPU. Explicitly
+                # release Ollama's resident model before handing it to SDXL.
+                self.request_ollama("/api/generate", {"model": CHAT_MODEL, "keep_alive": 0})
                 # First boot may include a one-time model download. Normal warm
                 # generations complete much sooner, but do not fail that setup.
                 with urllib.request.urlopen(request, timeout=900) as response:

@@ -14,7 +14,7 @@ export async function planAction(chat, input, images = []) {
 }
 
 export class ActionStore {
-  constructor(path) { this.path = path; this.state = { pending: {}, artifacts: {}, jobs: [] }; this.queue = Promise.resolve(); }
+  constructor(path) { this.path = path; this.state = { pending: {}, artifacts: {}, jobs: [], publicImageUsage: {} }; this.queue = Promise.resolve(); }
   async load() {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
     try { this.state = { ...this.state, ...JSON.parse(await readFile(this.path, 'utf8')) }; } catch (error) { if (error?.code !== 'ENOENT') throw error; }
@@ -26,4 +26,12 @@ export class ActionStore {
   async artifact(key, value) { if (value === undefined) return this.state.artifacts[key]; this.state.artifacts[key] = value; await this.save(); return value; }
   async job(kind, request) { const row = { id: randomUUID().slice(0, 8), kind, status: 'running', request, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; this.state.jobs.push(row); await this.save(); return row; }
   async finish(id, status, result) { const row = this.state.jobs.find((x) => x.id === id); if (row) { row.status = status; row.result = result; row.updatedAt = new Date().toISOString(); await this.save(); } return row; }
+  async claimPublicImage(sender, dailyLimit = 2) {
+    const day = new Date().toISOString().slice(0, 10); const key = `${day}:${sender}`;
+    const used = Number(this.state.publicImageUsage[key] || 0);
+    if (used >= dailyLimit) return { allowed: false, remaining: 0 };
+    this.state.publicImageUsage = Object.fromEntries(Object.entries(this.state.publicImageUsage).filter(([entry]) => entry.startsWith(`${day}:`)));
+    this.state.publicImageUsage[key] = used + 1; await this.save();
+    return { allowed: true, remaining: dailyLimit - used - 1 };
+  }
 }
