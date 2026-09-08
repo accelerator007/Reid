@@ -4,6 +4,8 @@ import { generateArtifact, requestedArtifactType } from './artifacts.js';
 import { openSocket, rememberMessage } from './socket.js';
 import { boundedHistory, digits, mediaKind, messageContent, messageContext, shouldHandle, shouldProcessUpsert } from './policy.js';
 import { formatMuscat, muscatNow, parseReminder, ReminderStore } from './reminders.js';
+import { ActionStore, planAction } from './actions.js';
+import { CompanyClient } from './company.js';
 
 // libsignal logs complete session objects (including key material) with
 // console.info while rotating sessions. Suppress only that unsafe diagnostic.
@@ -38,6 +40,8 @@ const conversations = new Map();
 const seen = new Map();
 const lastGroupReply = new Map();
 const pendingReminders = new Map();
+const company = new CompanyClient({ url: process.env.REID_RUNNER_URL, token: process.env.REID_RUNNER_TOKEN });
+const actionStore = new ActionStore(process.env.REID_BRIDGE_ACTIONS_FILE || `${authDir}/actions.json`);
 let responseQueue = Promise.resolve();
 let activeSocket;
 
@@ -45,6 +49,20 @@ await mkdir(authDir, { recursive: true, mode: 0o700 });
 await chmod(authDir, 0o700);
 const reminderStore = new ReminderStore(process.env.REID_BRIDGE_REMINDERS_FILE || `${authDir}/reminders.json`);
 await reminderStore.load();
+await actionStore.load();
+
+async function chatModel(system, input, images = []) {
+  const response = await fetch(`${adapterUrl}/api/chat`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-reid-origin-token': originToken },
+    body: JSON.stringify({ messages: [{ role: 'system', content: system }, { role: 'user', content: input.slice(0, 16000), ...(images.length ? { images } : {}) }], think: false }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!response.ok) throw new Error(`adapter_${response.status}`);
+  const payload = await response.json();
+  const output = String(payload?.message?.content || '').trim();
+  if (!output) throw new Error('empty_model_output');
+  return output;
+}
 
 async function answer(sender, chatId, input, context = {}, images = []) {
   const key = chatId.endsWith('@g.us') ? `group:${chatId}` : `${sender}:${chatId}`;
@@ -67,6 +85,67 @@ async function answer(sender, chatId, input, context = {}, images = []) {
   if (output === '<NO_REPLY>') return null;
   conversations.set(key, boundedHistory([...history, { role: 'user', content: input }, { role: 'assistant', content: output }]));
   return output;
+}
+
+const actionLike = (text) => /(اجتماع|مشروع|المشاريع|تتذكر|احفظ|انس|ملف|عرض سعر|اتفقنا|محتوى|منشور|انستغرام|instagram|linkedin|لينكد|فاتور|لقطة|خطأ|تقرير)/i.test(text);
+const approval = (text) => /^(?:اعتمد|موافق|موافقة|نفذ|انشره)\s*[.!؟]*$/i.test(text.trim());
+const rejection = (text) => /^(?:رفض|الغ|إلغاء|لا)\s*[.!؟]*$/i.test(text.trim());
+
+async function smartAction(decision, prepared) {
+  if (!company.enabled || (!actionLike(prepared.input) && !approval(prepared.input) && !rejection(prepared.input))) return null;
+  const key = `${decision.sender}:${decision.chatId}`;
+  const previousArtifact = await actionStore.artifact(key);
+  if (previousArtifact && /(عدّل|عدل|أضف|اضف|احذف|غيّر|غير).*(?:تقرير|ملف|مقارنة)|(?:تقرير|ملف).*(عدّل|عدل|أضف|اضف|احذف|غيّر|غير)/i.test(prepared.input)) {
+    const body = await chatModel('عدّل التقرير السابق حسب تعليمات المستخدم. أعد التقرير كاملًا فقط، منظمًا بعناوين ونقاط، وحافظ على الأرقام التي لم يطلب تغييرها.', `التقرير السابق:\n${previousArtifact.body}\n\nالتعديل المطلوب:\n${prepared.input}`);
+    return { artifact: { type: previousArtifact.type, body }, text: 'حدثت نفس التقرير حسب طلبك ✅' };
+  }
+  const pending = await actionStore.pending(key);
+  if (pending && rejection(prepared.input)) { await actionStore.pending(key, null); return 'تم إلغاء الطلب، ولا تغيّر شيء 👍'; }
+  if (pending && approval(prepared.input)) {
+    const job = await actionStore.job(pending.kind, pending);
+    try {
+      let result;
+      if (pending.kind === 'meeting') result = await company.call(decision.sender, 'tasks.create_batch', { project: pending.project, tasks: pending.tasks }, decision.chatId);
+      else if (pending.kind === 'content') result = await company.call(decision.sender, 'content.draft.create', pending.draft, decision.chatId);
+      else return null;
+      await actionStore.pending(key, null); await actionStore.finish(job.id, 'completed', result);
+      return `✅ اكتمل (${job.id})\n${pending.kind === 'meeting' ? `حفظت ${result.created.length} مهام في مشروع ${result.project.name}.` : `حفظت المسودة: ${result.title_ar}. النشر الخارجي يحتاج ربط المنصة وموافقة L2.`}\n${result.url}`;
+    } catch (error) { await actionStore.finish(job.id, 'failed', String(error)); return `❌ فشل الطلب (${job.id}): ${error.message}\nتقدر تقول: أعد المحاولة.`; }
+  }
+
+  const plan = await planAction(chatModel, prepared.input, prepared.images);
+  if (plan.intent === 'project_status') {
+    const data = await company.call(decision.sender, 'projects.summary', { query: plan.query || prepared.input, project: plan.project }, decision.chatId);
+    return chatModel('أنت مدير عمليات. لخّص بيانات المشاريع التالية بالعربية بوضوح: الحالة، المتأخر، السبب المستنتج فقط إن كان مدعومًا، والخطوة التالية. اذكر رابط المشروع. لا تخترع.', JSON.stringify(data));
+  }
+  if (plan.intent === 'meeting') {
+    if (!plan.project) return 'حللت الاجتماع، بس أحتاج اسم المشروع عشان أربط المهام بالمكان الصحيح. وش اسم المشروع؟';
+    const value = { kind: 'meeting', project: plan.project, summary: plan.summary, decisions: plan.decisions || [], tasks: plan.tasks || [] };
+    await actionStore.pending(key, value);
+    return `📋 معاينة الاجتماع\n\nالملخص: ${value.summary || '—'}\nالقرارات: ${(value.decisions || []).join('، ') || '—'}\nالمهام:\n${value.tasks.map((task, index) => `${index + 1}. ${task.title}${task.assignee ? ` — ${task.assignee}` : ''}${task.due_at ? ` — ${task.due_at}` : ''}`).join('\n') || 'لا توجد مهام واضحة'}\n\nاكتب «اعتمد» للحفظ في ${value.project} أو «إلغاء».`;
+  }
+  if (plan.intent === 'memory_list') {
+    const rows = await company.call(decision.sender, 'memory.list', { scope: decision.chatId.endsWith('@g.us') ? 'group' : 'user' }, decision.chatId);
+    return rows.length ? `هذا اللي أتذكره:\n${rows.map((row, i) => `${i + 1}. ${row.content} [${row.id.slice(0, 8)}]`).join('\n')}` : 'ما عندي ذاكرة محفوظة لك في هذا السياق للحين.';
+  }
+  if (plan.intent === 'memory_save') {
+    const row = await company.call(decision.sender, 'memory.save', { scope: decision.chatId.endsWith('@g.us') ? 'group' : 'user', content: plan.memory || prepared.input }, decision.chatId);
+    return `حفظتها في ذاكرتك المنفصلة ✅\n${row.content}`;
+  }
+  if (plan.intent === 'memory_delete') return 'اعرض ذاكرتك أول بعبارة «وش تتذكر عني؟»، وبعدها قل «انسَ» مع رقم الذاكرة الظاهر.';
+  if (plan.intent === 'knowledge') {
+    const sources = await company.call(decision.sender, 'knowledge.search', { query: plan.query || prepared.input }, decision.chatId);
+    return chatModel('أجب اعتمادًا على النتائج فقط. اذكر اسم كل مصدر ومعرّفه، وقل بوضوح إن لم تكف النتائج. لا تخترع رابطًا أو صفحة.', `${prepared.input}\n\nالمصادر:\n${JSON.stringify(sources)}`);
+  }
+  if (plan.intent === 'content') {
+    const draftText = await chatModel('أنشئ مسودة محتوى Reid احترافية بالعربية والإنجليزية مناسبة لـInstagram وLinkedIn. أعط عنوانين ثم النصين ثم اقتراحًا بصريًا، دون الادعاء بالنشر.', prepared.input, prepared.images);
+    const value = { kind: 'content', draft: { title_ar: 'مسودة محتوى ريّد', title_en: 'Reid content draft', body_ar: draftText, body_en: draftText } };
+    await actionStore.pending(key, value);
+    return `${draftText}\n\nاكتب «اعتمد» لحفظها كمسودة، أو «إلغاء». النشر والجدولة الخارجية يظهران بعد ربط حسابات المنصات.`;
+  }
+  if (plan.intent === 'invoice') return chatModel('استخرج بيانات الفاتورة من الصورة: المورد، الرقم، التاريخ، البنود، الضريبة، الإجمالي، العملة. ضع علامة يحتاج مراجعة أمام أي قيمة غير مؤكدة. لا تدّع حفظها.', prepared.input, prepared.images);
+  if (plan.intent === 'troubleshoot') return chatModel('حلل لقطة الخطأ كمختص تقني: ما الظاهر، السبب المرجح، خطوات آمنة مرتبة، وما الدليل الإضافي المطلوب. لا تخترع نصًا غير ظاهر.', prepared.input, prepared.images);
+  return null;
 }
 
 async function prepareMedia(socket, item, instruction) {
@@ -119,6 +198,20 @@ async function respond(socket, item, decision) {
     await socket.sendPresenceUpdate('composing', decision.chatId);
     const prepared = await prepareMedia(socket, item, decision.text);
     const reminderKey = `${decision.sender}:${decision.chatId}`;
+    if (/(تذكيراتي|قائمة التذكير|اعرض.*تذكير)/i.test(prepared.input)) {
+      const rows = reminderStore.list(decision.sender, decision.chatId);
+      await socket.sendMessage(decision.chatId, { text: rows.length ? `⏰ تذكيراتك:\n${rows.map((row, i) => `${i + 1}. ${row.text} — ${formatMuscat(row.dueAt)} [${row.id.slice(0, 8)}]`).join('\n')}` : 'ما عندك تذكيرات نشطة.' }, { quoted: item }); return;
+    }
+    const snooze = prepared.input.match(/(?:أجل|اجل|تأجيل|أجله)\s*(\d+)?\s*(دقيقة|دقائق|ساعة|ساعتين|ساعات)?/i);
+    if (snooze) {
+      const amount = Number(snooze[1] || (/ساعتين/.test(snooze[2] || '') ? 2 : 1)); const milliseconds = /دقيق/.test(snooze[2] || '') ? amount * 60_000 : amount * 3_600_000;
+      const row = await reminderStore.snooze(decision.sender, decision.chatId, milliseconds);
+      await socket.sendMessage(decision.chatId, { text: row ? `أجلته لك ✅\n${formatMuscat(row.dueAt)}` : 'ما لقيت تذكيرًا سابقًا أقدر أؤجله.' }, { quoted: item }); return;
+    }
+    if (/(?:إلغاء|الغاء|احذف).*تذكير/i.test(prepared.input)) {
+      const id = prepared.input.match(/[a-f0-9]{8}/i)?.[0] || ''; const row = await reminderStore.cancel(decision.sender, decision.chatId, id);
+      await socket.sendMessage(decision.chatId, { text: row ? 'تم إلغاء التذكير ✅' : 'حدد التذكير من «قائمة تذكيراتي».' }, { quoted: item }); return;
+    }
     const pending = pendingReminders.get(reminderKey);
     const reminderInput = pending ? `ذكرني ${pending} ${prepared.input}` : prepared.input;
     const reminder = parseReminder(reminderInput);
@@ -129,8 +222,17 @@ async function respond(socket, item, decision) {
         return;
       }
       pendingReminders.delete(reminderKey);
-      const created = await reminderStore.create({ sender: decision.sender, chatId: decision.chatId, text: reminder.text, due: reminder.due });
-      await socket.sendMessage(decision.chatId, { text: `تم ضبط التذكير ✅\n${created.text}\n${formatMuscat(created.dueAt)}` }, { quoted: item });
+      const created = await reminderStore.create({ sender: decision.sender, chatId: decision.chatId, text: reminder.text, due: reminder.due, recurrence: reminder.recurrence });
+      await socket.sendMessage(decision.chatId, { text: `تم ضبط التذكير ✅\n${created.text}\n${formatMuscat(created.dueAt)}${created.recurrence ? '\nيتكرر أسبوعيًا' : ''}\nبعد وصوله تقدر تكتب: تم، أجله ساعتين، أو إلغاء التذكير.` }, { quoted: item });
+      return;
+    }
+    const actionOutput = await smartAction(decision, prepared);
+    if (actionOutput) {
+      if (typeof actionOutput === 'object' && actionOutput.artifact) {
+        const artifact = await generateArtifact(actionOutput.artifact.type, actionOutput.artifact.body);
+        await actionStore.artifact(`${decision.sender}:${decision.chatId}`, { ...actionOutput.artifact, updatedAt: new Date().toISOString() });
+        await socket.sendMessage(decision.chatId, { document: artifact.buffer, mimetype: artifact.mimetype, fileName: artifact.fileName, caption: actionOutput.text }, { quoted: item });
+      } else await socket.sendMessage(decision.chatId, { text: actionOutput }, { quoted: item });
       return;
     }
     const output = await answer(decision.sender, decision.chatId, prepared.input, decision, prepared.images);
@@ -138,6 +240,7 @@ async function respond(socket, item, decision) {
     const artifactType = requestedArtifactType(prepared.input);
     if (artifactType) {
       const artifact = await generateArtifact(artifactType, output);
+      await actionStore.artifact(`${decision.sender}:${decision.chatId}`, { type: artifactType, body: output, updatedAt: new Date().toISOString() });
       await socket.sendMessage(decision.chatId, {
         document: artifact.buffer,
         mimetype: artifact.mimetype,

@@ -53,7 +53,7 @@ export function parseReminder(text, now = new Date()) {
     const amount = Number(relative[1]);
     const unit = relative[2];
     const multiplier = /دق/.test(unit) ? 60_000 : /ساع/.test(unit) ? 3_600_000 : 86_400_000;
-    return { due: new Date(now.getTime() + amount * multiplier), text: reminderBody(value) };
+    return { due: new Date(now.getTime() + amount * multiplier), text: reminderBody(value), recurrence: null };
   }
 
   const clock = value.match(/(?:الساعة|ساعه)\s*(\d{1,2})(?::(\d{1,2}))?\s*(صباح(?:اً|ا)?|مساء(?:ً|ا)?|ص|م|am|pm)?/i);
@@ -70,10 +70,17 @@ export function parseReminder(text, now = new Date()) {
   const hour = normalizeHour(clock[1], clock[3] || '');
   const minute = Number(clock[2] || 0);
   let due = muscatDate(year, month, day, hour, minute);
-  if (/(بكرة|باكر|غد(?:ا|ًا)?)/i.test(value)) due = new Date(due.getTime() + 86_400_000);
+  const weekdays = { الأحد: 0, الاحد: 0, أحد: 0, احد: 0, الإثنين: 1, الاثنين: 1, إثنين: 1, اثنين: 1, الثلاثاء: 2, ثلاثاء: 2, الأربعاء: 3, الاربعاء: 3, أربعاء: 3, اربعاء: 3, الخميس: 4, خميس: 4, الجمعة: 5, جمعة: 5, السبت: 6, سبت: 6 };
+  const weekly = Object.entries(weekdays).find(([name]) => new RegExp(`كل\\s+${name}`).test(value));
+  if (weekly) {
+    const currentWeekday = new Date(Date.UTC(current.year, current.month - 1, current.day)).getUTCDay();
+    let days = (weekly[1] - currentWeekday + 7) % 7;
+    if (!days || due <= now) days += 7;
+    due = new Date(due.getTime() + days * 86_400_000);
+  } else if (/(بكرة|باكر|غد(?:ا|ًا)?)/i.test(value)) due = new Date(due.getTime() + 86_400_000);
   else if (!explicit && !/اليوم/i.test(value) && due <= now) due = new Date(due.getTime() + 86_400_000);
   if (hour > 23 || minute > 59 || Number.isNaN(due.getTime()) || due <= now) return { missing: true };
-  return { due, text: reminderBody(value) };
+  return { due, text: reminderBody(value), recurrence: weekly ? { type: 'weekly', weekday: weekly[1] } : null };
 }
 
 export function formatMuscat(date) {
@@ -105,8 +112,8 @@ export class ReminderStore {
     return this.writeQueue;
   }
 
-  async create({ sender, chatId, text, due }) {
-    const item = { id: randomUUID(), sender, chatId, text, dueAt: due.toISOString(), status: 'scheduled', attempts: 0, createdAt: new Date().toISOString() };
+  async create({ sender, chatId, text, due, recurrence = null }) {
+    const item = { id: randomUUID(), sender, chatId, text, dueAt: due.toISOString(), recurrence, status: 'scheduled', attempts: 0, createdAt: new Date().toISOString() };
     this.items.push(item); await this.save(); return item;
   }
 
@@ -116,7 +123,10 @@ export class ReminderStore {
     item.status = 'sending'; item.attempts += 1; await this.save(); return { ...item };
   }
 
-  async complete(id) { const item = this.items.find((row) => row.id === id); if (item) { item.status = 'sent'; item.sentAt = new Date().toISOString(); await this.save(); } }
+  async complete(id) { const item = this.items.find((row) => row.id === id); if (item) { item.sentAt = new Date().toISOString(); if (item.recurrence?.type === 'weekly') { item.status = 'scheduled'; item.dueAt = new Date(new Date(item.dueAt).getTime() + 7 * 86_400_000).toISOString(); item.attempts = 0; } else item.status = 'sent'; await this.save(); } }
+  list(sender, chatId) { return this.items.filter((row) => row.sender === sender && row.chatId === chatId && ['scheduled','sending'].includes(row.status)).sort((a,b) => new Date(a.dueAt)-new Date(b.dueAt)); }
+  async cancel(sender, chatId, id = '') { const rows = this.list(sender, chatId); const item = rows.find((row) => row.id.startsWith(id)) || (rows.length === 1 ? rows[0] : null); if (!item) return null; item.status = 'cancelled'; await this.save(); return item; }
+  async snooze(sender, chatId, milliseconds, id = '') { const rows = this.items.filter((row) => row.sender === sender && row.chatId === chatId && ['sent','scheduled'].includes(row.status)); const item = rows.find((row) => row.id.startsWith(id)) || rows.at(-1); if (!item) return null; item.status = 'scheduled'; item.dueAt = new Date(Date.now() + milliseconds).toISOString(); item.attempts = 0; await this.save(); return item; }
   async fail(id, error) {
     const item = this.items.find((row) => row.id === id);
     if (item) { item.status = item.attempts < 3 ? 'scheduled' : 'failed'; item.dueAt = item.status === 'scheduled' ? new Date(Date.now() + 5 * 60_000).toISOString() : item.dueAt; item.lastError = String(error).slice(0, 120); await this.save(); }

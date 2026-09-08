@@ -7,6 +7,90 @@ const safeEqual = (left:string,right:string) => {
   let different=0; for(let i=0;i<a.length;i++) different|=a[i]^b[i]; return different===0;
 };
 
+const phoneDigits=(value:unknown)=>String(value||'').replace(/\D/g,'');
+const ownerMap=()=>Object.fromEntries((Deno.env.get('WHATSAPP_OWNER_EMAIL_MAP')||'96896709444=alialajmi524@gmail.com,96892797586=sheikhaalmamari4@gmail.com')
+  .split(',').map(value=>value.trim().split('=').map(part=>part.trim())).filter(parts=>parts.length===2));
+
+async function bridgeOwner(admin:ReturnType<typeof createClient>,sender:unknown){
+  const email=ownerMap()[phoneDigits(sender)];
+  if(!email) throw new Error('bridge_sender_not_allowed');
+  const profile=await admin.from('profiles').select('id,email,full_name').eq('email',email).single();
+  if(profile.error) throw new Error('bridge_owner_not_found');
+  const role=await admin.from('user_roles').select('role').eq('user_id',profile.data.id).in('role',['owner','super_admin']).limit(1).maybeSingle();
+  if(role.error||!role.data) throw new Error('bridge_owner_role_required');
+  return profile.data;
+}
+
+async function bridgeOperation(admin:ReturnType<typeof createClient>,body:Record<string,unknown>){
+  const owner=await bridgeOwner(admin,body.sender);
+  const operation=String(body.operation||''), args=(body.args&&typeof body.args==='object'?body.args:{}) as Record<string,unknown>;
+  if(operation==='projects.summary'){
+    const projects=await admin.from('projects').select('id,name,type,status,description,start_date,target_date,budget,currency,manager_id,updated_at').is('archived_at',null).order('updated_at',{ascending:false}).limit(40);
+    if(projects.error) throw projects.error;
+    const ids=(projects.data||[]).map(project=>project.id);
+    const [tasks,milestones,kpis]=ids.length?await Promise.all([
+      admin.from('tasks').select('id,title,status,priority,due_at,project_id,assignee_id').in('project_id',ids).order('due_at'),
+      admin.from('project_milestones').select('id,title,status,due_date,project_id').in('project_id',ids).order('due_date'),
+      admin.from('project_kpis').select('title,target_value,current_value,unit,status,project_id').in('project_id',ids),
+    ]):[{data:[]},{data:[]},{data:[]}];
+    const query=String(args.query||args.project||'').toLowerCase();
+    const selected=query?(projects.data||[]).filter(project=>query.includes(project.name.toLowerCase())||project.name.toLowerCase().includes(query)):(projects.data||[]);
+    const now=Date.now();
+    return selected.slice(0,12).map(project=>({ ...project, url:`https://reidpro.com/projects/${project.id}`,
+      tasks:(tasks.data||[]).filter(task=>task.project_id===project.id),
+      overdue:(tasks.data||[]).filter(task=>task.project_id===project.id&&task.status!=='done'&&task.due_at&&new Date(task.due_at).getTime()<now),
+      milestones:(milestones.data||[]).filter(row=>row.project_id===project.id),kpis:(kpis.data||[]).filter(row=>row.project_id===project.id)}));
+  }
+  if(operation==='tasks.create_batch'){
+    const projectName=String(args.project||'').trim();
+    const project=await admin.from('projects').select('id,name').ilike('name',`%${projectName.replace(/[%_]/g,'')}%`).is('archived_at',null).limit(1).maybeSingle();
+    if(project.error||!project.data) throw new Error('project_not_found');
+    const rows=Array.isArray(args.tasks)?args.tasks.slice(0,30):[];
+    if(!rows.length) throw new Error('tasks_required');
+    const profiles=await admin.from('profiles').select('id,full_name');
+    const created=await admin.from('tasks').insert(rows.map((raw:Record<string,unknown>)=>{
+      const assignee=String(raw.assignee||'').toLowerCase();
+      return {title:String(raw.title||'').slice(0,180),description:String(raw.description||'').slice(0,2000)||null,project_id:project.data.id,
+        assignee_id:(profiles.data||[]).find(row=>row.full_name.toLowerCase().includes(assignee))?.id||null,due_at:raw.due_at||null,created_by:owner.id};
+    })).select('id,title,due_at,assignee_id');
+    if(created.error) throw created.error;
+    return {project:project.data,created:created.data,url:`https://reidpro.com/projects/${project.data.id}`};
+  }
+  if(operation==='memory.list'){
+    const scope=String(args.scope||'user')==='group'?'company':'user';
+    const scopeId=scope==='user'?owner.id:`whatsapp:${String(body.chatId||'company')}`;
+    const rows=await admin.from('memories').select('id,title,content,updated_at').eq('scope',scope).eq('scope_id',scopeId).order('updated_at',{ascending:false}).limit(30);
+    if(rows.error) throw rows.error; return rows.data;
+  }
+  if(operation==='memory.save'){
+    const scope=String(args.scope||'user')==='group'?'company':'user', scopeId=scope==='user'?owner.id:`whatsapp:${String(body.chatId||'company')}`;
+    const content=String(args.content||'').trim(); if(!content) throw new Error('memory_content_required');
+    const row=await admin.from('memories').insert({scope,scope_id:scopeId,title:String(args.title||'تفضيل واتساب').slice(0,120),content:content.slice(0,4000),classification:'internal',created_by:owner.id}).select('id,title,content').single();
+    if(row.error) throw row.error; return row.data;
+  }
+  if(operation==='memory.delete'){
+    const id=String(args.id||''), scopeId=owner.id;
+    const removed=await admin.from('memories').delete().eq('id',id).eq('scope','user').eq('scope_id',scopeId).select('id');
+    if(removed.error) throw removed.error; return {removed:removed.data?.length||0};
+  }
+  if(operation==='knowledge.search'){
+    const query=String(args.query||'').trim().replace(/[^\p{L}\p{N}\s.-]/gu,'').slice(0,120); if(!query) throw new Error('query_required');
+    const pattern=`%${query}%`;
+    const [projectFiles,researchFiles,employeeFiles,memories]=await Promise.all([
+      admin.from('project_files').select('id,title,storage_path,project_id,category,created_at').ilike('title',pattern).limit(10),
+      admin.from('research_documents').select('id,title,storage_path,research_id,category,created_at').ilike('title',pattern).limit(10),
+      admin.from('employee_documents').select('id,title,storage_path,owner_id,category,created_at').ilike('title',pattern).limit(10),
+      admin.from('memories').select('id,title,content,scope,scope_id,created_at').or(`title.ilike.${pattern},content.ilike.${pattern}`).limit(10),
+    ]);
+    return {projectFiles:projectFiles.data||[],researchFiles:researchFiles.data||[],employeeFiles:employeeFiles.data||[],memories:memories.data||[],sourceNote:'المسارات معرفات داخل Reid؛ فتح الملف يتم من الوحدة المالكة مع تطبيق صلاحياتها.'};
+  }
+  if(operation==='content.draft.create'){
+    const row=await admin.from('content_drafts').insert({title_ar:String(args.title_ar||args.title||'مسودة ريّد').slice(0,180),title_en:String(args.title_en||args.title||'Reid draft').slice(0,180),body_ar:String(args.body_ar||args.body||'').slice(0,12000),body_en:String(args.body_en||'').slice(0,12000),created_by:owner.id}).select('id,title_ar,status').single();
+    if(row.error) throw row.error; return {...row.data,url:`https://reidpro.com/dashboard#content-${row.data.id}`,publishing:'requires_connected_platform_and_L2_approval'};
+  }
+  throw new Error('bridge_operation_not_allowed');
+}
+
 async function notifyWhatsApp(admin: ReturnType<typeof createClient>, runId: string, message: string, status: 'completed'|'failed') {
   const token=Deno.env.get('META_WHATSAPP_ACCESS_TOKEN'), phoneId=Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
   const command=await admin.from('whatsapp_commands').select('id,sender_phone').eq('agent_run_id',runId).maybeSingle();
@@ -67,6 +151,8 @@ Deno.serve(async request => {
     if (!expected || !safeEqual(supplied,expected)) return json({ error: 'unauthorized' }, 401);
     const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const body = await request.json();
+
+    if(body.action==='bridge') return json({ok:true,result:await bridgeOperation(admin,body)});
 
     if (body.action === 'heartbeat') {
       const numberOrNull=(value:unknown)=>Number.isFinite(Number(value))?Number(value):null;
