@@ -395,7 +395,9 @@ async function run() {
       const code = lastDisconnect?.error?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) {
         console.error('reid_whatsapp_bridge_logged_out');
-        process.exit(1);
+        // A revoked linked-device session cannot recover by reconnecting. Use a
+        // dedicated exit status so systemd stops instead of hammering WhatsApp.
+        process.exit(78);
       }
       setTimeout(() => run().catch(() => process.exit(1)), 3000);
     }
