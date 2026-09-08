@@ -1,16 +1,37 @@
 import React from "react";
-import { Activity, Bot, BrainCircuit, CirclePause, Cpu, Gauge, HardDrive, Play, Power, RefreshCw, Server, ShieldCheck, Wifi } from "lucide-react";
+import { Activity, Bot, Boxes, BrainCircuit, CirclePause, Cpu, Gauge, HardDrive, Network, Play, Power, RefreshCw, Server, ShieldCheck, Wifi } from "lucide-react";
 import { loadAgentControl, runAgent, runAgentTool, setAgentState, decideRun, canRun, providerAccepts, agentTopology, operationalState, topologyFor } from "./agents";
 import type { AgentRow, ProviderRow, RunRow, Classification, AgentToolRow, RunnerStatusRow, SystemMetrics } from "./agents";
+import type { WorldAgent, WorldState } from "./agent-world-scene";
 import { useSession } from "./shell";
 import { supabase } from "./supabase";
 
+// The outpost and three.js are a separate chunk: an administrator opening the
+// dashboard pays for the renderer, and nobody else does.
+const AgentWorld = React.lazy(() => import("./agent-world"));
+
 type Lang = "ar" | "en";
 const copy = {
-  ar: { title: "خريطة قيادة الوكلاء", subtitle: "شبكة التشغيل الحية — اضغط على أي وكيل للتفاصيل والتحكم", ready: "جاهز", working: "يعمل الآن", approval: "ينتظر موافقة", paused: "متوقف مؤقتًا", blocked: "محجوب أمنيًا", error: "خطأ", queue: "الطابور", tasks: "التشغيلات", tools: "الأدوات", memory: "نطاق الذاكرة", provider: "المزوّد والنموذج", permissions: "الحماية", run: "تشغيل يدوي", running: "جارٍ التشغيل…", prompt: "اكتب الهدف أو المهمة", pause: "إيقاف مؤقت", resume: "استئناف", disable: "تعطيل", enable: "تفعيل", close: "إغلاق", recent: "سجل التشغيل", approve: "اعتماد", reject: "رفض", replay: "إعادة المحاولة", owner: "الإعدادات الحساسة — Owner فقط", explanation: "الوكلاء لم تُدمج بياناتهم أو صلاحياتهم. جُمّعت بصريًا حسب مجال العمل، مع بقاء HR والمالية في حدود أمنية منفصلة.", live: "متصل بالبيانات الحية", noRuns: "لا توجد تشغيلات لهذا الوكيل.", latency: "الاستجابة", tokens: "التوكنز", blockedReason: "تصنيف بيانات هذا الوكيل أعلى من صلاحية المزوّد الحالي.", output: "نتيجة آخر أمر" },
-  en: { title: "Agent Command Map", subtitle: "Live operating network — select any node for detail and control", ready: "Ready", working: "Working", approval: "Needs approval", paused: "Paused", blocked: "Security blocked", error: "Error", queue: "Queue", tasks: "Runs", tools: "Tools", memory: "Memory scope", provider: "Provider and model", permissions: "Guardrail", run: "Manual run", running: "Running…", prompt: "Describe the objective or task", pause: "Pause", resume: "Resume", disable: "Disable", enable: "Enable", close: "Close", recent: "Run log", approve: "Approve", reject: "Reject", replay: "Retry", owner: "Sensitive configuration — Owner only", explanation: "Agent data and permissions are not merged. Nodes are grouped visually by operating domain, while HR and Finance retain isolated security boundaries.", live: "Live data connected", noRuns: "No runs for this agent.", latency: "Latency", tokens: "Tokens", blockedReason: "This agent's data classification exceeds the current provider clearance.", output: "Latest command output" },
+  ar: { title: "خريطة قيادة الوكلاء", subtitle: "شبكة التشغيل الحية — اضغط على أي وكيل للتفاصيل والتحكم", ready: "جاهز", working: "يعمل الآن", approval: "ينتظر موافقة", paused: "متوقف مؤقتًا", blocked: "محجوب أمنيًا", error: "خطأ", queue: "الطابور", tasks: "التشغيلات", tools: "الأدوات", memory: "نطاق الذاكرة", provider: "المزوّد والنموذج", permissions: "الحماية", run: "تشغيل يدوي", running: "جارٍ التشغيل…", prompt: "اكتب الهدف أو المهمة", pause: "إيقاف مؤقت", resume: "استئناف", disable: "تعطيل", enable: "تفعيل", close: "إغلاق", recent: "سجل التشغيل", approve: "اعتماد", reject: "رفض", replay: "إعادة المحاولة", owner: "الإعدادات الحساسة — Owner فقط", explanation: "الوكلاء لم تُدمج بياناتهم أو صلاحياتهم. جُمّعت بصريًا حسب مجال العمل، مع بقاء HR والمالية في حدود أمنية منفصلة.", live: "متصل بالبيانات الحية", noRuns: "لا توجد تشغيلات لهذا الوكيل.", latency: "الاستجابة", tokens: "التوكنز", blockedReason: "تصنيف بيانات هذا الوكيل أعلى من صلاحية المزوّد الحالي.", output: "نتيجة آخر أمر", view: "طريقة العرض", world: "العالم ثلاثي الأبعاد", classic: "الخريطة الكلاسيكية", loading: "جارٍ التحميل…", worldNote: "كل وكيل روبوت في مقر ريّد الصحراوي: يشتغل على مكتبه وقت التشغيل، يرفع يده حين ينتظر موافقة، وتُغلق فوقه قبة حمراء عند الحجب الأمني." },
+  en: { title: "Agent Command Map", subtitle: "Live operating network — select any node for detail and control", ready: "Ready", working: "Working", approval: "Needs approval", paused: "Paused", blocked: "Security blocked", error: "Error", queue: "Queue", tasks: "Runs", tools: "Tools", memory: "Memory scope", provider: "Provider and model", permissions: "Guardrail", run: "Manual run", running: "Running…", prompt: "Describe the objective or task", pause: "Pause", resume: "Resume", disable: "Disable", enable: "Enable", close: "Close", recent: "Run log", approve: "Approve", reject: "Reject", replay: "Retry", owner: "Sensitive configuration — Owner only", explanation: "Agent data and permissions are not merged. Nodes are grouped visually by operating domain, while HR and Finance retain isolated security boundaries.", live: "Live data connected", noRuns: "No runs for this agent.", latency: "Latency", tokens: "Tokens", blockedReason: "This agent's data classification exceeds the current provider clearance.", output: "Latest command output", view: "View", world: "3D world", classic: "Classic map", loading: "Loading…", worldNote: "Every agent is a robot at Reid's desert outpost: it works its desk while running, raises a hand while an approval waits, and is sealed under a red dome when security blocks it." },
 };
 const stateLabel = (t: typeof copy.ar, state: string) => (t as unknown as Record<string, string>)[state] || state;
+
+type MapView = "world" | "map";
+const VIEW_KEY = "reid.agent-map-view";
+
+/**
+ * The world is the default because it is the point of this screen, but a
+ * reader who asked the operating system for reduced motion starts on the still
+ * diagram. Either choice is remembered, and either view is one click away.
+ */
+function preferredView(): MapView {
+  try {
+    const stored = window.localStorage.getItem(VIEW_KEY);
+    if (stored === "world" || stored === "map") return stored;
+  } catch { /* storage can be refused; the default below still applies */ }
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "map" : "world";
+}
 
 export function AgentCommand({ lang }: { lang: Lang }) {
   const t = copy[lang];
@@ -57,6 +78,22 @@ export function AgentCommand({ lang }: { lang: Lang }) {
     const state = operationalState(agent, providerOf(agent), runs); all[state] = (all[state] || 0) + 1; return all;
   }, {}), [byId, providerOf, runs]);
 
+  // One derivation of live state feeds both views: the diagram reads it inline,
+  // the world needs it as data because the renderer cannot read React.
+  const worldAgents = React.useMemo<WorldAgent[]>(() => agentTopology.flatMap(node => {
+    const agent = byId.get(node.id);
+    if (!agent) return [];
+    return [{
+      id: node.id, parent: node.parent, domain: node.domain, name: agent.name, level: agent.approval_level,
+      state: operationalState(agent, providerOf(agent), runs) as WorldState,
+      pending: runs.filter(run => run.agent_id === agent.id && ["queued", "running", "pending_approval"].includes(run.run_state)).length,
+    }];
+  }), [byId, providerOf, runs]);
+
+  const [view, setView] = React.useState<MapView>(preferredView);
+  React.useEffect(() => { try { window.localStorage.setItem(VIEW_KEY, view); } catch { /* a private window may refuse storage; the view still works */ } }, [view]);
+  const pick = React.useCallback((id: string) => { setSelectedId(id); setMessage(""); }, []);
+
   const execute = async (agent: AgentRow) => {
     setBusy(true); setMessage("");
     try {
@@ -77,32 +114,54 @@ export function AgentCommand({ lang }: { lang: Lang }) {
       {owner && <SystemOverview lang={lang} runner={runner} metrics={metrics} onRefresh={refresh} />}
       <header className="agent-map-header">
         <div><span className="eyebrow"><Activity size={15} /> {t.live}</span><h2 id="agent-map-title">{t.title}</h2><p>{t.subtitle}</p></div>
-        <div className="agent-map-health" aria-label={t.live}>
-          {(["working", "approval", "ready", "paused", "blocked", "error"] as const).map(state => <span key={state} data-state={state}><i />{stateLabel(t, state)} <b>{counts[state] || 0}</b></span>)}
+        <div className="agent-map-controls">
+          <div className="agent-view-toggle" role="group" aria-label={t.view}>
+            <button type="button" data-active={view === "world"} aria-pressed={view === "world"} onClick={() => setView("world")}><Boxes size={14} />{t.world}</button>
+            <button type="button" data-active={view === "map"} aria-pressed={view === "map"} onClick={() => setView("map")}><Network size={14} />{t.classic}</button>
+          </div>
+          <div className="agent-map-health" aria-label={t.live}>
+            {(["working", "approval", "ready", "paused", "blocked", "error"] as const).map(state => <span key={state} data-state={state}><i />{stateLabel(t, state)} <b>{counts[state] || 0}</b></span>)}
+          </div>
         </div>
       </header>
       <div className="agent-map-layout">
-        <div className="agent-network" aria-label={t.title}>
-          <svg className="agent-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            {agentTopology.filter(node => node.parent).map(node => {
-              const parent = topologyFor(node.parent!); const agent = byId.get(node.id); const state = agent ? operationalState(agent, providerOf(agent), runs) : "blocked";
-              return parent && <line key={node.id} x1={parent.x} y1={parent.y} x2={node.x} y2={node.y} data-state={state} />;
-            })}
-          </svg>
-          {agentTopology.map(node => {
-            const agent = byId.get(node.id); if (!agent) return null;
-            const state = operationalState(agent, providerOf(agent), runs);
-            const pending = runs.filter(run => run.agent_id === agent.id && ["queued", "running", "pending_approval"].includes(run.run_state)).length;
-            return <button key={node.id} type="button" className="agent-node" data-domain={node.domain} data-state={state} data-selected={selectedId === node.id} style={{ left: `${node.x}%`, top: `${node.y}%` }} onClick={() => { setSelectedId(node.id); setMessage(""); }} aria-label={`${agent.name}: ${stateLabel(t, state)}`}>
-              <span className="agent-node-orbit" /><span className="agent-node-icon">{node.id === "ceo" ? <BrainCircuit /> : <Bot />}</span><b>{agent.name}</b><small><i />{stateLabel(t, state)}</small>{pending > 0 && <em>{pending}</em>}
-            </button>;
-          })}
-          {!agents.length && <div className="agent-map-loading"><RefreshCw className="spin" /> Loading</div>}
-        </div>
+        {view === "world"
+          ? <React.Suspense fallback={<div className="agent-world"><div className="agent-world-loading"><RefreshCw className="spin" /> {t.loading}</div></div>}>
+              <AgentWorld lang={lang} agents={worldAgents} selectedId={selected?.id ?? null} stateLabel={state => stateLabel(t, state)} onSelect={pick} onUnsupported={() => setView("map")} />
+            </React.Suspense>
+          : <AgentDiagram t={t} agents={agents} byId={byId} providerOf={providerOf} runs={runs} selectedId={selectedId} onSelect={pick} />}
         {selected && <AgentInspector lang={lang} t={t} selected={selected} provider={providerOf(selected)} runs={selectedRuns} tools={tools.filter(tool => selected.permissions?.includes(tool.id))} owner={owner} busy={busy} prompt={prompt} message={message} setMessage={setMessage} setBusy={setBusy} refresh={refresh} setPrompt={setPrompt} execute={execute} toggle={toggle} decide={decide} />}
       </div>
+      {view === "world" && <p className="agent-map-explanation">{t.worldNote}</p>}
       <p className="agent-map-explanation">{t.explanation}</p>
     </section>
+  );
+}
+
+/**
+ * The original map, kept rather than replaced. It is the fallback when WebGL
+ * is unavailable, the view a reader who prefers reduced motion starts on, and
+ * the fastest way to read eleven states at once on a small screen.
+ */
+function AgentDiagram({ t, agents, byId, providerOf, runs, selectedId, onSelect }: { t: Copy; agents: AgentRow[]; byId: Map<string, AgentRow>; providerOf: (agent: AgentRow) => ProviderRow | undefined; runs: RunRow[]; selectedId: string; onSelect: (id: string) => void }) {
+  return (
+    <div className="agent-network" aria-label={t.title}>
+      <svg className="agent-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        {agentTopology.filter(node => node.parent).map(node => {
+          const parent = topologyFor(node.parent!); const agent = byId.get(node.id); const state = agent ? operationalState(agent, providerOf(agent), runs) : "blocked";
+          return parent && <line key={node.id} x1={parent.x} y1={parent.y} x2={node.x} y2={node.y} data-state={state} />;
+        })}
+      </svg>
+      {agentTopology.map(node => {
+        const agent = byId.get(node.id); if (!agent) return null;
+        const state = operationalState(agent, providerOf(agent), runs);
+        const pending = runs.filter(run => run.agent_id === agent.id && ["queued", "running", "pending_approval"].includes(run.run_state)).length;
+        return <button key={node.id} type="button" className="agent-node" data-domain={node.domain} data-state={state} data-selected={selectedId === node.id} style={{ left: `${node.x}%`, top: `${node.y}%` }} onClick={() => onSelect(node.id)} aria-label={`${agent.name}: ${stateLabel(t, state)}`}>
+          <span className="agent-node-orbit" /><span className="agent-node-icon">{node.id === "ceo" ? <BrainCircuit /> : <Bot />}</span><b>{agent.name}</b><small><i />{stateLabel(t, state)}</small>{pending > 0 && <em>{pending}</em>}
+        </button>;
+      })}
+      {!agents.length && <div className="agent-map-loading"><RefreshCw className="spin" /> Loading</div>}
+    </div>
   );
 }
 

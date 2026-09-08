@@ -73,6 +73,28 @@
   --glow: #e1d6f2;
   --header-bg: #f7f4f6bd;
 
+  /* ---- the 3D agent world ---------------------------------------------
+   * src/agent-world-scene.ts reads these at runtime instead of naming a colour in
+   * the renderer, so the desert outpost flips with the theme like every other
+   * surface: midday sand in light, moonlit sand in dark. The six district
+   * hues separate the operating domains without competing with the brand. */
+  --world-sky-top: #6f9fd2;
+  --world-sky-bottom: #e3c294;
+  --world-sun: #fff4d8;
+  --world-haze: #dcc09a;
+  --world-sand: #dcbf90;
+  --world-sand-shade: #b99a68;
+  --world-rock: #9a8365;
+  --world-metal: #dcd7e6;
+  --world-metal-dark: #6d6681;
+  --world-glass: #2b2440;
+  --world-district-executive: #6f56b8;
+  --world-district-delivery: #2f79ad;
+  --world-district-growth: #c2703a;
+  --world-district-revenue: #2c8663;
+  --world-district-governance: #98548a;
+  --world-district-knowledge: #3a7f96;
+
   /* ---- radii: twelve values collapsed onto six ------------------------ */
   --radius-xs: 10px;
   --radius-sm: 12px;
@@ -115,6 +137,25 @@
 
   --glow: #2c2046;
   --header-bg: #110d19c9;
+
+  /* The same outpost after sunset: the sand keeps its form, the sky and the
+     district hues lift so they stay readable against it. */
+  --world-sky-top: #0d1030;
+  --world-sky-bottom: #2c2145;
+  --world-sun: #dfe6ff;
+  --world-haze: #191333;
+  --world-sand: #574763;
+  --world-sand-shade: #3d3147;
+  --world-rock: #3a3145;
+  --world-metal: #b7aecb;
+  --world-metal-dark: #4a4360;
+  --world-glass: #171226;
+  --world-district-executive: #a48ede;
+  --world-district-delivery: #6bb0e0;
+  --world-district-growth: #e2955f;
+  --world-district-revenue: #57c2a0;
+  --world-district-governance: #d089c0;
+  --world-district-knowledge: #6fb9d1;
 
   --shadow-sm: 0 15px 35px #00000066;
   --shadow-md: 0 25px 80px #00000073;

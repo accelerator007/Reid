@@ -32,6 +32,7 @@ import "./auth.css";
 import "./profile.css";
 import "./workflow.css";
 import "./agents.css";
+import "./agent-world.css";
 import "./crm.css";
 import "./workspace-shell.css";
 import "./whatsapp-inbox.css";
