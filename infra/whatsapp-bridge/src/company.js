@@ -14,11 +14,10 @@ export class CompanyClient {
       method: 'POST',
       headers: { authorization: `Bearer ${this.token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'bridge', sender: digits(sender), chatId, operation, args }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(180_000),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || `company_gateway_${response.status}`);
     return payload.result;
   }
 }
-

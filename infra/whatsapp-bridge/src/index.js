@@ -64,6 +64,22 @@ async function chatModel(system, input, images = []) {
   return output;
 }
 
+async function generateLocalImages(prompt, aspectRatio, count, source = '') {
+  const brand = `Create a polished production-ready visual for Reid (ريّد), an Omani technology and AI company. Brand palette: deep plum #2B1D3C, Reid purple #5E3F9E and #7C5AB5, pale lavender #F0EBF7, warm white. Minimal premium composition, clear hierarchy and generous whitespace. Never invent or distort a logo. Do not render text unless the request provides the exact text. No third-party marks. Request: ${prompt}`;
+  const results = [];
+  for (let index = 0; index < count; index += 1) {
+    const response = await fetch(`${adapterUrl}/api/images`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-reid-origin-token': originToken },
+      body: JSON.stringify({ prompt: `${brand}\nVariation ${index + 1} of ${count}.`, aspect_ratio: aspectRatio, ...(source ? { image: source } : {}) }),
+      signal: AbortSignal.timeout(180_000),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.image) throw new Error(payload.error || `local_image_${response.status}`);
+    results.push(payload.image);
+  }
+  return results;
+}
+
 async function answer(sender, chatId, input, context = {}, images = []) {
   const key = chatId.endsWith('@g.us') ? `group:${chatId}` : `${sender}:${chatId}`;
   const history = boundedHistory(conversations.get(key) || []);
@@ -164,11 +180,15 @@ async function smartAction(decision, prepared) {
     const prior = await actionStore.artifact(`image:${key}`);
     const source = prepared.images[0] || (plan.intent === 'image_edit' ? prior?.data : '');
     if (plan.intent === 'image_edit' && !source) return 'أرسل الصورة أو رد عليها، واكتب التعديل اللي تريده.';
+    const count = Math.min(3, Math.max(1, Number(plan.count) || 1));
+    const aspectRatio = plan.aspect_ratio || '1:1';
+    const generatedImages = await generateLocalImages(plan.prompt || prepared.input, aspectRatio, count, source);
     const result = await company.call(decision.sender, plan.intent === 'image_edit' ? 'image.edit' : 'image.generate', {
       prompt: plan.prompt || prepared.input, title: plan.title || 'تصميم ريّد', project: plan.project || '',
-      platforms: plan.platforms || [], aspect_ratio: plan.aspect_ratio || '1:1', count: Math.min(3, Math.max(1, Number(plan.count) || 1)),
+      platforms: plan.platforms || [], aspect_ratio: aspectRatio, count,
       image: source || undefined, mime_type: 'image/png', image_size: '1K',
       asset_id: plan.intent === 'image_edit' ? prior?.assetId : undefined,
+      generated_images: generatedImages, generated_model: 'stabilityai/sdxl-turbo',
     }, decision.chatId);
     const images = result.versions.map((version) => ({ data: version.data, caption: `اقتراح ${version.version} • ${result.asset.title}\nالأصل ${result.asset.id.slice(0, 8)} • المتبقي اليوم ${result.remaining}` }));
     await actionStore.artifact(`image:${key}`, { assetId: result.asset.id, data: result.versions.at(-1)?.data, updatedAt: new Date().toISOString() });

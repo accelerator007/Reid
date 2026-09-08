@@ -22,28 +22,22 @@ async function bridgeOwner(admin:ReturnType<typeof createClient>,sender:unknown)
 }
 
 const allowedRatios=new Set(['1:1','4:5','9:16','16:9','3:2','2:3']);
-const imageData=(payload:any)=>payload?.output_image?.data||payload?.outputs?.find((item:any)=>item?.type==='image')?.data||payload?.candidates?.[0]?.content?.parts?.find((part:any)=>part?.inlineData)?.inlineData?.data||'';
-
 async function generateContentImage(admin:ReturnType<typeof createClient>,owner:{id:string},args:Record<string,unknown>){
-  const key=Deno.env.get('GEMINI_API_KEY'); if(!key) throw new Error('image_provider_not_configured');
   const count=Math.min(3,Math.max(1,Number(args.count)||1)), dailyLimit=Math.max(1,Number(Deno.env.get('CONTENT_IMAGE_DAILY_LIMIT')||10));
   const budget=await admin.rpc('claim_content_image_budget',{wanted:count,daily_limit:dailyLimit});
   if(budget.error) throw budget.error; if(!budget.data?.[0]?.allowed) throw new Error(`image_daily_limit_reached:${budget.data?.[0]?.remaining??0}`);
-  const model=Deno.env.get('GEMINI_IMAGE_MODEL')||'gemini-3.1-flash-image';
+  let model='stabilityai/sdxl-turbo';
   const ratio=allowedRatios.has(String(args.aspect_ratio))?String(args.aspect_ratio):'1:1';
   const prompt=String(args.prompt||'').trim().slice(0,4000); if(!prompt) throw new Error('image_prompt_required');
-  const brand=`Create a polished production-ready visual for Reid (ريّد), an Omani technology and AI company. Brand palette: deep plum #2B1D3C, Reid purple #5E3F9E and #7C5AB5, pale lavender #F0EBF7, warm white. Minimal premium Apple-like composition, clear hierarchy, generous whitespace. Use the Reid bar-mark only if a supplied reference contains it; never invent or distort a logo. Arabic and English text must be exactly as supplied, legible, and free of spelling changes. No third-party marks. Request: ${prompt}`;
-  const reference=String(args.image||''); const mime=String(args.mime_type||'image/png');
-  const results=[];
+  const supplied=Array.isArray(args.generated_images)?args.generated_images.map(String).filter(Boolean).slice(0,count):[];
+  const results:string[]=[];
   try{
-    for(let index=0;index<count;index++){
-      const input:any[]=[{type:'text',text:`${brand}\nVariation ${index+1} of ${count}.`}];
-      if(reference) input.push({type:'image',mime_type:mime,data:reference});
-      const response=await fetch('https://generativelanguage.googleapis.com/v1beta/interactions',{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':key},body:JSON.stringify({model,input,response_format:{type:'image',aspect_ratio:ratio,image_size:String(args.image_size||'1K')}})});
-      const payload=await response.json();
-      if(!response.ok){ const reason=response.status===429?'image_provider_quota_unavailable':`image_provider_http_${response.status}`; throw new Error(reason); }
-      const data=imageData(payload); if(!data) throw new Error('image_provider_empty'); results.push(data);
+    if(supplied.length!==count) throw new Error('local_image_payload_required');
+    for(const data of supplied){
+      const bytes=Math.floor(data.length*3/4); if(bytes<1024||bytes>8*1024*1024) throw new Error('local_image_payload_invalid');
+      results.push(data);
     }
+    model=String(args.generated_model||model).slice(0,120);
   }catch(error){ const unused=count-results.length; if(unused) await admin.rpc('release_content_image_budget',{wanted:unused}); throw error; }
   let assetId=args.asset_id?String(args.asset_id):crypto.randomUUID(); let projectId=args.project_id?String(args.project_id):null; let firstVersion=1; let assetData:any;
   if(!projectId&&args.project){ const project=await admin.from('projects').select('id').ilike('name',`%${String(args.project).replace(/[%_]/g,'')}%`).is('archived_at',null).limit(1).maybeSingle(); projectId=project.data?.id||null; }
