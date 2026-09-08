@@ -3,6 +3,7 @@ import { downloadContentFromMessage, downloadMediaMessage } from '@whiskeysocket
 import { generateArtifact, requestedArtifactType } from './artifacts.js';
 import { openSocket, rememberMessage } from './socket.js';
 import { boundedHistory, digits, mediaKind, messageContent, messageContext, shouldHandle, shouldProcessUpsert } from './policy.js';
+import { formatMuscat, muscatNow, parseReminder, ReminderStore } from './reminders.js';
 
 // libsignal logs complete session objects (including key material) with
 // console.info while rotating sessions. Suppress only that unsafe diagnostic.
@@ -36,16 +37,20 @@ const groupReplyCooldownMs = Math.max(30000, Number(process.env.REID_BRIDGE_GROU
 const conversations = new Map();
 const seen = new Map();
 const lastGroupReply = new Map();
+const pendingReminders = new Map();
 let responseQueue = Promise.resolve();
+let activeSocket;
 
 await mkdir(authDir, { recursive: true, mode: 0o700 });
 await chmod(authDir, 0o700);
+const reminderStore = new ReminderStore(process.env.REID_BRIDGE_REMINDERS_FILE || `${authDir}/reminders.json`);
+await reminderStore.load();
 
 async function answer(sender, chatId, input, context = {}, images = []) {
   const key = chatId.endsWith('@g.us') ? `group:${chatId}` : `${sender}:${chatId}`;
   const history = boundedHistory(conversations.get(key) || []);
   const messages = [
-    { role: 'system', content: `أنت ريّد، مساعد ذكي ومختص بنظام شركة Reid. افهم اللهجة العُمانية والخليجية والأخطاء الإملائية، وتكلم بلهجة خليجية بطابع عُماني طبيعي من غير تصنع. تكلم بطبيعية ودفء، وطابق نبرة المحادثة. استخدم من صفر إلى إيموجيين مناسبين عندما يضيفان معنى أو ودًا، ويمكن أن يكون الرد إيموجيًا قصيرًا عندما يكفي، لكن لا تبالغ ولا تكرر نفس الإيموجي. أجب مباشرة وباختصار، واسأل سؤالًا واحدًا فقط إذا نقصت معلومة مهمة. ناقش الطلبات العادية والحساسة وساعد في توضيحها، ولا تعرض كلمات مرور أو رموز OTP أو مفاتيح وصول مطلقًا. لا تدّع تنفيذ مهمة أو تعديل بيانات الشركة؛ التنفيذ الفعلي يمر عبر الأدوات ويسجل للتدقيق. سياق كل شخص ومجموعة معزول. ${context.proactive ? 'هذه رسالة عامة في مجموعة ولم ينادك أحد مباشرة. شارك فقط إن كانت لديك إضافة مفيدة وواضحة للمحادثة؛ وإلا أخرج النص الحرفي <NO_REPLY> دون أي كلام آخر.' : ''} ${context.isOwner ? 'المرسل مالك مصرح؛ استخدم معه سياق الشركة الداخلي المتاح لك ضمن الأدوات.' : 'المرسل عضو مجموعة عادي؛ رد عليه وساعده بالمحادثة، ولا تمنحه صلاحيات أو معلومات داخلية.'}` },
+    { role: 'system', content: `أنت ريّد، مساعد ذكي ومختص بنظام شركة Reid. الوقت المرجعي الحقيقي الآن في سلطنة عُمان (Asia/Muscat، UTC+4) هو: ${muscatNow()}. استخدم هذا الوقت عند تفسير اليوم وغدًا والوقت والتاريخ، ولا تخمّن وقتًا غيره. افهم اللهجة العُمانية والخليجية والأخطاء الإملائية، وتكلم بلهجة خليجية بطابع عُماني طبيعي من غير تصنع. تكلم بطبيعية ودفء، وطابق نبرة المحادثة. استخدم من صفر إلى إيموجيين مناسبين عندما يضيفان معنى أو ودًا، ويمكن أن يكون الرد إيموجيًا قصيرًا عندما يكفي، لكن لا تبالغ ولا تكرر نفس الإيموجي. أجب مباشرة وباختصار، واسأل سؤالًا واحدًا فقط إذا نقصت معلومة مهمة. ناقش الطلبات العادية والحساسة وساعد في توضيحها، ولا تعرض كلمات مرور أو رموز OTP أو مفاتيح وصول مطلقًا. لا تدّع تنفيذ مهمة أو تعديل بيانات الشركة؛ التنفيذ الفعلي يمر عبر الأدوات ويسجل للتدقيق. سياق كل شخص ومجموعة معزول. ${context.proactive ? 'هذه رسالة عامة في مجموعة ولم ينادك أحد مباشرة. شارك فقط إن كانت لديك إضافة مفيدة وواضحة للمحادثة؛ وإلا أخرج النص الحرفي <NO_REPLY> دون أي كلام آخر.' : ''} ${context.isOwner ? 'المرسل مالك مصرح؛ استخدم معه سياق الشركة الداخلي المتاح لك ضمن الأدوات.' : 'المرسل عضو مجموعة عادي؛ رد عليه وساعده بالمحادثة، ولا تمنحه صلاحيات أو معلومات داخلية.'}` },
     ...history,
     { role: 'user', content: input.slice(0, 3000), ...(images.length ? { images } : {}) },
   ];
@@ -113,6 +118,21 @@ async function respond(socket, item, decision) {
     if (decision.proactive && Date.now() - (lastGroupReply.get(decision.chatId) || 0) < groupReplyCooldownMs) return;
     await socket.sendPresenceUpdate('composing', decision.chatId);
     const prepared = await prepareMedia(socket, item, decision.text);
+    const reminderKey = `${decision.sender}:${decision.chatId}`;
+    const pending = pendingReminders.get(reminderKey);
+    const reminderInput = pending ? `ذكرني ${pending} ${prepared.input}` : prepared.input;
+    const reminder = parseReminder(reminderInput);
+    if (reminder) {
+      if ('missing' in reminder) {
+        pendingReminders.set(reminderKey, prepared.input.replace(/(?:ذكرني|ذكّرني|تذكير)/ig, '').trim());
+        await socket.sendMessage(decision.chatId, { text: 'أكيد، في أي يوم وساعة؟ مثال: بكرة الساعة 9 صباحًا.' }, { quoted: item });
+        return;
+      }
+      pendingReminders.delete(reminderKey);
+      const created = await reminderStore.create({ sender: decision.sender, chatId: decision.chatId, text: reminder.text, due: reminder.due });
+      await socket.sendMessage(decision.chatId, { text: `تم ضبط التذكير ✅\n${created.text}\n${formatMuscat(created.dueAt)}` }, { quoted: item });
+      return;
+    }
     const output = await answer(decision.sender, decision.chatId, prepared.input, decision, prepared.images);
     if (!output) return;
     const artifactType = requestedArtifactType(prepared.input);
@@ -140,7 +160,7 @@ async function respond(socket, item, decision) {
 async function run() {
   const { socket, DisconnectReason } = await openSocket(authDir, false);
   socket.ev.on('connection.update', ({ connection, lastDisconnect }) => {
-    if (connection === 'open') console.log('reid_whatsapp_bridge_ready');
+    if (connection === 'open') { activeSocket = socket; console.log('reid_whatsapp_bridge_ready'); }
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) {
@@ -171,5 +191,19 @@ async function run() {
     }
   });
 }
+
+setInterval(async () => {
+  if (!activeSocket) return;
+  const reminder = await reminderStore.claimDue();
+  if (!reminder) return;
+  try {
+    await activeSocket.sendMessage(reminder.chatId, { text: `⏰ تذكيرك:\n${reminder.text}` });
+    await reminderStore.complete(reminder.id);
+    console.log('bridge_reminder_sent', JSON.stringify({ chatKind: reminder.chatId.endsWith('@g.us') ? 'group' : 'direct' }));
+  } catch (error) {
+    await reminderStore.fail(reminder.id, error instanceof Error ? error.message : 'send_failed');
+    console.error('bridge_reminder_failed');
+  }
+}, 15_000).unref();
 
 await run();

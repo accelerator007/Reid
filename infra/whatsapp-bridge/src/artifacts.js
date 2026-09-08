@@ -7,12 +7,12 @@ const hasArabic = (value) => /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/.test(va
 
 function writePdfLine(document, value, options = {}) {
   const text = String(value);
-  const { size = 12, color = '#222222' } = options;
+  const { size = 12, color = '#222222', left = document.page.margins.left, right = document.page.width - document.page.margins.right } = options;
   document.fontSize(size).fillColor(color);
   if (!hasArabic(text)) {
-    document.x = document.page.margins.left;
-    document.text(text, { align: 'left', lineGap: 5 });
-    return;
+    document.x = left;
+    document.text(text, left, document.y, { align: 'left', width: right - left, lineGap: 5 });
+    return document.y;
   }
 
   // PDFKit shapes an Arabic run correctly, but its bidi layout can merge a Latin
@@ -20,20 +20,21 @@ function writePdfLine(document, value, options = {}) {
   // the right edge while retaining each token's own glyph order.
   const tokens = text.trim().split(/\s+/);
   const gap = document.widthOfString(' ');
-  let x = document.page.width - document.page.margins.right;
+  let x = right;
   const y = document.y;
   for (const token of tokens) {
     const width = document.widthOfString(token);
-    if (x - width < document.page.margins.left) {
+    if (x - width < left) {
       document.y += size * 1.55;
-      x = document.page.width - document.page.margins.right;
+      x = right;
     }
     x -= width;
     document.text(token, x, document.y, { lineBreak: false });
     x -= gap;
   }
-  document.x = document.page.margins.left;
+  document.x = left;
   document.y = Math.max(document.y, y) + size * 1.55;
+  return document.y;
 }
 
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -95,16 +96,61 @@ async function makeDocx(title, body) {
 }
 
 async function makePdf(title, body) {
-  const document = new PDFDocument({ size: 'A4', margins: { top: 54, bottom: 54, left: 54, right: 54 }, info: { Title: title, Author: 'Reid' } });
+  const document = new PDFDocument({ size: 'A4', bufferPages: true, margins: { top: 48, bottom: 64, left: 52, right: 52 }, info: { Title: title, Author: 'Reid', Subject: 'Reid generated report' } });
   const chunks = [];
   document.on('data', (chunk) => chunks.push(chunk));
   const font = ['/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', '/System/Library/Fonts/Supplemental/Arial.ttf'].find(existsSync);
   if (font) document.font(font);
-  writePdfLine(document, title, { size: 20, color: '#5E3F9E' });
-  document.moveDown(0.5);
-  for (const line of cleanLines(body)) {
-    const clean = line.replace(/^[-*#]+\s*/, '');
-    writePdfLine(document, clean);
+
+  const drawHeader = (first = false) => {
+    document.save().rect(0, 0, document.page.width, first ? 148 : 82).fill('#2B1D3C').restore();
+    const logoX = document.page.margins.left;
+    [18, 28, 40, 54].forEach((height, index) => {
+      document.save().roundedRect(logoX + index * 11, 42 - height / 2, 7, height, 3).fill(index === 3 ? '#8C6BC4' : '#D8CDE9').restore();
+    });
+    document.y = first ? 48 : 28;
+    writePdfLine(document, first ? title : 'تقرير ريّد', { size: first ? 22 : 15, color: '#FFFFFF', left: 125, right: document.page.width - document.page.margins.right });
+    if (first) {
+      document.y = 108;
+      writePdfLine(document, `أُنشئ بواسطة ريّد • ${new Intl.DateTimeFormat('ar-OM', { timeZone: 'Asia/Muscat', dateStyle: 'long', timeStyle: 'short' }).format(new Date())}`, { size: 9, color: '#E9E2F3', left: 125, right: document.page.width - document.page.margins.right });
+      document.y = 174;
+    } else document.y = 104;
+  };
+  const ensureSpace = (height = 42) => {
+    if (document.y + height <= document.page.height - document.page.margins.bottom) return;
+    document.addPage(); drawHeader(false);
+  };
+
+  drawHeader(true);
+  const lines = cleanLines(body);
+  for (const [index, line] of lines.entries()) {
+    const heading = /^#{1,3}\s+/.test(line);
+    const bullet = /^[-*•]\s+/.test(line);
+    const clean = line.replace(/^[-*#•]+\s*/, '');
+    ensureSpace(heading ? 58 : 38);
+    if (heading) {
+      document.save().roundedRect(document.page.margins.left, document.y - 7, document.page.width - document.page.margins.left - document.page.margins.right, 36, 8).fill('#F0EBF7').restore();
+      writePdfLine(document, clean, { size: 14, color: '#5E3F9E', left: document.page.margins.left + 12, right: document.page.width - document.page.margins.right - 12 });
+      document.y += 8;
+    } else if (bullet) {
+      const right = document.page.width - document.page.margins.right;
+      document.save().circle(right - 4, document.y + 7, 3).fill('#7C5AB5').restore();
+      writePdfLine(document, clean, { size: 11.5, left: document.page.margins.left + 8, right: right - 18 });
+      document.y += 5;
+    } else {
+      if (index % 2 === 1) document.save().roundedRect(document.page.margins.left, document.y - 5, document.page.width - document.page.margins.left - document.page.margins.right, 30, 6).fill('#FAF8FC').restore();
+      writePdfLine(document, clean, { size: 11.5, left: document.page.margins.left + 10, right: document.page.width - document.page.margins.right - 10 });
+      document.y += 5;
+    }
+  }
+
+  const range = document.bufferedPageRange();
+  for (let page = range.start; page < range.start + range.count; page += 1) {
+    document.switchToPage(page);
+    const footerY = document.page.height - 42;
+    document.save().moveTo(document.page.margins.left, footerY - 10).lineTo(document.page.width - document.page.margins.right, footerY - 10).strokeColor('#DED6E8').lineWidth(0.7).stroke().restore();
+    document.fontSize(8).fillColor('#776C82').text(`Reid • reidpro.com`, document.page.margins.left, footerY, { lineBreak: false });
+    document.text(`${page - range.start + 1} / ${range.count}`, document.page.width - document.page.margins.right - 50, footerY, { width: 50, align: 'right', lineBreak: false });
   }
   document.end();
   return await new Promise((resolve, reject) => {
