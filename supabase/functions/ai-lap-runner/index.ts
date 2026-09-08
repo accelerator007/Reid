@@ -110,8 +110,9 @@ async function bridgeOperation(admin:ReturnType<typeof createClient>,body:Record
     if(row.error) throw row.error; return row.data;
   }
   if(operation==='memory.delete'){
-    const id=String(args.id||''), scopeId=owner.id;
-    const removed=await admin.from('memories').delete().eq('id',id).eq('scope','user').eq('scope_id',scopeId).select('id');
+    const id=String(args.id||''), scope=String(args.scope||'user')==='group'?'company':'user';
+    const scopeId=scope==='user'?owner.id:`whatsapp:${String(body.chatId||'company')}`;
+    const removed=await admin.from('memories').delete().eq('id',id).eq('scope',scope).eq('scope_id',scopeId).select('id');
     if(removed.error) throw removed.error; return {removed:removed.data?.length||0};
   }
   if(operation==='knowledge.search'){

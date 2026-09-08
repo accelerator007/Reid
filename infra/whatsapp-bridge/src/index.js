@@ -111,11 +111,11 @@ async function answer(sender, chatId, input, context = {}, images = []) {
   return output;
 }
 
-const actionLike = (text) => /(اجتماع|مشروع|المشاريع|تتذكر|احفظ|انس|ملف|عرض سعر|اتفقنا|محتوى|منشور|صورة|صور|صمم|تصميم|ستوري|بنر|خلفية|انستغرام|instagram|linkedin|لينكد|فاتور|لقطة|خطأ|تقرير)/i.test(text);
+const actionLike = (text) => /(ارسل|أرسل|رسل|send|اجتماع|مشروع|المشاريع|تتذكر|احفظ|انس|ملف|عرض سعر|اتفقنا|محتوى|منشور|صورة|صور|صمم|تصميم|ستوري|بنر|خلفية|انستغرام|instagram|linkedin|لينكد|فاتور|لقطة|خطأ|تقرير|حالة الطلب|طلباتي|أعد المحاولة|اعد المحاولة|تراجع|حوّل لمسؤول|حول لمسؤول)/i.test(text);
 const approval = (text) => /^(?:اعتمد|موافق|موافقة|نفذ|انشره)\s*[.!؟]*$/i.test(text.trim());
 const rejection = (text) => /^(?:رفض|الغ|إلغاء|لا)\s*[.!؟]*$/i.test(text.trim());
 
-async function smartAction(decision, prepared) {
+async function smartAction(socket, decision, prepared) {
   if (!company.enabled || (!actionLike(prepared.input) && !approval(prepared.input) && !rejection(prepared.input))) return null;
   const key = `${decision.sender}:${decision.chatId}`;
   const previousArtifact = await actionStore.artifact(key);
@@ -136,20 +136,26 @@ async function smartAction(decision, prepared) {
   const pending = await actionStore.pending(key);
   if (pending && rejection(prepared.input)) { await actionStore.pending(key, null); return 'تم إلغاء الطلب، ولا تغيّر شيء 👍'; }
   if (pending && approval(prepared.input)) {
-    const job = await actionStore.job(pending.kind, pending);
+    const job = await actionStore.job(pending.kind, pending, key);
     try {
       let result;
       if (pending.kind === 'meeting') result = await company.call(decision.sender, 'tasks.create_batch', { project: pending.project, tasks: pending.tasks }, decision.chatId);
       else if (pending.kind === 'content') result = await company.call(decision.sender, 'content.draft.create', pending.draft, decision.chatId);
       else if (pending.kind === 'image_approval') result = await company.call(decision.sender, 'image.approve', { asset_id: pending.assetId }, decision.chatId);
+      else if (pending.kind === 'outbound_message') {
+        await socket.sendMessage(pending.recipient.id, { text: pending.message });
+        result = { recipient: pending.recipient, sent: true };
+      }
       else return null;
       await actionStore.pending(key, null); await actionStore.finish(job.id, 'completed', result);
       if (pending.kind === 'image_approval') return `✅ سُجل اعتماد L2 للصورة (${job.id}). ما تم نشرها تلقائيًا. تقدر الحين تطلب جدولتها بعد ربط المنصة.`;
+      if (pending.kind === 'outbound_message') return `✅ أرسلت الرسالة إلى ${result.recipient.name} (${job.id}).`;
       return `✅ اكتمل (${job.id})\n${pending.kind === 'meeting' ? `حفظت ${result.created.length} مهام في مشروع ${result.project.name}.` : `حفظت المسودة: ${result.title_ar}. النشر الخارجي يحتاج ربط المنصة وموافقة L2.`}\n${result.url}`;
     } catch (error) { await actionStore.finish(job.id, 'failed', String(error)); return `❌ فشل الطلب (${job.id}): ${error.message}\nتقدر تقول: أعد المحاولة.`; }
   }
 
   const plan = await planAction(chatModel, prepared.input, prepared.images);
+  if (plan.missing && plan.clarifying_question) return plan.clarifying_question;
   if (!decision.isOwner) {
     if (plan.intent !== 'image_generate' && plan.intent !== 'image_edit') return null;
     const allowance = await actionStore.claimPublicImage(decision.sender, 2);
@@ -159,6 +165,43 @@ async function smartAction(decision, prepared) {
     const imagePrompt = await enhanceImagePrompt(plan.prompt || prepared.input);
     const generated = await generateLocalImages(imagePrompt, plan.aspect_ratio || '1:1', 1, source);
     return { images: [{ data: generated[0], caption: `صممتها لك محليًا ✨ • المتبقي اليوم ${allowance.remaining}` }], text: 'إذا تبي تعديل، أرسل الصورة مرة ثانية واكتب التغيير المطلوب.' };
+  }
+  if (plan.intent === 'outbound_message') {
+    const knownOwner = /^(?:شيخة|الشيخة|sheikha)$/i.test(String(plan.recipient || '').trim()) ? '96892797586'
+      : /^(?:علي|ali)$/i.test(String(plan.recipient || '').trim()) ? '96896709444' : plan.recipient;
+    const recipient = actionStore.resolveContact(knownOwner);
+    const message = String(plan.message || '').trim().slice(0, 4000);
+    if (!message) return 'وش الرسالة اللي تريدني أرسلها؟';
+    if (recipient.ambiguous) return recipient.ambiguous.length
+      ? `لقيت أكثر من اسم مطابق:\n${recipient.ambiguous.map((row, index) => `${index + 1}. ${row.name}`).join('\n')}\nاكتب الاسم بشكل أوضح أو الرقم.`
+      : 'ما لقيت الاسم في جهات الاتصال المتزامنة. أرسل لي رقمه مع مفتاح الدولة.';
+    if (recipient.phone) {
+      const registered = await socket.onWhatsApp(recipient.phone);
+      if (!registered?.length) return 'هذا الرقم ما ظهر كحساب واتساب. تأكد من الرقم ومفتاح الدولة.';
+      recipient.id = registered[0].jid;
+    }
+    await actionStore.pending(key, { kind: 'outbound_message', recipient, message });
+    return `تأكيد إرسال L2:\nإلى: ${recipient.name}\nالرسالة: ${message}\n\nاكتب «موافقة» للإرسال أو «رفض» للإلغاء.`;
+  }
+  if (plan.intent === 'task_status') {
+    const labels = { running: 'جارٍ العمل', pending_approval: 'بانتظار الموافقة', needs_input: 'يحتاج معلومة', completed: 'مكتمل', failed: 'فشل', cancelled: 'ملغي', needs_human: 'محول لمسؤول' };
+    const rows = actionStore.recentJobs(key, 6);
+    return rows.length ? `آخر طلباتك:\n${rows.map((row) => `• ${row.id} — ${row.kind} — ${labels[row.status] || row.status}`).join('\n')}` : 'ما عندك طلبات تنفيذ مسجلة في هذه المحادثة للحين.';
+  }
+  if (plan.intent === 'retry') {
+    const row = await actionStore.prepareRetry(key, String(plan.job_id || '').trim());
+    if (!row) return 'ما لقيت طلبًا فاشلًا أقدر أعيد محاولته. اكتب «حالة الطلبات» وشوف الرقم.';
+    await actionStore.pending(key, row.request);
+    return `رجعت الطلب ${row.id} للمعاينة بأمان. راجع التفاصيل السابقة واكتب «موافقة» لإعادة تنفيذه أو «رفض» لإلغائه.`;
+  }
+  if (plan.intent === 'handoff') {
+    const row = await actionStore.handoff(key, String(plan.job_id || '').trim());
+    return row ? `حوّلت الطلب ${row.id} لمسؤول بشري، وحالته محفوظة للمتابعة.` : 'ما لقيت طلبًا في هذه المحادثة أحوله لمسؤول.';
+  }
+  if (plan.intent === 'undo') {
+    const row = await actionStore.cancel(key, String(plan.job_id || '').trim());
+    if (row) return `ألغيت الطلب ${row.id} قبل اكتماله ✅`;
+    return 'ما أقدر أتراجع عن رسالة أُرسلت أو إجراء اكتمل. أقدر ألغي فقط الطلب الجاري أو المنتظر للموافقة.';
   }
   if (plan.intent === 'image_schedule') {
     if (!previousImage?.assetId) return 'ما لقيت صورة سابقة في هذه المحادثة عشان أجدولها.';
@@ -183,7 +226,14 @@ async function smartAction(decision, prepared) {
     const row = await company.call(decision.sender, 'memory.save', { scope: decision.chatId.endsWith('@g.us') ? 'group' : 'user', content: plan.memory || prepared.input }, decision.chatId);
     return `حفظتها في ذاكرتك المنفصلة ✅\n${row.content}`;
   }
-  if (plan.intent === 'memory_delete') return 'اعرض ذاكرتك أول بعبارة «وش تتذكر عني؟»، وبعدها قل «انسَ» مع رقم الذاكرة الظاهر.';
+  if (plan.intent === 'memory_delete') {
+    const rows = await company.call(decision.sender, 'memory.list', { scope: decision.chatId.endsWith('@g.us') ? 'group' : 'user' }, decision.chatId);
+    const requested = String(plan.memory_id || plan.query || prepared.input).match(/[a-f0-9]{8}(?:-[a-f0-9-]{27})?/i)?.[0];
+    const matches = requested ? rows.filter((row) => row.id === requested || row.id.startsWith(requested)) : [];
+    if (matches.length !== 1) return 'اعرض ذاكرتك أول بعبارة «وش تتذكر عني؟»، وبعدها قل «انسَ» مع الرمز الظاهر بجانب المعلومة.';
+    const result = await company.call(decision.sender, 'memory.delete', { id: matches[0].id, scope: decision.chatId.endsWith('@g.us') ? 'group' : 'user' }, decision.chatId);
+    return result.removed ? 'نسيت المعلومة المطلوبة من هذا السياق ✅' : 'ما لقيت هذه المعلومة ضمن ذاكرتك المسموح بها.';
+  }
   if (plan.intent === 'knowledge') {
     const sources = await company.call(decision.sender, 'knowledge.search', { query: plan.query || prepared.input }, decision.chatId);
     return chatModel('أجب اعتمادًا على النتائج فقط. اذكر اسم كل مصدر ومعرّفه، وقل بوضوح إن لم تكف النتائج. لا تخترع رابطًا أو صفحة.', `${prepared.input}\n\nالمصادر:\n${JSON.stringify(sources)}`);
@@ -297,7 +347,7 @@ async function respond(socket, item, decision) {
       await socket.sendMessage(decision.chatId, { text: `تم ضبط التذكير ✅\n${created.text}\n${formatMuscat(created.dueAt)}${created.recurrence ? '\nيتكرر أسبوعيًا' : ''}\nبعد وصوله تقدر تكتب: تم، أجله ساعتين، أو إلغاء التذكير.` }, { quoted: item });
       return;
     }
-    const actionOutput = await smartAction(decision, prepared);
+    const actionOutput = await smartAction(socket, decision, prepared);
     if (actionOutput) {
       if (typeof actionOutput === 'object' && actionOutput.images) {
         for (const generated of actionOutput.images) await socket.sendMessage(decision.chatId, { image: Buffer.from(generated.data, 'base64'), caption: generated.caption }, { quoted: item });
@@ -350,10 +400,15 @@ async function run() {
       setTimeout(() => run().catch(() => process.exit(1)), 3000);
     }
   });
+  socket.ev.on('contacts.upsert', (rows) => actionStore.rememberContacts(rows).catch(() => console.error('bridge_contacts_store_failed')));
+  socket.ev.on('contacts.update', (rows) => actionStore.rememberContacts(rows).catch(() => console.error('bridge_contacts_store_failed')));
   socket.ev.on('messages.upsert', async ({ messages, type }) => {
     console.log('bridge_upsert', JSON.stringify({ type, count: messages.length }));
     for (const item of messages) {
       rememberMessage(item);
+      if (item.pushName && item.key?.remoteJid && !item.key.remoteJid.endsWith('@g.us')) {
+        await actionStore.rememberContacts([{ id: item.key.remoteJid, name: item.pushName }]);
+      }
       if (!shouldProcessUpsert(type, item.messageTimestamp)) continue;
       const id = item.key?.id;
       if (!id || seen.has(id)) continue;

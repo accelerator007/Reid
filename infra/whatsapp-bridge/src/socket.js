@@ -1,5 +1,6 @@
 import { NodeCache } from '@cacheable/node-cache';
 import makeWASocket, {
+  Browsers,
   DisconnectReason,
   fetchLatestWaWebVersion,
   makeCacheableSignalKeyStore,
@@ -33,7 +34,9 @@ export async function openSocket(authDir) {
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
     version,
-    browser: ['Reid Bridge', 'Chrome', '1.0.0'],
+    // Use Baileys' canonical browser tuple. Custom tuples are more likely to
+    // be treated as an unsupported companion after WhatsApp protocol changes.
+    browser: Browsers.ubuntu('Chrome'),
     logger,
     markOnlineOnConnect: false,
     syncFullHistory: false,
