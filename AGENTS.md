@@ -907,3 +907,9 @@ A workflow is done only when its happy path, denial path, validation errors, RBA
 - Execution records are isolated by sender and conversation and expose the latest request id and state. Failed work can only be returned to `pending_approval`; retry never repeats an outbound message or company mutation automatically. Running or approval-pending work may be cancelled, while completed sends and mutations explicitly refuse false rollback claims.
 - Personal and WhatsApp-group memories can now be deleted by the short identifier shown in the memory list. The runner checks the authenticated owner and exact personal/group scope before deletion, preventing a memory id from being used across users or groups.
 - Local verification passes 30/30 bridge tests, including retry approval, lifecycle isolation, handoff and cancellation; the full application remains at 155/155 passing tests, the Production build passes, Node syntax checks pass and `git diff --check` is clean.
+
+### 2026-09-08 WhatsApp linked-session guard
+
+- Live logs proved that WhatsApp removed the linked `ai-lap` device with stream conflict `401 device_removed` at 21:37 Asia/Muscat. The bridge had received and answered messages before the removal; later messages could not enter the bridge. This is a revoked QR session, not a model, reminder or routing defect.
+- A logged-out session now exits with dedicated status `78`, and the systemd unit uses `RestartPreventExitStatus=78`. This prevents an unrecoverable revoked session from entering the observed rapid restart loop while preserving automatic restart for ordinary process failures.
+- The revoked credential directory was retained on `ai-lap` as a timestamped backup, a new private auth directory was prepared, and the service remains stopped until a human links the fresh QR from the primary phone.

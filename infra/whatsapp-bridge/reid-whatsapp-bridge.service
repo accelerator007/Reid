@@ -10,6 +10,7 @@ EnvironmentFile=%h/.config/reid-ai/whatsapp-bridge.env
 EnvironmentFile=-%h/.config/reid-ai/runner.env
 ExecStart=/usr/bin/node src/index.js
 Restart=on-failure
+RestartPreventExitStatus=78
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
