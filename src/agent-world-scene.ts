@@ -6,6 +6,10 @@
  * agents are robots at workstations in a desert outpost, and every state the
  * gateway reports is a behaviour you can see from across the room.
  *
+ * The world is modelled in metres: a robot is 1.85 tall, a desk is 0.74, a
+ * workstation pad is 5.2 across. Keeping real proportions is most of what
+ * makes a procedural scene look built rather than assembled from primitives.
+ *
  * This module owns the renderer and nothing else. It never reads Supabase, it
  * never imports React, and it names no colour: `readWorldPalette()` lifts the
  * `--world-*` tokens out of the cascade so the outpost flips with the theme.
@@ -14,6 +18,8 @@
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 export type WorldState = "ready" | "working" | "approval" | "paused" | "blocked" | "error";
 export type WorldDomain = "executive" | "delivery" | "growth" | "revenue" | "governance" | "knowledge";
@@ -36,7 +42,7 @@ export type WorldAgent = WorldNode & {
 export type WorldPlacement = { id: string; x: number; z: number; angle: number; depth: number };
 
 /** The campus is rings, not rows: depth 0 is the HQ platform, each level out is a wider avenue. */
-export const ringRadius = (depth: number) => (depth === 0 ? 0 : 3.5 + depth * 9);
+export const ringRadius = (depth: number) => (depth === 0 ? 0 : 3 + depth * 8);
 
 /**
  * Places every node from the reporting tree alone, so adding an agent to
@@ -70,7 +76,7 @@ export function worldLayout(nodes: readonly WorldNode[]): Map<string, WorldPlace
       children.forEach((child, index) => {
         const angle = firstRing
           ? ((placedOnRing + index) / Math.max(1, ringMembers.length)) * Math.PI * 2 + Math.PI / Math.max(1, ringMembers.length)
-          : (base?.angle ?? 0) + (index - (children.length - 1) / 2) * 0.36;
+          : (base?.angle ?? 0) + (index - (children.length - 1) / 2) * 0.4;
         const radius = ringRadius(depth);
         placements.set(child.id, { id: child.id, x: Math.sin(angle) * radius, z: Math.cos(angle) * radius, angle, depth });
         next.push(child);
@@ -86,6 +92,9 @@ export function worldLayout(nodes: readonly WorldNode[]): Map<string, WorldPlace
 // ---------------------------------------------------------------------------
 // State to behaviour
 // ---------------------------------------------------------------------------
+
+/** What the body is doing. The renderer blends between these rather than snapping. */
+export type PoseName = "idle" | "typing" | "raised" | "slumped" | "crossed" | "shaken";
 
 export type StateVisual = {
   /** Which semantic token drives the accent lights. */
@@ -104,18 +113,39 @@ export type StateVisual = {
   raised: boolean;
   /** Data packets travelling the link toward the parent. */
   packets: boolean;
+  /** The whole-body posture this state stands in. */
+  pose: PoseName;
 };
 
 const VISUALS: Record<WorldState, StateVisual> = {
-  ready:    { tone: "good",  activity: 0.18, droop: 0,    beacon: false, flash: 0, dome: false, raised: false, packets: false },
-  working:  { tone: "good",  activity: 1,    droop: 0,    beacon: false, flash: 0, dome: false, raised: false, packets: true },
-  approval: { tone: "warn",  activity: 0.3,  droop: 0,    beacon: true,  flash: 0, dome: false, raised: true,  packets: false },
-  paused:   { tone: "muted", activity: 0.02, droop: 1,    beacon: false, flash: 0, dome: false, raised: false, packets: false },
-  blocked:  { tone: "risk",  activity: 0,    droop: 0.45, beacon: false, flash: 0, dome: true,  raised: false, packets: false },
-  error:    { tone: "risk",  activity: 0.1,  droop: 0.2,  beacon: true,  flash: 3, dome: false, raised: false, packets: false },
+  ready:    { tone: "good",  activity: 0.16, droop: 0,    beacon: false, flash: 0, dome: false, raised: false, packets: false, pose: "idle" },
+  working:  { tone: "good",  activity: 1,    droop: 0,    beacon: false, flash: 0, dome: false, raised: false, packets: true,  pose: "typing" },
+  approval: { tone: "warn",  activity: 0.3,  droop: 0,    beacon: true,  flash: 0, dome: false, raised: true,  packets: false, pose: "raised" },
+  paused:   { tone: "muted", activity: 0.02, droop: 1,    beacon: false, flash: 0, dome: false, raised: false, packets: false, pose: "slumped" },
+  blocked:  { tone: "risk",  activity: 0,    droop: 0.35, beacon: false, flash: 0, dome: true,  raised: false, packets: false, pose: "crossed" },
+  error:    { tone: "risk",  activity: 0.1,  droop: 0.15, beacon: true,  flash: 3, dome: false, raised: false, packets: false, pose: "shaken" },
 };
 
 export const stateVisual = (state: WorldState): StateVisual => VISUALS[state] ?? VISUALS.blocked;
+
+/** Joint angles in radians, blended toward every frame so a state change is a movement. */
+export type Pose = {
+  hip: number; knee: number;
+  lean: number; headPitch: number; sink: number;
+  shoulder: number; elbow: number; shoulderOut: number;
+};
+
+export const POSES: Record<PoseName, Pose> = {
+  idle:    { hip: 0.02, knee: 0.08, lean: 0.02, headPitch: 0,    sink: 0,    shoulder: 0.06, elbow: -0.22, shoulderOut: 0.08 },
+  typing:  { hip: 0.16, knee: 0.2,   lean: 0.2,  headPitch: 0.34, sink: 0.05, shoulder: -0.9, elbow: -1.15, shoulderOut: 0.18 },
+  raised:  { hip: 0.02, knee: 0.06, lean: -0.05, headPitch: -0.12, sink: 0,  shoulder: 0.04, elbow: -0.2,  shoulderOut: 0.1 },
+  slumped: { hip: 0.34, knee: 0.6,  lean: 0.3,  headPitch: 0.5,  sink: 0.22, shoulder: 0.2,  elbow: -0.32, shoulderOut: 0.05 },
+  // Arms folded across the chest, which needs the shoulders in, not out.
+  crossed: { hip: 0.04, knee: 0.1,  lean: -0.04, headPitch: -0.05, sink: 0,  shoulder: -1.2, elbow: -1.95, shoulderOut: -0.32 },
+  shaken:  { hip: 0.08, knee: 0.16, lean: 0.1,  headPitch: 0.14, sink: 0.06, shoulder: 0.14, elbow: -0.5,  shoulderOut: 0.14 },
+};
+
+export const poseFor = (state: WorldState): Pose => POSES[stateVisual(state).pose];
 
 // ---------------------------------------------------------------------------
 // Palette
@@ -124,7 +154,8 @@ export const stateVisual = (state: WorldState): StateVisual => VISUALS[state] ??
 export const WORLD_TOKENS = [
   "world-sky-top", "world-sky-bottom", "world-sun", "world-haze",
   "world-sand", "world-sand-shade", "world-rock",
-  "world-metal", "world-metal-dark", "world-glass",
+  "world-shell", "world-shell-shade", "world-joint", "world-rubber",
+  "world-metal", "world-metal-dark", "world-desk", "world-glass",
   "world-district-executive", "world-district-delivery", "world-district-growth",
   "world-district-revenue", "world-district-governance", "world-district-knowledge",
   "good", "warn", "risk", "muted", "brand-400", "brand-600",
@@ -135,9 +166,10 @@ export type WorldPalette = Record<WorldToken, string>;
 
 /** Only reached when the stylesheet has not applied yet; the world still renders. */
 const FALLBACK: WorldPalette = {
-  "world-sky-top": "#8fb3dd", "world-sky-bottom": "#f6ddb4", "world-sun": "#fff4d8", "world-haze": "#e9d5b2",
-  "world-sand": "#dcbf90", "world-sand-shade": "#b99a68", "world-rock": "#9a8365",
-  "world-metal": "#dcd7e6", "world-metal-dark": "#6d6681", "world-glass": "#2b2440",
+  "world-sky-top": "#4f8bcd", "world-sky-bottom": "#e9c99b", "world-sun": "#fff3d2", "world-haze": "#ddc39c",
+  "world-sand": "#d9b678", "world-sand-shade": "#a8834f", "world-rock": "#8d7355",
+  "world-shell": "#eceaf2", "world-shell-shade": "#b9b4c6", "world-joint": "#3c3847", "world-rubber": "#232029",
+  "world-metal": "#cfcad9", "world-metal-dark": "#6d6681", "world-desk": "#ded8e4", "world-glass": "#0e0c16",
   "world-district-executive": "#6f56b8", "world-district-delivery": "#2f79ad", "world-district-growth": "#c2703a",
   "world-district-revenue": "#2c8663", "world-district-governance": "#98548a", "world-district-knowledge": "#3a7f96",
   good: "#237a51", warn: "#8a5f12", risk: "#a52f2f", muted: "#71677e", "brand-400": "#8069bd", "brand-600": "#55418b",
@@ -188,12 +220,15 @@ export function detectQuality({ cores = 4, memory = 4, width = 1280, coarsePoint
   return "high";
 }
 
-export type QualityBudget = { shadowMap: number; dust: number; pixelRatio: number; tubeSegments: number; props: boolean };
+export type QualityBudget = {
+  shadowMap: number; dust: number; pixelRatio: number; tubeSegments: number;
+  props: boolean; /** Rounded corners and smooth capsules cost triangles; a weak device gets fewer. */ detail: number;
+};
 
 export const qualityBudget = (quality: WorldQuality): QualityBudget =>
-  quality === "high" ? { shadowMap: 2048, dust: 900, pixelRatio: 2, tubeSegments: 56, props: true }
-  : quality === "medium" ? { shadowMap: 1024, dust: 420, pixelRatio: 1.5, tubeSegments: 36, props: true }
-  : { shadowMap: 0, dust: 160, pixelRatio: 1, tubeSegments: 20, props: false };
+  quality === "high" ? { shadowMap: 2048, dust: 900, pixelRatio: 2, tubeSegments: 56, props: true, detail: 1 }
+  : quality === "medium" ? { shadowMap: 1024, dust: 420, pixelRatio: 1.5, tubeSegments: 36, props: true, detail: 1 }
+  : { shadowMap: 0, dust: 160, pixelRatio: 1, tubeSegments: 20, props: false, detail: 1 };
 
 /** Deterministic scatter: the dunes and rocks must not reshuffle on every mount. */
 export function seeded(seed: number): () => number {
@@ -210,7 +245,7 @@ export function seeded(seed: number): () => number {
 export function duneHeight(x: number, z: number): number {
   const wave = Math.sin(x * 0.09) * Math.cos(z * 0.11) * 2.4 + Math.sin((x + z) * 0.05) * 1.7 + Math.cos(x * 0.031 - z * 0.043) * 3.4;
   const distance = Math.hypot(x, z);
-  return wave * THREE.MathUtils.smoothstep(distance, 28, 52);
+  return wave * THREE.MathUtils.smoothstep(distance, 26, 50);
 }
 
 /** Relative luminance, used for exactly one decision: is this outpost in daylight? */
@@ -272,17 +307,21 @@ export type AgentWorld = {
   dispose(): void;
 };
 
+/** A shoulder-to-hand or hip-to-foot chain, posed by two angles. */
+type Limb = { upper: THREE.Group; lower: THREE.Group };
+
 type Rig = {
   agent: WorldAgent;
   station: THREE.Group;
   robot: THREE.Group;
   torso: THREE.Group;
   head: THREE.Group;
-  armLeft: THREE.Group;
-  armRight: THREE.Group;
+  arms: readonly [Limb, Limb];
+  legs: readonly [Limb, Limb];
   beacon: THREE.Mesh;
   dome: THREE.Mesh;
   column: THREE.Mesh;
+  visorGlow: THREE.Sprite;
   anchor: THREE.Object3D;
   pick: THREE.Mesh;
   accent: THREE.MeshStandardMaterial;
@@ -294,17 +333,15 @@ type Rig = {
   columnMaterial: THREE.ShaderMaterial;
   phase: number;
   visual: StateVisual;
-  lean: number;
-  sink: number;
-  lift: number;
+  pose: Pose;
+  blinkAt: number;
   selected: boolean;
 };
 
 type Link = { childId: string; material: THREE.ShaderMaterial; packets: THREE.Mesh[]; curve: THREE.QuadraticBezierCurve3 };
 
-const LABEL_HEIGHT = 2.55;
-/** Where a robot floats above its own station, before the station scale applies. */
-const ROBOT_BASE_Y = 0.42;
+/** Where a nameplate floats: just clear of a 1.85 m robot with its antenna up. */
+const LABEL_HEIGHT = 2.35;
 
 export function createAgentWorld(options: WorldOptions): AgentWorld {
   const { canvas, onSelect, onHover } = options;
@@ -315,250 +352,393 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: options.quality !== "low", powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, budget.pixelRatio));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = budget.shadowMap > 0;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 420);
-  // Low and close: the point of a world is that the robots read as characters.
-  const HOME = new THREE.Vector3(0, 16, 42);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.4, 420);
+  // Eye level of somebody standing at the edge of the outpost, not a satellite.
+  const HOME = new THREE.Vector3(0, 12.5, 36);
   camera.position.copy(HOME);
 
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = !reducedMotion;
   controls.dampingFactor = 0.06;
-  controls.minDistance = 9;
-  controls.maxDistance = 78;
-  controls.maxPolarAngle = Math.PI * 0.47;
-  controls.minPolarAngle = Math.PI * 0.1;
+  controls.minDistance = 5;
+  controls.maxDistance = 66;
+  controls.maxPolarAngle = Math.PI * 0.487;
+  controls.minPolarAngle = Math.PI * 0.08;
   controls.enablePan = false;
-  controls.rotateSpeed = 0.55;
+  controls.rotateSpeed = 0.5;
   controls.zoomSpeed = 0.7;
-  controls.target.set(0, 2.5, 0);
+  controls.target.set(0, 1.6, 0);
 
   const disposables: { dispose(): void }[] = [];
   const track = <T extends { dispose(): void }>(value: T): T => { disposables.push(value); return value; };
   const colour = (token: WorldToken) => new THREE.Color(palette[token]);
 
+  // ---- procedural textures ------------------------------------------------
+  // Every texture in the world is drawn here rather than downloaded: no asset
+  // pipeline, no cache miss, and the grain follows the theme like everything else.
+  function paint(size: number, draw: (context: CanvasRenderingContext2D) => void) {
+    const surface = document.createElement("canvas");
+    surface.width = surface.height = size;
+    draw(surface.getContext("2d")!);
+    return track(new THREE.CanvasTexture(surface));
+  }
+
+  const noise = seeded(7717);
+  const sandTexture = paint(256, context => {
+    const image = context.createImageData(256, 256);
+    // Wind ripples plus grain. Flat colour reads as plastic at any distance.
+    const grain = Array.from({ length: 256 * 256 }, () => noise());
+    for (let y = 0; y < 256; y += 1) {
+      for (let x = 0; x < 256; x += 1) {
+        const at = y * 256 + x;
+        const ripple = Math.sin((x * 0.28) + Math.sin(y * 0.06) * 3) * 0.5 + 0.5;
+        const speck = grain[at] * 0.35 + grain[(at + 991) % grain.length] * 0.2;
+        const value = Math.round(150 + ripple * 55 + speck * 50);
+        image.data[at * 4] = image.data[at * 4 + 1] = image.data[at * 4 + 2] = value;
+        image.data[at * 4 + 3] = 255;
+      }
+    }
+    context.putImageData(image, 0, 0);
+  });
+  sandTexture.wrapS = sandTexture.wrapT = THREE.RepeatWrapping;
+  sandTexture.repeat.set(70, 70);
+  sandTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+  const radial = (stops: readonly [number, string][]) => paint(128, context => {
+    const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+    for (const [at, value] of stops) gradient.addColorStop(at, value);
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 128, 128);
+  });
+  const glowTexture = radial([[0, "rgba(255,255,255,1)"], [0.35, "rgba(255,255,255,0.45)"], [1, "rgba(255,255,255,0)"]]);
+  // Ambient occlusion the cheap and old way: a soft dark patch where a body
+  // meets the floor. It is most of what stops a model from looking pasted on.
+  const contactTexture = radial([[0, "rgba(0,0,0,0.62)"], [0.55, "rgba(0,0,0,0.22)"], [1, "rgba(0,0,0,0)"]]);
+
   // ---- lighting -----------------------------------------------------------
   const hemisphere = new THREE.HemisphereLight(colour("world-sky-top"), colour("world-sand-shade"), 0.8);
   scene.add(hemisphere);
   const sun = new THREE.DirectionalLight(colour("world-sun"), 2.1);
-  sun.position.set(30, 26, 24);
+  sun.position.set(24, 20, 20);
   if (budget.shadowMap > 0) {
     sun.castShadow = true;
     sun.shadow.mapSize.set(budget.shadowMap, budget.shadowMap);
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 140;
-    sun.shadow.camera.left = -38; sun.shadow.camera.right = 38;
-    sun.shadow.camera.top = 38; sun.shadow.camera.bottom = -38;
-    sun.shadow.bias = -0.0008;
-    sun.shadow.normalBias = 0.03;
+    sun.shadow.camera.far = 120;
+    sun.shadow.camera.left = -30; sun.shadow.camera.right = 30;
+    sun.shadow.camera.top = 30; sun.shadow.camera.bottom = -30;
+    sun.shadow.bias = -0.0006;
+    sun.shadow.normalBias = 0.02;
     // The sun does not move and the campus does not either; only the robots
     // shift, by centimetres, so the depth map is regenerated a few times a
-    // second rather than sixty. Under this container's software rasterizer the
-    // saving is inside the noise — there the cost is in sampling the shadow,
-    // not producing it — but on a GPU it is a whole render pass per frame that
-    // nothing in the scene needed.
+    // second rather than sixty.
     sun.shadow.autoUpdate = false;
     sun.shadow.needsUpdate = true;
   }
-  scene.add(sun);
-  scene.add(sun.target);
+  scene.add(sun, sun.target);
+  // A cool bounce from the opposite side so the shadowed half of a robot has
+  // shape instead of being a silhouette.
+  const fill = new THREE.DirectionalLight(colour("world-sky-top"), 0.5);
+  fill.position.set(-18, 9, -14);
+  scene.add(fill);
 
-  // ---- sky and haze -------------------------------------------------------
-  const skyMaterial = track(new THREE.ShaderMaterial({
+  // ---- sky, haze and the reflections everything metal needs ---------------
+  const skyShader = () => new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
-    uniforms: { top: { value: colour("world-sky-top") }, bottom: { value: colour("world-sky-bottom") } },
+    uniforms: { top: { value: colour("world-sky-top") }, bottom: { value: colour("world-sky-bottom") }, sun: { value: colour("world-sun") } },
     vertexShader: "varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
     fragmentShader: [
-      "uniform vec3 top; uniform vec3 bottom; varying vec3 vPos;",
+      "uniform vec3 top; uniform vec3 bottom; uniform vec3 sun; varying vec3 vPos;",
       "void main(){",
-      "  float h = clamp(vPos.y / 190.0 + 0.12, 0.0, 1.0);",
-      "  gl_FragColor = vec4(mix(bottom, top, pow(h, 0.75)), 1.0);",
-      "  #include <tonemapping_fragment>",
+      "  vec3 dir = normalize(vPos);",
+      "  vec3 sky = mix(bottom, top, smoothstep(-0.02, 0.4, dir.y));",
+      // A wide, soft glow where the sun sits, so the horizon is not a flat band.
+      "  float halo = pow(max(0.0, dot(dir, normalize(vec3(0.68, 0.42, 0.6)))), 6.0);",
+      "  gl_FragColor = vec4(sky + sun * halo * 0.5, 1.0);",
       "  #include <colorspace_fragment>",
       "}",
     ].join("\n"),
-  }));
-  const skyGeometry = track(new THREE.SphereGeometry(190, 32, 20));
+  });
+  const skyMaterial = track(skyShader());
+  const skyGeometry = track(new THREE.SphereGeometry(190, 32, 24));
   scene.add(new THREE.Mesh(skyGeometry, skyMaterial));
-  scene.fog = new THREE.Fog(colour("world-haze"), 72, 215);
+  scene.fog = new THREE.Fog(colour("world-haze"), 60, 200);
+
+  // Image-based lighting from the sky itself. Without it every metal surface is
+  // a flat grey shape; with it the robots pick up the sand and the sky, which
+  // is the single largest step from "primitives" to "objects".
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  let environment: THREE.WebGLRenderTarget | null = null;
+  function buildEnvironment() {
+    const source = new THREE.Scene();
+    const material = skyShader();
+    const geometry = new THREE.SphereGeometry(80, 24, 16);
+    const floorGeometry = new THREE.CircleGeometry(120, 24);
+    const floorMaterial = new THREE.MeshBasicMaterial({ color: colour("world-sand") });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -2;
+    source.add(new THREE.Mesh(geometry, material), floor);
+    environment?.dispose();
+    environment = pmrem.fromScene(source, 0, 1, 200);
+    scene.environment = environment.texture;
+    geometry.dispose(); material.dispose(); floorGeometry.dispose(); floorMaterial.dispose();
+  }
+  buildEnvironment();
+
+  const sunDiscMaterial = track(new THREE.SpriteMaterial({ map: glowTexture, color: colour("world-sun"), transparent: true, opacity: 0.85, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+  const sunDisc = new THREE.Sprite(sunDiscMaterial);
+  sunDisc.scale.setScalar(46);
+  sunDisc.position.set(88, 54, 78);
+  scene.add(sunDisc);
 
   function applyDaylight() {
     const night = isNight(palette);
-    hemisphere.intensity = night ? 1.45 : 0.8;
-    sun.intensity = night ? 1.5 : 2.1;
-    renderer.toneMappingExposure = night ? 1.35 : 0.95;
+    hemisphere.intensity = night ? 1.9 : 0.75;
+    sun.intensity = night ? 1.9 : 2.6;
+    fill.intensity = night ? 0.7 : 0.3;
+    renderer.toneMappingExposure = night ? 1.5 : 0.82;
     const fog = scene.fog as THREE.Fog;
-    fog.near = night ? 52 : 72; fog.far = night ? 165 : 215;
-    sunDiscMaterial.opacity = night ? 0.9 : 0.75;
+    fog.near = night ? 46 : 62; fog.far = night ? 155 : 205;
+    sunDiscMaterial.opacity = night ? 0.55 : 0.85;
   }
-
-  const sunDiscMaterial = track(new THREE.MeshBasicMaterial({ color: colour("world-sun"), fog: false, transparent: true, opacity: 0.75 }));
-  const sunDisc = new THREE.Mesh(track(new THREE.SphereGeometry(6.5, 20, 14)), sunDiscMaterial);
-  sunDisc.position.copy(sun.position).multiplyScalar(3.4);
-  scene.add(sunDisc);
   applyDaylight();
 
+  // ---- materials ----------------------------------------------------------
+  // Real materials, not tinted defaults: painted shell, machined joints,
+  // polished trim, rubber feet. The difference between them is what makes the
+  // eye read a machine rather than a toy.
+  const shellMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-shell"), roughness: 0.42, metalness: 0.1, envMapIntensity: 1 }));
+  const panelMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-shell-shade"), roughness: 0.58, metalness: 0.2, envMapIntensity: 0.8 }));
+  const jointMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-joint"), roughness: 0.34, metalness: 0.85, envMapIntensity: 1 }));
+  const rubberMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-rubber"), roughness: 0.92, metalness: 0 }));
+  const metalMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-metal"), roughness: 0.24, metalness: 1, envMapIntensity: 1.1 }));
+  const deskMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-desk"), roughness: 0.5, metalness: 0.08, envMapIntensity: 0.7 }));
+  const glassMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-glass"), roughness: 0.08, metalness: 0.3, envMapIntensity: 1.2 }));
+  const brandMaterial = track(new THREE.MeshStandardMaterial({ color: colour("brand-600"), emissive: colour("brand-400"), emissiveIntensity: 0.7, roughness: 0.3, metalness: 0.5 }));
+  const contactMaterial = track(new THREE.MeshBasicMaterial({ map: contactTexture, transparent: true, depthWrite: false, color: 0x000000, opacity: 0.75 }));
+
+  /** Bakes a set of primitives into one mesh, because a station is not worth twenty draw calls. */
+  const merge = (parts: readonly { geometry: THREE.BufferGeometry; position?: THREE.Vector3Tuple; rotation?: THREE.Vector3Tuple }[]) => {
+    const matrix = new THREE.Matrix4();
+    const euler = new THREE.Euler();
+    const scale = new THREE.Vector3(1, 1, 1);
+    const clones = parts.map(part => {
+      const clone = part.geometry.clone().toNonIndexed();
+      matrix.compose(
+        new THREE.Vector3(...(part.position ?? [0, 0, 0])),
+        new THREE.Quaternion().setFromEuler(euler.set(...(part.rotation ?? [0, 0, 0]))),
+        scale,
+      );
+      clone.applyMatrix4(matrix);
+      return clone;
+    });
+    const result = mergeGeometries(clones, false) ?? clones[0].clone();
+    for (const clone of clones) clone.dispose();
+    return track(result);
+  };
+
+  const box = (width: number, height: number, depth: number, radius = 0.02) => new RoundedBoxGeometry(width, height, depth, budget.detail, radius);
+  const capsule = (radius: number, length: number) => new THREE.CapsuleGeometry(radius, length, budget.detail + 1, 8 + budget.detail * 4);
+  const tube = (top: number, bottom: number, height: number, sides = 12) => new THREE.CylinderGeometry(top, bottom, height, sides);
+
+  // ---- shared geometry: eleven robots pay for one set ---------------------
+  const parts = {
+    // A robot: a painted shell over dark joints, 1.9 m to the tip of the antenna.
+    torso: merge([
+      { geometry: box(0.44, 0.44, 0.28, 0.1), position: [0, 1.28, 0] },
+      { geometry: box(0.3, 0.16, 0.24, 0.06), position: [0, 1.02, 0] },
+      { geometry: box(0.26, 0.28, 0.11, 0.04), position: [0, 1.3, -0.19] },
+      { geometry: box(0.13, 0.1, 0.13, 0.03), position: [-0.24, 1.5, 0] },
+      { geometry: box(0.13, 0.1, 0.13, 0.03), position: [0.24, 1.5, 0] },
+    ]),
+    chest: merge([
+      { geometry: box(0.19, 0.09, 0.04, 0.015), position: [0, 1.33, 0.145] },
+      { geometry: box(0.05, 0.05, 0.03, 0.01), position: [0, 1.18, 0.15] },
+    ]),
+    head: merge([
+      { geometry: box(0.25, 0.23, 0.24, 0.075), position: [0, 0.09, 0] },
+      { geometry: tube(0.055, 0.065, 0.09, 10), position: [0, -0.02, 0] },
+      { geometry: tube(0.032, 0.032, 0.03, 8), position: [-0.132, 0.09, 0], rotation: [0, 0, Math.PI / 2] },
+      { geometry: tube(0.032, 0.032, 0.03, 8), position: [0.132, 0.09, 0], rotation: [0, 0, Math.PI / 2] },
+      { geometry: tube(0.008, 0.012, 0.13, 6), position: [0.06, 0.26, -0.04] },
+    ]),
+    visor: new THREE.PlaneGeometry(0.185, 0.07),
+    beacon: new THREE.SphereGeometry(0.042, 12, 8),
+    upperArm: merge([
+      { geometry: new THREE.SphereGeometry(0.055, 10, 8) },
+      { geometry: capsule(0.048, 0.2), position: [0, -0.15, 0] },
+    ]),
+    forearm: merge([
+      { geometry: capsule(0.04, 0.17), position: [0, -0.12, 0] },
+      { geometry: box(0.075, 0.1, 0.05, 0.02), position: [0, -0.27, 0.01] },
+    ]),
+    thigh: merge([
+      { geometry: new THREE.SphereGeometry(0.075, 10, 8) },
+      { geometry: capsule(0.072, 0.26), position: [0, -0.22, 0] },
+    ]),
+    shin: merge([
+      { geometry: capsule(0.058, 0.26), position: [0, -0.21, 0] },
+      { geometry: box(0.12, 0.055, 0.25, 0.02), position: [0, -0.44, 0.05] },
+    ]),
+
+    // A workstation, split by material so it costs two draw calls, not twelve.
+    deskLight: merge([
+      { geometry: box(1.5, 0.05, 0.72, 0.02), position: [0, 0.72, 0.8] },
+      { geometry: box(0.44, 0.08, 0.42, 0.04), position: [0, 0.44, -0.62] },
+      { geometry: box(0.42, 0.44, 0.07, 0.03), position: [0, 0.7, -0.82], rotation: [-0.12, 0, 0] },
+    ]),
+    deskDark: merge([
+      { geometry: box(0.06, 0.68, 0.62, 0.02), position: [-0.68, 0.35, 0.8] },
+      { geometry: box(0.06, 0.68, 0.62, 0.02), position: [0.68, 0.35, 0.8] },
+      { geometry: box(1.3, 0.04, 0.1, 0.02), position: [0, 0.12, 0.8] },
+      { geometry: tube(0.05, 0.09, 0.1, 10), position: [-0.3, 0.79, 1.02] },
+      { geometry: box(0.06, 0.2, 0.05, 0.02), position: [-0.3, 0.9, 1.02] },
+      { geometry: box(0.66, 0.4, 0.035, 0.015), position: [-0.3, 1.12, 1.0], rotation: [0.1, 0.5, 0] },
+      { geometry: box(0.4, 0.018, 0.14, 0.008), position: [0.12, 0.757, 0.58], rotation: [0, -0.12, 0] },
+      { geometry: box(0.5, 0.4, 0.5, 0.03), position: [-1.25, 0.2, -0.15], rotation: [0, 0.4, 0] },
+      { geometry: tube(0.3, 0.32, 0.04, 14), position: [0, 0.04, -0.62] },
+      { geometry: tube(0.035, 0.045, 0.36, 10), position: [0, 0.22, -0.62] },
+    ]),
+    screen: new THREE.PlaneGeometry(0.6, 0.35),
+    holo: new THREE.PlaneGeometry(0.78, 0.4),
+    mug: tube(0.037, 0.032, 0.09, 12),
+
+    pad: tube(2.6, 2.72, 0.16, 40),
+    padRing: new THREE.TorusGeometry(2.62, 0.055, 8, 56),
+    dome: new THREE.SphereGeometry(1.35, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+    column: new THREE.CylinderGeometry(0.34, 0.95, 4.4, 20, 1, true),
+    pick: tube(1.25, 1.25, 2.6, 10),
+    packet: new THREE.OctahedronGeometry(0.11, 0),
+    contact: new THREE.PlaneGeometry(1.5, 1.5),
+    crown: box(0.11, 0.11, 0.11, 0.02),
+  };
+  for (const geometry of Object.values(parts)) track(geometry);
+
   // ---- ground -------------------------------------------------------------
-  const groundGeometry = track(new THREE.PlaneGeometry(300, 300, 110, 110));
+  const groundGeometry = track(new THREE.PlaneGeometry(320, 320, 96, 96));
   const groundPosition = groundGeometry.attributes.position as THREE.BufferAttribute;
   for (let index = 0; index < groundPosition.count; index += 1) {
     // The plane is still in its own XY space here: Y becomes -Z once rotated.
-    const x = groundPosition.getX(index);
-    const y = groundPosition.getY(index);
-    groundPosition.setZ(index, duneHeight(x, -y));
+    groundPosition.setZ(index, duneHeight(groundPosition.getX(index), -groundPosition.getY(index)));
   }
   groundGeometry.computeVertexNormals();
-  const groundMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-sand"), roughness: 1, metalness: 0, flatShading: true }));
+  const groundMaterial = track(new THREE.MeshStandardMaterial({
+    color: colour("world-sand"), roughness: 1, metalness: 0,
+    // Ripples and grain. A flat colour on a 320 m plane reads as painted card.
+    bumpMap: sandTexture, bumpScale: 0.6, envMapIntensity: 0.3,
+  }));
   const ground = new THREE.Mesh(groundGeometry, groundMaterial);
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = budget.shadowMap > 0;
   scene.add(ground);
 
-  // The campus apron: one flat disc so the stations never float over a dune edge.
-  const apronMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-sand-shade"), roughness: 0.95, metalness: 0.05 }));
-  const apron = new THREE.Mesh(track(new THREE.CircleGeometry(25.5, 64)), apronMaterial);
-  apron.rotation.x = -Math.PI / 2;
-  apron.position.y = 0.02;
-  apron.receiveShadow = budget.shadowMap > 0;
-  const apronRim = new THREE.Mesh(track(new THREE.TorusGeometry(25.5, 0.1, 6, 80)), track(new THREE.MeshStandardMaterial({ color: colour("world-rock"), roughness: 0.9, metalness: 0.1 })));
-  apronRim.rotation.x = Math.PI / 2;
-  apronRim.position.y = 0.05;
-  scene.add(apron, apronRim);
+  // Two service tracks worn into the sand along the rings the stations sit on:
+  // enough to say the campus is used, without paving the desert over.
+  const trackMaterial = track(new THREE.MeshStandardMaterial({
+    color: colour("world-sand-shade"), roughness: 1, metalness: 0, transparent: true, opacity: 0.32,
+    envMapIntensity: 0.3, depthWrite: false,
+  }));
+  for (const radius of [ringRadius(1), ringRadius(2)]) {
+    const road = new THREE.Mesh(track(new THREE.RingGeometry(radius - 0.7, radius + 0.7, 96)), trackMaterial);
+    road.rotation.x = -Math.PI / 2;
+    road.position.y = 0.012;
+    scene.add(road);
+  }
 
   // ---- scenery ------------------------------------------------------------
-  const rockMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-rock"), roughness: 1, flatShading: true }));
-  const rockGeometry = track(new THREE.IcosahedronGeometry(1, 0));
+  const rockMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-rock"), roughness: 0.95, metalness: 0.02, flatShading: true, envMapIntensity: 0.5 }));
+  const rockGeometry = track(new THREE.IcosahedronGeometry(1, 1));
+  {
+    const shape = seeded(4242);
+    const vertices = rockGeometry.attributes.position as THREE.BufferAttribute;
+    for (let index = 0; index < vertices.count; index += 1) {
+      const push = 0.62 + shape() * 0.55;
+      vertices.setXYZ(index, vertices.getX(index) * push, vertices.getY(index) * push * 0.8, vertices.getZ(index) * push);
+    }
+    rockGeometry.computeVertexNormals();
+  }
   const random = seeded(20260908);
   const scenery = new THREE.Group();
-  // One instanced mesh instead of twenty-six draw calls of the same rock.
-  const rockCount = budget.props ? 28 : 10;
+  const rockCount = budget.props ? 30 : 12;
   const rocks = new THREE.InstancedMesh(rockGeometry, rockMaterial, rockCount);
   rocks.castShadow = budget.shadowMap > 0;
   const placement = new THREE.Object3D();
   for (let index = 0; index < rockCount; index += 1) {
     const angle = random() * Math.PI * 2;
-    const radius = 38 + random() * 76;
+    const radius = 30 + random() * 78;
     placement.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
-    placement.position.y = duneHeight(placement.position.x, placement.position.z) - 0.35;
-    placement.scale.set(0.8 + random() * 2.4, 0.6 + random() * 1.6, 0.8 + random() * 2.4);
+    placement.position.y = duneHeight(placement.position.x, placement.position.z) - 0.55;
+    const bulk = 0.9 + random() * 1.8;
+    placement.scale.set(bulk, bulk * (0.6 + random() * 0.7), bulk * (0.8 + random() * 0.5));
     placement.rotation.set(random(), random() * Math.PI, random());
     placement.updateMatrix();
     rocks.setMatrixAt(index, placement.matrix);
   }
   rocks.instanceMatrix.needsUpdate = true;
   scenery.add(rocks);
+
   if (budget.props) {
-    // A desert outpost runs on its own power: five solar arrays on the perimeter.
-    const panelGeometry = track(new THREE.BoxGeometry(4.6, 0.16, 2.6));
-    const panelMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-glass"), roughness: 0.25, metalness: 0.7 }));
-    const frameGeometry = track(new THREE.BoxGeometry(4.8, 0.1, 2.8));
-    const mastGeometry = track(new THREE.CylinderGeometry(0.16, 0.22, 2.2, 8));
-    const mastMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-metal-dark"), roughness: 0.6, metalness: 0.5 }));
+    // A desert outpost runs on its own power, and says so.
+    const arrayGeometry = merge([
+      { geometry: tube(0.13, 0.18, 1.9, 10), position: [0, 0.95, 0] },
+      { geometry: box(3.4, 0.09, 1.9, 0.03), position: [0, 1.95, 0], rotation: [-0.72, 0, 0] },
+      { geometry: box(0.12, 0.12, 1.9, 0.02), position: [0, 1.9, 0], rotation: [-0.72, 0, 0] },
+    ]);
+    const panelGeometry = merge([{ geometry: new THREE.PlaneGeometry(3.2, 1.7), position: [0, 2.02, 0.04], rotation: [-0.72 - Math.PI / 2, 0, 0] }]);
+    const panelMaterialSolar = track(new THREE.MeshStandardMaterial({ color: colour("world-glass"), roughness: 0.12, metalness: 0.6, side: THREE.DoubleSide, envMapIntensity: 1.4 }));
     for (let index = 0; index < 5; index += 1) {
-      const angle = (index / 5) * Math.PI * 2 + 0.4;
+      const angle = (index / 5) * Math.PI * 2 + 0.5;
       const array = new THREE.Group();
-      array.position.set(Math.sin(angle) * 33, 0, Math.cos(angle) * 33);
+      array.position.set(Math.sin(angle) * 29, 0, Math.cos(angle) * 29);
       array.position.y = duneHeight(array.position.x, array.position.z);
-      // Facing the sun, which is where a solar array points and where the
-      // panel catches enough light to stop reading as a hole in the sand.
-      array.lookAt(sun.position.x, 0, sun.position.z);
-      const mast = new THREE.Mesh(mastGeometry, mastMaterial);
-      mast.position.y = 1.1;
-      mast.castShadow = budget.shadowMap > 0;
-      const frame = new THREE.Mesh(frameGeometry, mastMaterial);
-      frame.position.y = 2.1;
-      frame.rotation.x = -0.85;
-      const panel = new THREE.Mesh(panelGeometry, panelMaterial);
-      panel.position.y = 2.16;
-      panel.rotation.x = -0.85;
-      panel.castShadow = budget.shadowMap > 0;
-      array.add(mast, frame, panel);
+      array.lookAt(sun.position.x, array.position.y, sun.position.z);
+      const frame = new THREE.Mesh(arrayGeometry, jointMaterial);
+      frame.castShadow = budget.shadowMap > 0;
+      array.add(frame, new THREE.Mesh(panelGeometry, panelMaterialSolar));
       scenery.add(array);
     }
 
+    // A comms mast, because an outpost that reports to nobody is a sculpture.
+    const mast = new THREE.Group();
+    mast.position.set(-19, 0, -11);
+    mast.rotation.y = -1.05;
+    const mastMesh = new THREE.Mesh(merge([
+      { geometry: tube(0.1, 0.32, 8, 6), position: [0, 4, 0] },
+      { geometry: tube(1.0, 1.0, 0.1, 18), position: [0, 7.6, 0.45], rotation: [-1.05, 0, 0] },
+      { geometry: tube(0.04, 0.04, 0.5, 6), position: [0, 7.35, 0.15], rotation: [-1.05, 0, 0] },
+    ]), jointMaterial);
+    mastMesh.castShadow = budget.shadowMap > 0;
+    const tip = new THREE.Mesh(parts.beacon, track(new THREE.MeshBasicMaterial({ color: colour("brand-400"), fog: false })));
+    tip.position.y = 8.1;
+    mast.add(mastMesh, tip);
+    scenery.add(mast);
   }
   scene.add(scenery);
 
   // ---- headquarters -------------------------------------------------------
-  const metalMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-metal"), roughness: 0.45, metalness: 0.35 }));
-  const darkMetalMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-metal-dark"), roughness: 0.55, metalness: 0.4 }));
-  const glassMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-glass"), roughness: 0.2, metalness: 0.6 }));
-  const brandMaterial = track(new THREE.MeshStandardMaterial({
-    color: colour("brand-600"), emissive: colour("brand-400"), emissiveIntensity: 0.8, roughness: 0.4, metalness: 0.3,
-  }));
-
   const headquarters = new THREE.Group();
-  const hqBase = new THREE.Mesh(track(new THREE.CylinderGeometry(6.4, 7.1, 0.7, 6)), darkMetalMaterial);
-  hqBase.position.y = 0.35;
-  hqBase.receiveShadow = budget.shadowMap > 0;
-  const hqDeck = new THREE.Mesh(track(new THREE.CylinderGeometry(5.4, 5.9, 0.35, 6)), metalMaterial);
-  hqDeck.position.y = 0.85;
+  const hqDeck = new THREE.Mesh(merge([
+    { geometry: tube(4.6, 5.1, 0.5, 6), position: [0, 0.25, 0] },
+    { geometry: tube(3.9, 4.2, 0.3, 6), position: [0, 0.62, 0] },
+  ]), track(new THREE.MeshStandardMaterial({ color: colour("world-rock"), roughness: 0.9, metalness: 0.06, envMapIntensity: 0.25 })));
   hqDeck.receiveShadow = budget.shadowMap > 0;
-  const hqCore = new THREE.Mesh(track(new THREE.CylinderGeometry(0.55, 0.75, 4.6, 6)), brandMaterial);
-  hqCore.position.set(0, 3.3, -2.4);
+  hqDeck.castShadow = budget.shadowMap > 0;
+  const hqCore = new THREE.Mesh(merge([
+    { geometry: tube(0.32, 0.46, 3.2, 6), position: [0, 2.3, 0] },
+    { geometry: new THREE.TorusGeometry(0.95, 0.05, 8, 40), position: [0, 3.6, 0], rotation: [Math.PI / 2, 0, 0] },
+  ]), brandMaterial);
+  hqCore.position.z = -1.9;
   hqCore.castShadow = budget.shadowMap > 0;
-  const hqHalo = new THREE.Mesh(track(new THREE.TorusGeometry(1.5, 0.07, 8, 40)), brandMaterial);
-  hqHalo.position.set(0, 5.1, -2.4);
-  hqHalo.rotation.x = Math.PI / 2;
-  headquarters.add(hqBase, hqDeck, hqCore, hqHalo);
+  headquarters.add(hqDeck, hqCore);
   scene.add(headquarters);
 
-  // ---- shared geometry ----------------------------------------------------
-  // Eleven robots share one set of geometries; only the materials that carry
-  // state are cloned, so a station costs draw calls rather than memory.
-  const geometry = {
-    pad: track(new THREE.CylinderGeometry(2.9, 3.1, 0.26, 28)),
-    padRing: track(new THREE.TorusGeometry(2.92, 0.075, 8, 40)),
-    deskTop: track(new THREE.BoxGeometry(2.2, 0.11, 1.0)),
-    deskLeg: track(new THREE.BoxGeometry(0.14, 0.72, 0.14)),
-    monitorFrame: track(new THREE.BoxGeometry(1.15, 0.72, 0.07)),
-    monitorScreen: track(new THREE.PlaneGeometry(1.02, 0.6)),
-    monitorStand: track(new THREE.CylinderGeometry(0.06, 0.16, 0.3, 8)),
-    chairSeat: track(new THREE.CylinderGeometry(0.34, 0.3, 0.12, 12)),
-    chairBack: track(new THREE.BoxGeometry(0.6, 0.5, 0.1)),
-    crate: track(new THREE.BoxGeometry(0.7, 0.55, 0.7)),
-    torso: track(new THREE.CapsuleGeometry(0.38, 0.5, 4, 14)),
-    chest: track(new THREE.BoxGeometry(0.44, 0.24, 0.1)),
-    head: track(new THREE.BoxGeometry(0.56, 0.46, 0.5)),
-    visor: track(new THREE.PlaneGeometry(0.44, 0.2)),
-    neck: track(new THREE.CylinderGeometry(0.13, 0.15, 0.14, 10)),
-    shoulder: track(new THREE.BoxGeometry(0.2, 0.16, 0.26)),
-    backpack: track(new THREE.BoxGeometry(0.36, 0.46, 0.18)),
-    waist: track(new THREE.TorusGeometry(0.34, 0.05, 6, 20)),
-    ear: track(new THREE.CylinderGeometry(0.07, 0.07, 0.08, 8)),
-    arm: track(new THREE.CapsuleGeometry(0.1, 0.42, 3, 8)),
-    thruster: track(new THREE.ConeGeometry(0.4, 0.55, 16, 1, true)),
-    antenna: track(new THREE.CylinderGeometry(0.028, 0.035, 0.34, 6)),
-    beacon: track(new THREE.SphereGeometry(0.11, 12, 8)),
-    dome: track(new THREE.SphereGeometry(1.5, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2)),
-    column: track(new THREE.CylinderGeometry(0.5, 1.2, 10, 20, 1, true)),
-    pick: track(new THREE.CylinderGeometry(1.6, 1.6, 4.4, 10)),
-    packet: track(new THREE.OctahedronGeometry(0.16, 0)),
-    crownCube: track(new THREE.BoxGeometry(0.17, 0.17, 0.17)),
-  };
-
-  // A comms mast, because an outpost that reports to nobody is a sculpture.
-  if (budget.props) {
-    const mast = new THREE.Group();
-    mast.position.set(-25, 0, -13);
-    mast.rotation.y = -1.1;
-    const pylon = new THREE.Mesh(track(new THREE.CylinderGeometry(0.12, 0.4, 9, 6)), darkMetalMaterial);
-    pylon.position.y = 4.5;
-    pylon.castShadow = budget.shadowMap > 0;
-    const disc = new THREE.Mesh(track(new THREE.CylinderGeometry(1.15, 1.15, 0.14, 16)), metalMaterial);
-    disc.position.set(0, 8.6, 0.5);
-    disc.rotation.set(-1.1, 0, 0);
-    const tip = new THREE.Mesh(geometry.beacon, track(new THREE.MeshBasicMaterial({ color: colour("brand-400"), fog: false })));
-    tip.position.y = 9.2;
-    mast.add(pylon, disc, tip);
-    scenery.add(mast);
-  }
-
+  // ---- link paths ---------------------------------------------------------
   const linkMaterialFor = (tone: WorldToken) => track(new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -576,8 +756,33 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
     ].join("\n"),
   }));
 
+  /** The readout the reader can actually see, because a monitor faces its robot. */
+  const holoMaterialFor = (tint: THREE.Color) => track(new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    uniforms: { colour: { value: tint.clone() }, time: { value: 0 }, activity: { value: 0 } },
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: [
+      "uniform vec3 colour; uniform float time; uniform float activity; varying vec2 vUv;",
+      "void main(){",
+      "  float column = floor(vUv.x * 9.0);",
+      "  float height = 0.18 + 0.72 * activity * (0.5 + 0.5 * sin(time * 3.4 + column * 1.7));",
+      "  float bar = step(vUv.y, height) * step(0.12, fract(vUv.x * 9.0));",
+      "  float frame = step(0.97, vUv.y) + step(vUv.y, 0.03);",
+      "  float scan = 0.06 * step(0.5, fract(vUv.y * 26.0 - time * 0.8));",
+      "  float alpha = (bar * 1.0 + frame * 0.85 + scan) * (0.5 + activity * 0.5);",
+      "  gl_FragColor = vec4(colour * (0.8 + bar * 0.8), alpha);",
+      "  #include <tonemapping_fragment>",
+      "  #include <colorspace_fragment>",
+      "}",
+    ].join("\n"),
+  }));
+
   const rigs = new Map<string, Rig>();
   const links: Link[] = [];
+  const holos: { material: THREE.ShaderMaterial; id: string }[] = [];
   const pickTargets: THREE.Mesh[] = [];
   const stationRoot = new THREE.Group();
   const linkRoot = new THREE.Group();
@@ -588,204 +793,180 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
 
   /** A light column that reads as light: bright at the pad, gone before the top. */
   const columnMaterialFor = () => track(new THREE.ShaderMaterial({
-    // Low strength on purpose: a beam that hides the robot it points at is a bug.
     transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false,
     uniforms: { colour: { value: colour("brand-400") }, strength: { value: 0 } },
-    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
-    fragmentShader: [
-      "uniform vec3 colour; uniform float strength; varying vec2 vUv;",
+    vertexShader: [
+      "varying vec2 vUv; varying vec3 vNormal; varying vec3 vView;",
       "void main(){",
-      "  float fade = pow(1.0 - vUv.y, 3.0) * 0.85 + 0.05;",
-      "  gl_FragColor = vec4(colour * fade * strength, 1.0);",
+      "  vUv = uv;",
+      "  vec4 world = modelViewMatrix * vec4(position, 1.0);",
+      "  vNormal = normalize(normalMatrix * normal);",
+      "  vView = normalize(-world.xyz);",
+      "  gl_Position = projectionMatrix * world;",
+      "}",
+    ].join("\n"),
+    fragmentShader: [
+      "uniform vec3 colour; uniform float strength; varying vec2 vUv; varying vec3 vNormal; varying vec3 vView;",
+      "void main(){",
+      "  float fade = pow(1.0 - vUv.y, 3.0) * 0.9 + 0.04;",
+      "  float body = pow(abs(dot(normalize(vNormal), normalize(vView))), 1.6);",
+      "  gl_FragColor = vec4(colour * fade * body * strength, 1.0);",
       "  #include <tonemapping_fragment>",
       "  #include <colorspace_fragment>",
       "}",
     ].join("\n"),
   }));
 
-  function buildStation(agent: WorldAgent, placement: WorldPlacement): Rig {
+  const limb = (upperGeometry: THREE.BufferGeometry, lowerGeometry: THREE.BufferGeometry, material: THREE.Material, jointDrop: number, side: number): Limb => {
+    const upper = new THREE.Group();
+    const upperMesh = new THREE.Mesh(upperGeometry, material);
+    upperMesh.castShadow = budget.shadowMap > 0;
+    const lower = new THREE.Group();
+    lower.position.y = jointDrop;
+    const lowerMesh = new THREE.Mesh(lowerGeometry, material);
+    lowerMesh.castShadow = budget.shadowMap > 0;
+    lowerMesh.scale.x = side;
+    lower.add(lowerMesh);
+    upper.add(upperMesh, lower);
+    return { upper, lower };
+  };
+
+  function buildStation(agent: WorldAgent, place: WorldPlacement): Rig {
     const district = colour(districtToken(agent.domain));
-    const isChief = placement.depth === 0;
-    // The orchestrator is bigger because it is the orchestrator. Everything on a
-    // station scales together, so a robot never towers over its own desk.
-    const scale = isChief ? 1.75 : 1.3;
+    const isChief = place.depth === 0;
     const station = new THREE.Group();
-    station.position.set(placement.x, 0, placement.z);
+    station.position.set(place.x, 0, place.z);
     // Facing out, not in. Facing the headquarters was the honest diagram of the
     // reporting line, and it pointed eleven robots away from a camera that
-    // orbits the outside of the campus. The glowing link paths carry the
-    // hierarchy instead, and the reader gets faces.
-    station.rotation.y = placement.angle;
+    // orbits the outside of the campus. The link paths carry the hierarchy.
+    station.rotation.y = place.angle;
 
-    const padMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-metal-dark"), roughness: 0.7, metalness: 0.25 }));
-    const pad = new THREE.Mesh(geometry.pad, padMaterial);
-    pad.position.y = isChief ? 1.15 : 0.13;
+    const padMaterial = track(new THREE.MeshStandardMaterial({ color: colour("world-rock"), roughness: 0.94, metalness: 0.03, envMapIntensity: 0.2 }));
+    const pad = new THREE.Mesh(parts.pad, padMaterial);
+    pad.position.y = isChief ? 0.98 : 0.08;
     pad.receiveShadow = budget.shadowMap > 0;
-    if (isChief) pad.scale.setScalar(1.15);
 
-    const padRing = track(new THREE.MeshStandardMaterial({ color: district, emissive: district, emissiveIntensity: 0.6, roughness: 0.4 }));
-    const ring = new THREE.Mesh(geometry.padRing, padRing);
+    const padRing = track(new THREE.MeshStandardMaterial({ color: district, emissive: district, emissiveIntensity: 0.35, roughness: 0.4, metalness: 0.5 }));
+    const ring = new THREE.Mesh(parts.padRing, padRing);
     ring.rotation.x = Math.PI / 2;
-    ring.position.y = pad.position.y + 0.14;
-    if (isChief) ring.scale.setScalar(1.15);
+    ring.position.y = pad.position.y + 0.085;
     station.add(pad, ring);
 
+    const floor = pad.position.y + 0.08;
     const furnished = new THREE.Group();
-    furnished.position.y = pad.position.y + 0.13;
-    furnished.scale.setScalar(scale);
+    furnished.position.y = floor;
+    if (isChief) furnished.scale.setScalar(1.12);
     station.add(furnished);
 
-    // ---- the desk it actually works at -----------------------------------
-    const desk = new THREE.Group();
-    desk.position.set(0, 0, 1.15);
-    const deskTop = new THREE.Mesh(geometry.deskTop, metalMaterial);
-    deskTop.position.y = 0.72;
-    deskTop.castShadow = budget.shadowMap > 0;
-    desk.add(deskTop);
-    for (const side of [-0.95, 0.95]) {
-      const leg = new THREE.Mesh(geometry.deskLeg, darkMetalMaterial);
-      leg.position.set(side, 0.36, 0);
-      desk.add(leg);
-    }
-    const monitor = new THREE.Mesh(geometry.monitorFrame, darkMetalMaterial);
-    monitor.position.set(0, 1.22, 0.12);
-    monitor.rotation.x = 0.12;
-    const stand = new THREE.Mesh(geometry.monitorStand, darkMetalMaterial);
-    stand.position.set(0, 0.9, 0.12);
+    const deskLight = new THREE.Mesh(parts.deskLight, deskMaterial);
+    deskLight.castShadow = budget.shadowMap > 0;
+    const deskDark = new THREE.Mesh(parts.deskDark, jointMaterial);
+    deskDark.castShadow = budget.shadowMap > 0;
     const screenMaterial = track(new THREE.MeshStandardMaterial({
-      color: colour("world-glass"), emissive: district, emissiveIntensity: 0.4, roughness: 0.3, side: THREE.DoubleSide,
+      color: colour("world-glass"), emissive: district, emissiveIntensity: 0.5, roughness: 0.12, metalness: 0.1, side: THREE.DoubleSide,
     }));
-    const screen = new THREE.Mesh(geometry.monitorScreen, screenMaterial);
-    screen.position.set(0, 1.22, 0.08);
-    screen.rotation.x = 0.12;
-    screen.rotation.y = Math.PI;
-    desk.add(monitor, stand, screen);
+    const screen = new THREE.Mesh(parts.screen, screenMaterial);
+    screen.position.set(-0.3, 1.12, 0.98);
+    screen.rotation.set(0.1, 0.5 + Math.PI, 0);
+    const mug = new THREE.Mesh(parts.mug, metalMaterial);
+    mug.position.set(0.52, 0.79, 0.62);
+    // The monitor faces its robot, so the reader gets a holographic readout
+    // angled their way instead of the back of a screen.
+    const holoMaterial = holoMaterialFor(district);
+    const holo = new THREE.Mesh(parts.holo, holoMaterial);
+    holo.position.set(0.46, 1.18, 0.6);
+    holo.rotation.set(-0.16, -0.55, 0);
+    holos.push({ material: holoMaterial, id: agent.id });
+    furnished.add(deskLight, deskDark, screen, mug, holo);
 
-    const chair = new THREE.Group();
-    chair.position.set(0, 0, 0.15);
-    const seat = new THREE.Mesh(geometry.chairSeat, darkMetalMaterial);
-    seat.position.y = 0.5;
-    const back = new THREE.Mesh(geometry.chairBack, darkMetalMaterial);
-    back.position.set(0, 0.8, -0.28);
-    chair.add(seat, back);
-
-    const crate = new THREE.Mesh(geometry.crate, darkMetalMaterial);
-    crate.position.set(-1.75, 0.28, -0.3);
-    crate.rotation.y = 0.4;
-    crate.castShadow = budget.shadowMap > 0;
-    furnished.add(desk, chair, crate);
+    const deskShadow = new THREE.Mesh(parts.contact, contactMaterial);
+    deskShadow.rotation.x = -Math.PI / 2;
+    deskShadow.position.set(0, 0.012, 0.8);
+    deskShadow.scale.set(1.5, 1.1, 1);
+    furnished.add(deskShadow);
 
     // ---- the robot --------------------------------------------------------
     const robot = new THREE.Group();
-    robot.position.set(0, ROBOT_BASE_Y, -0.7);
-
     const torso = new THREE.Group();
-    const shell = new THREE.Mesh(geometry.torso, metalMaterial);
-    shell.position.y = 1.05;
-    shell.castShadow = budget.shadowMap > 0;
-    const accent = track(new THREE.MeshStandardMaterial({ color: district, emissive: district, emissiveIntensity: 0.9, roughness: 0.35 }));
-    const chest = new THREE.Mesh(geometry.chest, accent);
-    chest.position.set(0, 1.12, 0.35);
-    const thruster = new THREE.Mesh(geometry.thruster, accent);
-    thruster.position.y = 0.5;
-    thruster.rotation.x = Math.PI;
-    // A capsule with a head on it is a pill. These are what make it a robot.
-    const backpack = new THREE.Mesh(geometry.backpack, darkMetalMaterial);
-    backpack.position.set(0, 1.12, -0.34);
-    backpack.castShadow = budget.shadowMap > 0;
-    const waist = new THREE.Mesh(geometry.waist, darkMetalMaterial);
-    waist.position.y = 0.78;
-    waist.rotation.x = Math.PI / 2;
-    const neck = new THREE.Mesh(geometry.neck, darkMetalMaterial);
-    neck.position.y = 1.44;
-    const shoulders = [-0.47, 0.47].map(side => {
-      const shoulder = new THREE.Mesh(geometry.shoulder, darkMetalMaterial);
-      shoulder.position.set(side, 1.34, 0);
-      return shoulder;
-    });
+    const torsoMesh = new THREE.Mesh(parts.torso, shellMaterial);
+    torsoMesh.castShadow = budget.shadowMap > 0;
+    const accent = track(new THREE.MeshStandardMaterial({ color: district, emissive: district, emissiveIntensity: 1, roughness: 0.3, metalness: 0.3 }));
+    const chest = new THREE.Mesh(parts.chest, accent);
 
     const head = new THREE.Group();
-    head.position.y = 1.66;
-    const skull = new THREE.Mesh(geometry.head, metalMaterial);
-    skull.castShadow = budget.shadowMap > 0;
-    const visor = track(new THREE.MeshStandardMaterial({ color: colour("world-glass"), emissive: colour("good"), emissiveIntensity: 1.4, roughness: 0.2 }));
-    const visorMesh = new THREE.Mesh(geometry.visor, visor);
-    visorMesh.position.z = 0.245;
-    for (const side of [-0.29, 0.29]) {
-      const ear = new THREE.Mesh(geometry.ear, darkMetalMaterial);
-      ear.position.set(side, 0, 0);
-      ear.rotation.z = Math.PI / 2;
-      head.add(ear);
-    }
-    const antenna = new THREE.Mesh(geometry.antenna, darkMetalMaterial);
-    antenna.position.y = 0.38;
-    head.add(skull, visorMesh, antenna);
-
+    head.position.y = 1.62;
+    const headMesh = new THREE.Mesh(parts.head, shellMaterial);
+    headMesh.castShadow = budget.shadowMap > 0;
+    const visor = track(new THREE.MeshStandardMaterial({ color: colour("world-glass"), emissive: colour("good"), emissiveIntensity: 1.6, roughness: 0.06, metalness: 0.2 }));
+    const visorMesh = new THREE.Mesh(parts.visor, visor);
+    visorMesh.position.set(0, 0.095, 0.121);
+    const visorGlow = new THREE.Sprite(track(new THREE.SpriteMaterial({ map: glowTexture, color: colour("good"), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.5, fog: false })));
+    visorGlow.position.set(0, 0.095, 0.14);
+    visorGlow.scale.setScalar(0.4);
     const beaconMaterial = track(new THREE.MeshBasicMaterial({ color: colour("warn"), transparent: true, opacity: 0.9, fog: false }));
-    const beacon = new THREE.Mesh(geometry.beacon, beaconMaterial);
-    beacon.position.y = 2.28;
+    const beacon = new THREE.Mesh(parts.beacon, beaconMaterial);
+    beacon.position.set(0.06, 0.36, -0.04);
     beacon.visible = false;
+    head.add(headMesh, visorMesh, visorGlow, beacon);
 
-    const armLeft = new THREE.Group();
-    armLeft.position.set(-0.46, 1.28, 0);
-    const armRight = new THREE.Group();
-    armRight.position.set(0.46, 1.28, 0);
-    for (const [pivot, sign] of [[armLeft, -1], [armRight, 1]] as const) {
-      const limb = new THREE.Mesh(geometry.arm, metalMaterial);
-      limb.position.y = -0.3;
-      limb.castShadow = budget.shadowMap > 0;
-      const hand = new THREE.Mesh(geometry.ear, accent);
-      hand.position.y = -0.58;
-      hand.rotation.z = Math.PI / 2 + sign * 0.1;
-      pivot.add(limb, hand);
-    }
+    const arms = [limb(parts.upperArm, parts.forearm, panelMaterial, -0.3, -1), limb(parts.upperArm, parts.forearm, panelMaterial, -0.3, 1)] as const;
+    arms[0].upper.position.set(-0.245, 1.5, 0);
+    arms[1].upper.position.set(0.245, 1.5, 0);
+    const legs = [limb(parts.thigh, parts.shin, jointMaterial, -0.45, -1), limb(parts.thigh, parts.shin, jointMaterial, -0.45, 1)] as const;
+    legs[0].upper.position.set(-0.115, 0.95, 0);
+    legs[1].upper.position.set(0.115, 0.95, 0);
 
-    torso.add(shell, chest, thruster, backpack, waist, neck, ...shoulders, head, armLeft, armRight, beacon);
-    robot.add(torso);
+    torso.add(torsoMesh, chest, head, arms[0].upper, arms[1].upper);
+    robot.add(torso, legs[0].upper, legs[1].upper);
+
+    const robotShadow = new THREE.Mesh(parts.contact, contactMaterial);
+    robotShadow.rotation.x = -Math.PI / 2;
+    robotShadow.position.y = 0.014;
+    robotShadow.scale.setScalar(0.62);
+    robot.add(robotShadow);
 
     if (isChief) {
       // The orchestrator wears its authority: three governance cubes in orbit.
       const crown = new THREE.Group();
       crown.name = "crown";
+      crown.position.y = 2.05;
       for (let index = 0; index < 3; index += 1) {
-        const cube = new THREE.Mesh(geometry.crownCube, brandMaterial);
+        const cube = new THREE.Mesh(parts.crown, brandMaterial);
         const angle = (index / 3) * Math.PI * 2;
-        cube.position.set(Math.sin(angle) * 0.62, 2.24, Math.cos(angle) * 0.62);
+        cube.position.set(Math.sin(angle) * 0.4, 0, Math.cos(angle) * 0.4);
         crown.add(cube);
       }
       robot.add(crown);
     }
     furnished.add(robot);
 
-    const domeMaterial = track(new THREE.MeshBasicMaterial({ color: colour("risk"), wireframe: true, transparent: true, opacity: 0.5, fog: false }));
-    const dome = new THREE.Mesh(geometry.dome, domeMaterial);
-    dome.position.y = pad.position.y + 0.14;
-    dome.scale.setScalar(scale);
+    const domeMaterial = track(new THREE.MeshBasicMaterial({ color: colour("risk"), wireframe: true, transparent: true, opacity: 0.42, fog: false }));
+    const dome = new THREE.Mesh(parts.dome, domeMaterial);
+    dome.position.y = floor;
     dome.visible = false;
 
     const columnMaterial = columnMaterialFor();
-    const column = new THREE.Mesh(geometry.column, columnMaterial);
-    column.position.y = pad.position.y + 5.4;
+    const column = new THREE.Mesh(parts.column, columnMaterial);
+    column.position.y = floor + 2.2;
 
     const pickMaterial = track(new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
-    const pick = new THREE.Mesh(geometry.pick, pickMaterial);
-    pick.position.y = pad.position.y + 1.7 * scale;
-    pick.scale.setScalar(scale);
+    const pick = new THREE.Mesh(parts.pick, pickMaterial);
+    pick.position.y = floor + 1.3;
     pick.userData.agentId = agent.id;
     pick.renderOrder = -1;
 
     const anchor = new THREE.Object3D();
-    anchor.position.set(0, pad.position.y + LABEL_HEIGHT * scale, -0.7 * scale);
+    anchor.position.set(0, floor + LABEL_HEIGHT * (isChief ? 1.12 : 1), 0);
 
     station.add(dome, column, pick, anchor);
     stationRoot.add(station);
     pickTargets.push(pick);
 
     return {
-      agent, station, robot, torso, head, armLeft, armRight, beacon, dome, column, anchor, pick,
+      agent, station, robot, torso, head, arms, legs, beacon, dome, column, visorGlow, anchor, pick,
       accent, visor, screen: screenMaterial, padRing, beaconMaterial, domeMaterial, columnMaterial,
-      phase: (placement.angle + placement.depth) * 1.7, visual: stateVisual(agent.state),
-      lean: 0, sink: 0, lift: 0, selected: false,
+      phase: (place.angle + place.depth) * 1.7, visual: stateVisual(agent.state), pose: { ...poseFor(agent.state) },
+      blinkAt: 2 + place.angle, selected: false,
     };
   }
 
@@ -795,20 +976,19 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
       const from = placements.get(agent.parent);
       const to = placements.get(agent.id);
       if (!from || !to) continue;
-      const start = new THREE.Vector3(from.x, 1.5, from.z);
-      const end = new THREE.Vector3(to.x, 0.6, to.z);
+      const start = new THREE.Vector3(from.x, 1.2, from.z);
+      const end = new THREE.Vector3(to.x, 0.4, to.z);
       const middle = start.clone().add(end).multiplyScalar(0.5);
-      middle.y = 2.6;
+      middle.y = 2.2;
       // Bow the path outward so two links never overlap into one bright smear.
-      middle.x *= 1.12; middle.z *= 1.12;
+      middle.x *= 1.14; middle.z *= 1.14;
       const curve = new THREE.QuadraticBezierCurve3(start, middle, end);
       const material = linkMaterialFor("good");
-      const mesh = new THREE.Mesh(track(new THREE.TubeGeometry(curve, budget.tubeSegments, 0.06, 6, false)), material);
+      const mesh = new THREE.Mesh(track(new THREE.TubeGeometry(curve, budget.tubeSegments, 0.045, 6, false)), material);
       linkRoot.add(mesh);
       const packets: THREE.Mesh[] = [];
-      const packetCount = budget.props ? 3 : 1;
-      for (let index = 0; index < packetCount; index += 1) {
-        const packet = new THREE.Mesh(geometry.packet, track(new THREE.MeshBasicMaterial({ color: colour("good"), fog: false })));
+      for (let index = 0; index < (budget.props ? 3 : 1); index += 1) {
+        const packet = new THREE.Mesh(parts.packet, track(new THREE.MeshBasicMaterial({ color: colour("good"), fog: false })));
         packet.visible = false;
         linkRoot.add(packet);
         packets.push(packet);
@@ -822,14 +1002,14 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
   const dustPositions = new Float32Array(budget.dust * 3);
   const dustSpeeds = new Float32Array(budget.dust);
   for (let index = 0; index < budget.dust; index += 1) {
-    dustPositions[index * 3] = (random() - 0.5) * 150;
-    dustPositions[index * 3 + 1] = random() * 16;
-    dustPositions[index * 3 + 2] = (random() - 0.5) * 150;
-    dustSpeeds[index] = 1.4 + random() * 3.4;
+    dustPositions[index * 3] = (random() - 0.5) * 130;
+    dustPositions[index * 3 + 1] = random() * 12;
+    dustPositions[index * 3 + 2] = (random() - 0.5) * 130;
+    dustSpeeds[index] = 1.2 + random() * 3;
   }
   dustGeometry.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
   const dustMaterial = track(new THREE.PointsMaterial({
-    color: colour("world-haze"), size: 0.16, sizeAttenuation: true, transparent: true, opacity: 0.5, depthWrite: false,
+    color: colour("world-haze"), size: 0.1, sizeAttenuation: true, transparent: true, opacity: 0.45, depthWrite: false, map: glowTexture,
   }));
   const dust = new THREE.Points(dustGeometry, dustMaterial);
   scene.add(dust);
@@ -878,12 +1058,11 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
   canvas.addEventListener("pointerleave", handleLeave);
   canvas.style.cursor = "grab";
 
-  // ---- camera focus -------------------------------------------------------
-  const desiredTarget = new THREE.Vector3(0, 2, 0);
+  const desiredTarget = new THREE.Vector3(0, 1.6, 0);
   const focus = (id: string | null) => {
     const rig = id ? rigs.get(id) : undefined;
-    if (!rig) { desiredTarget.set(0, 2, 0); return; }
-    desiredTarget.set(rig.station.position.x, 2.2, rig.station.position.z);
+    if (!rig) { desiredTarget.set(0, 1.6, 0); return; }
+    desiredTarget.set(rig.station.position.x, 1.5, rig.station.position.z);
   };
 
   // ---- projection of the HTML nameplates ----------------------------------
@@ -900,9 +1079,9 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
       const y = (-projection.y * 0.5 + 0.5) * height;
       // Depth is the only cue a flat overlay has, so a far nameplate shrinks
       // and fades rather than crowding the near ones.
-      const scale = THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(distance, 14, 80, 1, 0.62), 0.58, 1.06);
+      const scale = THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(distance, 10, 60, 1, 0.62), 0.58, 1.06);
       element.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) translate(-50%, -100%) scale(${scale.toFixed(3)})`;
-      element.style.opacity = behind ? "0" : String(THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(distance, 20, 95, 1, 0.25), 0.25, 1));
+      element.style.opacity = behind ? "0" : String(THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(distance, 14, 70, 1, 0.25), 0.25, 1));
       element.style.zIndex = String(Math.max(1, 400 - Math.round(distance)));
       element.style.pointerEvents = behind ? "none" : "auto";
     }
@@ -917,7 +1096,11 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
   let framesSinceShadow = 0;
   let slowFor = 0;
   let degraded = 0;
+  let running = false;
+  let renderRequested = false;
   const startedAt = performance.now();
+  const clock = new THREE.Clock();
+  const ease = (current: number, goal: number, delta: number, rate = 6) => current + (goal - current) * (1 - Math.exp(-rate * delta));
 
   /**
    * The device hints that pick a quality tier are a guess: two machines
@@ -929,7 +1112,7 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
   function considerDegrading(frameSeconds: number) {
     // Wall clock, not scene time: the first seconds are shader compilation and
     // would otherwise convict a fast machine of being slow.
-    if (degraded >= 2 || reducedMotion || performance.now() - startedAt < 2500) return;
+    if (degraded >= 3 || reducedMotion || performance.now() - startedAt < 2500) return;
     slowFor = frameSeconds > 1 / 24 ? slowFor + frameSeconds : 0;
     if (slowFor < 2.5) return;
     slowFor = 0;
@@ -938,72 +1121,141 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
       renderer.setPixelRatio(1);
       dust.visible = false;
     } else {
-      renderer.shadowMap.enabled = false;
-      scene.traverse(object => {
+      const refresh = () => scene.traverse(object => {
         const material = (object as THREE.Mesh).material;
         if (!material) return;
         for (const entry of Array.isArray(material) ? material : [material]) entry.needsUpdate = true;
       });
+      if (degraded === 2) { renderer.shadowMap.enabled = false; refresh(); }
+      else { scene.environment = null; groundMaterial.bumpMap = null; refresh(); }
     }
     options.onDegrade?.(degraded);
   }
-  let running = false;
-  let renderRequested = false;
-  const clock = new THREE.Clock();
-  const ease = (current: number, goal: number, delta: number, rate = 6) => current + (goal - current) * (1 - Math.exp(-rate * delta));
 
   function animateRig(rig: Rig, delta: number) {
     const visual = rig.visual;
-    const beat = elapsed * 1.7 + rig.phase;
-    rig.lean = ease(rig.lean, visual.activity * 0.26, delta, 4);
-    rig.sink = ease(rig.sink, visual.droop * 0.42, delta, 3);
-    rig.lift = ease(rig.lift, rig.selected ? 0.22 : hovered === rig.agent.id ? 0.12 : 0, delta, 8);
+    const goal = poseFor(rig.agent.state);
+    // Every joint is eased toward the target pose, so a state change is a
+    // movement the reader can follow rather than a new frame of a flipbook.
+    const rate = 3.4;
+    rig.pose.hip = ease(rig.pose.hip, goal.hip, delta, rate);
+    rig.pose.knee = ease(rig.pose.knee, goal.knee, delta, rate);
+    rig.pose.lean = ease(rig.pose.lean, goal.lean, delta, rate);
+    rig.pose.headPitch = ease(rig.pose.headPitch, goal.headPitch, delta, rate);
+    rig.pose.sink = ease(rig.pose.sink, goal.sink, delta, rate);
+    rig.pose.shoulder = ease(rig.pose.shoulder, goal.shoulder, delta, rate);
+    rig.pose.elbow = ease(rig.pose.elbow, goal.elbow, delta, rate);
+    rig.pose.shoulderOut = ease(rig.pose.shoulderOut, goal.shoulderOut, delta, rate);
 
-    const hover = Math.sin(beat) * 0.06 * (1 - visual.droop);
-    rig.robot.position.y = ROBOT_BASE_Y + hover - rig.sink + rig.lift;
-    rig.torso.rotation.x = rig.lean;
-    rig.torso.rotation.z = visual.dome ? 0 : Math.sin(beat * 0.6) * 0.02;
+    const beat = elapsed * 1.1 + rig.phase;
+    const alive = 1 - visual.droop * 0.85;
+    // Breathing and a slow weight shift. Perfect stillness is what makes a
+    // rigged model look like a prop.
+    const breath = Math.sin(beat * 1.7) * 0.008 * alive;
+    const shift = Math.sin(beat * 0.6) * alive;
 
-    // A robot in error shakes; the others hold still.
-    rig.robot.position.x = visual.flash ? Math.sin(elapsed * 34) * 0.035 : 0;
+    rig.robot.position.y = -rig.pose.sink + breath;
+    rig.robot.position.x = visual.flash ? Math.sin(elapsed * 32) * 0.018 : 0;
+    rig.robot.rotation.z = shift * 0.014;
+    rig.robot.rotation.y = shift * 0.03;
 
-    // Typing. The arms only move as fast as the agent is actually working.
-    const typing = Math.sin(elapsed * 11 + rig.phase) * 0.5 + 0.5;
-    const reach = visual.activity * 0.95;
-    rig.armLeft.rotation.x = -reach * (0.55 + typing * 0.35);
-    rig.armRight.rotation.x = visual.raised ? 0 : -reach * (0.55 + (1 - typing) * 0.35);
-    rig.armRight.rotation.z = visual.raised ? -2.35 + Math.sin(elapsed * 3) * 0.12 : visual.dome ? -0.9 : 0;
-    rig.armLeft.rotation.z = visual.dome ? 0.9 : 0;
+    rig.torso.rotation.x = rig.pose.lean + breath * 0.4;
+    rig.torso.rotation.z = -shift * 0.02;
 
-    // The head tracks the camera so a face is always turned toward the reader,
-    // however the campus happens to be rotated.
+    rig.legs.forEach((leg, index) => {
+      const side = index === 0 ? -1 : 1;
+      leg.upper.rotation.x = rig.pose.hip + shift * 0.02 * side;
+      leg.upper.rotation.z = side * -0.015;
+      leg.lower.rotation.x = -rig.pose.knee;
+    });
+
+    // Typing is two hands taking turns, with the elbows doing the work.
+    const tap = visual.activity * 0.22;
+    rig.arms.forEach((arm, index) => {
+      const outward = index === 0 ? 1 : -1;
+      const phase = index === 0 ? 0 : Math.PI;
+      const raised = visual.raised && index === 1;
+      arm.upper.rotation.x = raised ? -0.2 : rig.pose.shoulder + Math.sin(elapsed * 7 + phase) * tap * 0.35;
+      arm.upper.rotation.z = raised
+        ? 2.5 + Math.sin(elapsed * 2.6) * 0.16
+        : outward * rig.pose.shoulderOut + shift * 0.01;
+      arm.lower.rotation.x = raised ? -0.5 : rig.pose.elbow - Math.sin(elapsed * 7 + phase) * tap;
+    });
+
+    // The head tracks the camera so a face is turned toward the reader however
+    // the campus is rotated, and glances up from the desk now and then.
     const toCamera = Math.atan2(camera.position.x - rig.station.position.x, camera.position.z - rig.station.position.z) - rig.station.rotation.y;
     const wrapped = Math.atan2(Math.sin(toCamera), Math.cos(toCamera));
-    const scan = visual.droop > 0.5 ? 0 : Math.sin(beat * 0.5) * 0.18;
-    rig.head.rotation.y = ease(rig.head.rotation.y, THREE.MathUtils.clamp(wrapped, -1.2, 1.2) * 0.85 + scan, delta, 2.5);
-    rig.head.rotation.x = ease(rig.head.rotation.x, visual.droop * 0.4 - rig.lean * 0.5, delta, 3);
+    const glance = visual.activity > 0.5 ? Math.max(0, Math.sin(elapsed * 0.42 + rig.phase)) : 1;
+    rig.head.rotation.y = ease(rig.head.rotation.y, THREE.MathUtils.clamp(wrapped, -1.15, 1.15) * 0.8 * glance, delta, 2.2);
+    rig.head.rotation.x = ease(rig.head.rotation.x, rig.pose.headPitch * (1 - glance * 0.55) - rig.pose.lean * 0.35, delta, 2.6);
+    rig.head.rotation.z = shift * 0.02;
 
-    rig.visor.emissiveIntensity = visual.droop > 0.5 ? 0.15 : 1.1 + visual.activity * 0.9 + Math.sin(elapsed * 6 + rig.phase) * 0.12;
-    rig.accent.emissiveIntensity = 0.35 + visual.activity * 1.1;
-    rig.screen.emissiveIntensity = 0.18 + visual.activity * (0.9 + Math.sin(elapsed * 12 + rig.phase) * 0.35);
-    rig.padRing.emissiveIntensity = 0.35 + (rig.selected ? 1.1 : 0) + visual.activity * 0.5
+    // A blink: the eye line drops for a moment, on its own rhythm per robot.
+    const cycle = 3.6 + (rig.phase % 2.4);
+    const blink = visual.droop > 0.5 ? 1 : elapsed % cycle < 0.11 ? 0.1 : 1;
+    rig.visor.emissiveIntensity = (visual.droop > 0.5 ? 0.22 : 1.25 + visual.activity * 0.85) * blink;
+    (rig.visorGlow.material as THREE.SpriteMaterial).opacity = (0.18 + visual.activity * 0.32) * blink;
+    rig.accent.emissiveIntensity = 0.35 + visual.activity * 1.2;
+    rig.screen.emissiveIntensity = 0.2 + visual.activity * (0.95 + Math.sin(elapsed * 12 + rig.phase) * 0.3);
+    rig.padRing.emissiveIntensity = 0.22 + (rig.selected ? 0.8 : 0) + visual.activity * 0.35
       + (visual.beacon ? (Math.sin(elapsed * (visual.flash || 1.6) * Math.PI) * 0.5 + 0.5) * 0.8 : 0);
 
     rig.beacon.visible = visual.beacon;
     if (visual.beacon) {
-      rig.beacon.position.x = Math.sin(elapsed * 4) * 0.16;
-      rig.beacon.position.z = Math.cos(elapsed * 4) * 0.16;
+      rig.beacon.position.x = 0.06 + Math.sin(elapsed * 4) * 0.05;
+      rig.beacon.position.z = -0.04 + Math.cos(elapsed * 4) * 0.05;
       rig.beaconMaterial.opacity = visual.flash ? (Math.sin(elapsed * visual.flash * Math.PI * 2) > 0 ? 0.95 : 0.12) : 0.9;
     }
     rig.dome.visible = visual.dome;
-    if (visual.dome) rig.dome.rotation.y = elapsed * 0.35;
+    if (visual.dome) rig.dome.rotation.y = elapsed * 0.3;
 
     const beam = rig.columnMaterial.uniforms.strength;
-    beam.value = ease(beam.value as number, rig.selected ? 0.11 + Math.sin(elapsed * 2.4) * 0.03 : 0, delta, 5);
+    beam.value = ease(beam.value as number, rig.selected ? 0.34 + Math.sin(elapsed * 2.4) * 0.07 : 0, delta, 5);
     rig.column.visible = (beam.value as number) > 0.01;
 
     const crown = rig.robot.getObjectByName("crown");
-    if (crown) crown.rotation.y = elapsed * 0.6;
+    if (crown) { crown.rotation.y = elapsed * 0.5; crown.position.y = 2.05 + Math.sin(elapsed * 1.4) * 0.04; }
+  }
+
+  function updateScene(delta: number) {
+    controls.update();
+    controls.target.lerp(desiredTarget, 1 - Math.exp(-3 * delta));
+    for (const rig of rigs.values()) animateRig(rig, delta);
+
+    for (const holo of holos) {
+      const rig = rigs.get(holo.id);
+      holo.material.uniforms.time.value = elapsed;
+      holo.material.uniforms.activity.value = rig ? rig.visual.activity : 0;
+    }
+
+    for (const link of links) {
+      const rig = rigs.get(link.childId);
+      if (!rig) continue;
+      link.material.uniforms.time.value = elapsed;
+      link.material.uniforms.speed.value = 0.25 + rig.visual.activity * 2.2;
+      link.material.uniforms.strength.value = 0.25 + rig.visual.activity * 0.55;
+      link.packets.forEach((packet, index) => {
+        packet.visible = rig.visual.packets;
+        if (!packet.visible) return;
+        // Packets travel child -> parent: the report goes up the tree.
+        link.curve.getPoint(1 - ((elapsed * 0.45 + index / link.packets.length) % 1), packet.position);
+        packet.rotation.set(elapsed * 2, elapsed * 3, 0);
+      });
+    }
+
+    hqCore.rotation.y = elapsed * 0.15;
+
+    if (dust.visible) {
+      const positions = dustGeometry.attributes.position as THREE.BufferAttribute;
+      const gust = 1 + Math.sin(elapsed * 0.23) * 0.55;
+      for (let index = 0; index < budget.dust; index += 1) {
+        let x = positions.getX(index) + dustSpeeds[index] * delta * gust;
+        if (x > 65) x -= 130;
+        positions.setX(index, x);
+      }
+      positions.needsUpdate = true;
+    }
   }
 
   function frame() {
@@ -1020,40 +1272,8 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
     sinceShadow += delta;
     framesSinceShadow += 1;
     if (sinceShadow > 0.25 && framesSinceShadow >= 4) { sinceShadow = 0; framesSinceShadow = 0; sun.shadow.needsUpdate = true; }
-    controls.update();
-    controls.target.lerp(desiredTarget, 1 - Math.exp(-3 * delta));
 
-    for (const rig of rigs.values()) animateRig(rig, delta);
-
-    for (const link of links) {
-      const rig = rigs.get(link.childId);
-      if (!rig) continue;
-      link.material.uniforms.time.value = elapsed;
-      link.material.uniforms.speed.value = 0.25 + rig.visual.activity * 2.2;
-      link.material.uniforms.strength.value = 0.25 + rig.visual.activity * 0.55;
-      link.packets.forEach((packet, index) => {
-        packet.visible = rig.visual.packets;
-        if (!packet.visible) return;
-        // Packets travel child -> parent: the report goes up the tree.
-        const progress = 1 - ((elapsed * 0.45 + index / link.packets.length) % 1);
-        link.curve.getPoint(progress, packet.position);
-        packet.rotation.set(elapsed * 2, elapsed * 3, 0);
-      });
-    }
-
-    hqHalo.rotation.z = elapsed * 0.4;
-    hqHalo.position.y = 5.1 + Math.sin(elapsed) * 0.12;
-
-    const positions = dustGeometry.attributes.position as THREE.BufferAttribute;
-    const gust = 1 + Math.sin(elapsed * 0.23) * 0.55;
-    for (let index = 0; index < budget.dust; index += 1) {
-      let x = positions.getX(index) + dustSpeeds[index] * delta * gust;
-      if (x > 75) x -= 150;
-      positions.setX(index, x);
-      positions.setY(index, positions.getY(index) + Math.sin(elapsed * 0.8 + index) * delta * 0.2);
-    }
-    positions.needsUpdate = true;
-
+    updateScene(delta);
     renderer.render(scene, camera);
     frames += 1;
     placeLabels(width, height);
@@ -1063,9 +1283,8 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
   function renderStill() {
     renderRequested = false;
     sun.shadow.needsUpdate = true;
-    controls.update();
-    controls.target.lerp(desiredTarget, 1);
-    for (const rig of rigs.values()) animateRig(rig, 0.6);
+    controls.target.copy(desiredTarget);
+    updateScene(0.6);
     renderer.render(scene, camera);
     frames += 1;
     placeLabels(width, height);
@@ -1089,7 +1308,7 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
       geometries: renderer.info.memory.geometries,
       textures: renderer.info.memory.textures,
       programs: renderer.info.programs?.length ?? 0,
-      frames: frames,
+      frames,
       quality: options.quality,
       agents: rigs.size,
       degraded,
@@ -1099,8 +1318,8 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
       if (!built && agents.length) {
         const placements = worldLayout(agents);
         for (const agent of agents) {
-          const placement = placements.get(agent.id);
-          if (placement) rigs.set(agent.id, buildStation(agent, placement));
+          const place = placements.get(agent.id);
+          if (place) rigs.set(agent.id, buildStation(agent, place));
         }
         buildLinks(agents, placements);
         built = true;
@@ -1113,11 +1332,12 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
         rig.selected = agent.id === selectedId;
         const tone = colour(toneToken(rig.visual.tone));
         rig.visor.emissive.copy(tone);
+        (rig.visorGlow.material as THREE.SpriteMaterial).color.copy(tone);
         rig.beaconMaterial.color.copy(tone);
         const link = links.find(candidate => candidate.childId === agent.id);
         if (link) {
           link.material.uniforms.colour.value = tone;
-          link.packets.forEach(packet => (packet.material as THREE.MeshBasicMaterial).color.copy(tone));
+          for (const packet of link.packets) (packet.material as THREE.MeshBasicMaterial).color.copy(tone);
         }
       }
       focus(selectedId);
@@ -1133,15 +1353,21 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
       hemisphere.color.copy(colour("world-sky-top"));
       hemisphere.groundColor.copy(colour("world-sand-shade"));
       sun.color.copy(colour("world-sun"));
+      fill.color.copy(colour("world-sky-top"));
       sunDiscMaterial.color.copy(colour("world-sun"));
       skyMaterial.uniforms.top.value = colour("world-sky-top");
       skyMaterial.uniforms.bottom.value = colour("world-sky-bottom");
+      skyMaterial.uniforms.sun.value = colour("world-sun");
       (scene.fog as THREE.Fog).color.copy(colour("world-haze"));
       groundMaterial.color.copy(colour("world-sand"));
-      apronMaterial.color.copy(colour("world-sand-shade"));
+      trackMaterial.color.copy(colour("world-sand-shade"));
       rockMaterial.color.copy(colour("world-rock"));
+      shellMaterial.color.copy(colour("world-shell"));
+      panelMaterial.color.copy(colour("world-shell-shade"));
+      jointMaterial.color.copy(colour("world-joint"));
+      rubberMaterial.color.copy(colour("world-rubber"));
       metalMaterial.color.copy(colour("world-metal"));
-      darkMetalMaterial.color.copy(colour("world-metal-dark"));
+      deskMaterial.color.copy(colour("world-desk"));
       glassMaterial.color.copy(colour("world-glass"));
       brandMaterial.color.copy(colour("brand-600"));
       brandMaterial.emissive.copy(colour("brand-400"));
@@ -1155,6 +1381,13 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
         rig.domeMaterial.color.copy(colour("risk"));
         rig.columnMaterial.uniforms.colour.value = colour("brand-400");
       }
+      for (const holo of holos) {
+        const rig = rigs.get(holo.id);
+        if (rig) holo.material.uniforms.colour.value = colour(districtToken(rig.agent.domain));
+      }
+      applyDaylight();
+      // The sky is the light source for every reflection, so it is rebaked.
+      buildEnvironment();
       requestRender();
     },
 
@@ -1175,8 +1408,8 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
 
     resetCamera() {
       camera.position.copy(HOME);
-      desiredTarget.set(0, 2, 0);
-      controls.target.set(0, 2, 0);
+      desiredTarget.set(0, 1.6, 0);
+      controls.target.set(0, 1.6, 0);
       controls.update();
       requestRender();
     },
@@ -1189,10 +1422,13 @@ export function createAgentWorld(options: WorldOptions): AgentWorld {
       canvas.removeEventListener("pointerleave", handleLeave);
       if (reducedMotion) controls.removeEventListener("change", requestRender);
       controls.dispose();
+      environment?.dispose();
+      pmrem.dispose();
       for (const resource of disposables) resource.dispose();
       disposables.length = 0;
       rigs.clear();
       links.length = 0;
+      holos.length = 0;
       pickTargets.length = 0;
       renderer.dispose();
     },

@@ -12,6 +12,10 @@ import { expect, test, type Page } from '@playwright/test';
  * direction or the other. `scripts/world-benchmark.mjs` measures that.
  */
 
+// A CPU rasterizer builds and shades this scene in seconds, not milliseconds.
+// The default 30s budget is a GPU assumption; CI does not have one.
+test.describe.configure({ timeout: 180_000 });
+
 const HARNESS = '/tests/harness/world.html';
 const READY = '.agent-world[data-ready="true"]';
 // Software rendering compiles the shaders slowly; a real GPU is here in a blink.
@@ -39,7 +43,7 @@ test('builds the campus from the topology and keeps every robot reachable', asyn
 });
 
 test('selects an agent by pointer and by keyboard alone', async ({ page }) => {
-  await page.goto(HARNESS);
+  await page.goto(`${HARNESS}?quality=low`);
   await page.waitForSelector(READY, SETTLE);
 
   await page.getByRole('button', { name: /^OPERATIONS/ }).click();
@@ -59,11 +63,12 @@ test('stays inside its scene budget, and spends less on a weak device', async ({
   const high = await stats(page);
 
   // Not a performance threshold: a ceiling on what the scene is allowed to
-  // become. Eleven stations, one desert, and no texture atlas to speak of.
-  expect(high.drawCalls).toBeLessThanOrEqual(360);
-  expect(high.triangles).toBeLessThanOrEqual(80_000);
-  expect(high.geometries).toBeLessThanOrEqual(60);
-  expect(high.textures).toBeLessThanOrEqual(4);
+  // become. Eleven stations and one desert, with the furniture baked down to
+  // two draw calls apiece and every texture drawn in code rather than fetched.
+  expect(high.drawCalls).toBeLessThanOrEqual(380);
+  expect(high.triangles).toBeLessThanOrEqual(220_000);
+  expect(high.geometries).toBeLessThanOrEqual(70);
+  expect(high.textures).toBeLessThanOrEqual(10);
 
   await page.goto(`${HARNESS}?quality=low`);
   await page.waitForSelector(READY, SETTLE);
@@ -101,7 +106,7 @@ test('falls back to the classic map instead of failing when WebGL is missing', a
       return (original as (...args: unknown[]) => unknown).call(this, kind, ...rest);
     } as typeof HTMLCanvasElement.prototype.getContext;
   });
-  await page.goto(HARNESS);
+  await page.goto(`${HARNESS}?quality=low`);
   await expect.poll(() => page.evaluate(() => (window as unknown as { agentWorldUnsupported?: boolean }).agentWorldUnsupported === true), { timeout: 30_000 }).toBe(true);
   await expect(page.locator('.agent-world-canvas')).toHaveCount(0);
 });

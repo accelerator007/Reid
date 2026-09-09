@@ -111,7 +111,17 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 ## Implemented and verified
 
-Last verified: 2026-09-08, Asia/Muscat.
+Last verified: 2026-09-09, Asia/Muscat.
+
+### 2026-09-09 the outpost was modelled rather than assembled
+
+- The robots are built, not implied. Each is 1.85 m of painted shell over dark machined limbs, with a jointed neck, shoulders, elbows, hips and knees, standing at a 0.74 m desk with a chair, a monitor, a keyboard and a mug. The whole world is modelled in metres, which is most of what separates a scene that looks built from one that looks assembled from primitives.
+- Materials are materials: matte painted shell, machined joints at high metalness, polished trim, rubber, glass. A sky-derived environment map is baked with `PMREMGenerator` and rebaked when the theme flips, so metal reflects the sand and the sky instead of being a flat grey shape. That single change is the largest step in the whole rework.
+- The desert has grain. A procedural sand texture — wind ripples plus speckle, drawn in a canvas rather than downloaded — drives the ground's relief, the dunes are smooth-shaded, boulders are deformed icosahedra sunk into the sand, and two worn service tracks follow the rings the stations sit on. The paved apron that used to cover the campus is gone; the pads stand on stone.
+- State is animation, not a snapshot. Every joint eases toward a named pose — `idle`, `typing`, `raised`, `slumped`, `crossed`, `shaken` — so a state change is a movement. On top of that sit breathing, a slow weight shift, blinking, hands taking turns at the keyboard, and a head that tracks the camera and glances up from the desk while working.
+- The monitor faces its robot, as monitors do, so the reader gets a holographic readout angled their way with bars that rise and fall with real activity. The selection beam fades by viewing angle, because a cylinder with flat alpha reads as a translucent box.
+- Colour was reworked around the light: the daylight sky is a narrow warm band under blue rather than a blue-orange mix that greys out halfway up, exposure came down to 0.82, and the sky opts out of tone mapping because ACES was desaturating it to the same pale grey whatever the tokens said.
+- Cost was measured, not assumed. Baking each workstation's furniture into two draw calls kept the scene at 292 draw calls — fewer than the simpler version it replaced — while triangles rose to 90k. Profiling then cut rounded-corner tessellation in half and removed twelve redundant bump-mapped material variants, which tripled the software frame rate for no visible difference. Adaptive degradation gained a third step: pixel ratio and sand, then shadows, then environment reflections and ground relief.
 
 ### 2026-09-08 the agent map became a place
 
@@ -397,6 +407,14 @@ The product must be released vertically: each phase includes database, RLS, UI, 
 5. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
 
 ## Verification log
+
+### 2026-09-09 rebuilding the robots, and what it cost
+
+- Local verification: 175/175 Vitest checks, the TypeScript/Vite production build, and 16/16 Chromium journeys. No database change, so no migration and no RLS run.
+- The scene budget in `tests/e2e/agent-world.spec.ts` was raised deliberately and only where the rebuild earned it: 380 draw calls (measured 292, down from 310 before the rebuild, because furniture is baked per material), 220k triangles (measured 90k, up from 53k), 70 geometries, 10 textures. Draw calls falling while detail rose is the merge doing its job.
+- Benchmark on this container's software rasterizer, which has no GPU and is the floor rather than the expected experience: `high` at 1440×900 settled at 4.5 fps after adaptive degradation, `low` at 390×844 at 21 fps, first frame 3.7–7.2 s dominated by compiling 38 shader programs. Every scenario released the renderer on unmount and rendered zero frames while off screen.
+- The first build of the rebuild ran at 1.3 fps and took 9.8 s to the first frame. Two measurements fixed that without changing what the scene looks like: rounded-corner segments dropped from two to one (163k triangles to 90k, invisible past two metres) and the bump map was removed from the thirteen surfaces that did not need it, leaving it on the ground alone. Frame rate tripled.
+- Three visual defects were found by rendering and fixing rather than by reading code: the blue-to-orange sky mixed to mauve halfway up, the paved apron read as a muddy brown disc over the whole campus, and the purple-grey workstation pads read as plastic against warm sand.
 
 ### 2026-09-08 the 3D agent world, measured rather than assumed
 

@@ -69,6 +69,24 @@ gets a light column plus a camera ease-in.
   ratio and drifting sand first, then shadows. It never steps back up, because
   oscillating between two qualities is worse than staying at the lower one.
 
+## What makes it read as real
+
+- **Metres, not units.** A robot is 1.85 m, a desk 0.74 m, a workstation pad 5.2 m
+  across. Real proportions do more for a procedural scene than any amount of
+  detail.
+- **Image-based lighting.** A sky-derived environment map is baked with
+  `PMREMGenerator` and rebaked when the theme flips. Without it, every metal
+  surface is a flat grey shape; with it, the robots pick up the sand and the sky.
+- **Materials that differ.** Matte painted shell over machined joints at high
+  metalness, with polished trim, rubber and glass — not one tinted default.
+- **Grain.** The sand texture is drawn in a canvas at load: wind ripples plus
+  speckle, driving the ground's relief. Boulders are deformed icosahedra sunk
+  into the dunes, and two worn tracks follow the rings.
+- **Motion with weight.** Every joint eases toward a named pose, so a state
+  change is a movement. Breathing, a slow weight shift, blinking, hands taking
+  turns at the keyboard, and a head that tracks the camera and glances up from
+  the desk while working sit on top of it.
+
 ## Two decisions that only rendering could settle
 
 Both of these looked right in code and were wrong on screen.
@@ -78,6 +96,13 @@ diagram of the reporting line, and it pointed eleven robot backs at a camera
 that orbits the *outside* of the campus. The link paths carry the hierarchy
 instead, and the reader gets faces. Heads also track the camera within the range
 a neck plausibly turns.
+
+**Detail is not where the cost is.** The rebuilt scene first ran at 1.3 fps
+under software rendering. Halving the rounded-corner tessellation and removing
+the bump map from the thirteen surfaces that did not need it tripled the frame
+rate and changed nothing visible. Baking each workstation's furniture into two
+draw calls meant the far more detailed world costs *fewer* draw calls than the
+simple one it replaced.
 
 **The shadow pass is the expensive part, and not for the reason expected.**
 Removing shadows entirely raised the frame rate 62% under software rendering,
