@@ -109,7 +109,24 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 ## Implemented and verified
 
-Last verified: 2026-09-06, Asia/Muscat.
+Last verified: 2026-09-11, Asia/Muscat.
+
+### 2026-09-11 Reid local rebuild foundation
+
+- Work is active on `feature/local-rebuild`. The production domain remains on the existing Cloudflare deployment until the local origin and private tunnel pass end-to-end verification.
+- Added a reproducible Docker build for the React application, an unprivileged local-only origin on `127.0.0.1:8080`, an Nginx SPA fallback, a dedicated `/healthz` probe, immutable asset caching, baseline response headers, and automatic container restart.
+- Per the Owner's 2026-09-11 decision, database, Auth, Storage, Realtime, and Edge Functions remain on the existing Supabase project. "Local hosting" means the web origin runs on Reid; it does not mean moving Supabase data to the host.
+
+Verification log:
+
+- Pending: `npm run check` on `feature/local-rebuild`.
+- Pending: `docker compose build` and `/healthz` on the Reid host.
+- Cloudflare Tunnel `reid-local` was created for the Reid host. Its credential is stored outside the repository; `local.reidpro.com` is the pre-cutover verification hostname.
+- Local Supabase startup was cancelled before any containers or database volumes were created. No production data or Supabase configuration was changed.
+- `local.reidpro.com` passed external HTTPS, all declared application routes, tunnel redundancy, production Supabase configuration, and a live PostgREST request on 2026-09-11.
+- The Nginx origin emits `X-Reid-Origin: local-reid` so post-cutover probes can prove traffic reached Reid instead of the previous Cloudflare Worker.
+- Production cutover completed on 2026-09-11: the old Worker custom-domain attachment was removed and `reidpro.com` plus `www.reidpro.com` were routed to `reid-local`. The Worker itself was retained for rollback; only its production-domain attachment changed.
+- Post-cutover verification passed for `/`, `/login`, `/privacy`, `/dashboard`, `/workspace`, `/projects`, `/research`, and `/crm`; every response returned HTTP 200 with `X-Reid-Origin: local-reid`. The web and tunnel containers are healthy, use `restart: unless-stopped`, and Docker is enabled at boot.
 
 ### 2026-09-07 Owner system command center
 

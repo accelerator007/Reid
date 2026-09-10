@@ -1,0 +1,38 @@
+name: reid-local
+
+services:
+  web:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+        VITE_WHATSAPP_NUMBER: ${VITE_WHATSAPP_NUMBER:-96897308003}
+        VITE_APP_URL: ${VITE_APP_URL:-https://reidpro.com}
+    image: reid-web:local
+    container_name: reid-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=16m
+      - /var/run:size=1m
+      - /tmp:size=1m
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.9.0
+    container_name: reid-tunnel
+    user: "0:0"
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - ./deploy/cloudflared.yml:/etc/cloudflared/config.yml:ro
+      - /home/reid/.cloudflared/635939a7-92d1-4e60-a2f4-821eaa167ede.json:/etc/cloudflared/635939a7-92d1-4e60-a2f4-821eaa167ede.json:ro
+    security_opt:
+      - no-new-privileges:true
