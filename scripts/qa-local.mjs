@@ -29,7 +29,7 @@ try{
   await ctx.addInitScript(session=>localStorage.setItem('sb-pkogchbrknwmzefjklkr-auth-token',JSON.stringify(session)),signed.data.session);
   const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));
   for(const [route,heading] of [['today','أهلًا'],['finance','وضوح'],['operations','التفاصيل'],['assistant','فكرتك'],['admin','كل صلاحية'],['connections','كل أدواتك'],['inbox','كل محادثة']]){
-    await page.goto(`http://127.0.0.1:5175/${route}`);await page.getByRole('heading',{name:new RegExp(heading)}).first().waitFor({timeout:20000});if(route==='admin')await page.getByText('Reid QA',{exact:true}).waitFor({timeout:20000});else await pause(1500);await page.screenshot({path:`${folder}/${route}.png`,fullPage:true});console.log(`${route}: rendered`);
+    await page.goto(`http://127.0.0.1:5175/${route}`);await page.getByRole('heading',{name:new RegExp(heading)}).first().waitFor({timeout:20000});if(route==='admin')await page.getByText('Sheikha Almamari',{exact:true}).waitFor({timeout:20000});else await pause(1500);await page.screenshot({path:`${folder}/${route}.png`,fullPage:true});console.log(`${route}: rendered`);
   }
   await page.goto('http://127.0.0.1:5175/connections');
   const connectButton=page.getByRole('button',{name:'إظهار QR code'}),qrImage=page.getByRole('img',{name:'امسح هذا الكود من واتساب لربط رقم ريّد'});

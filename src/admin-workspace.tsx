@@ -30,6 +30,7 @@ const permissions=[
 ] as const;
 
 const omitKeys=new Set(['updated_at','last_heartbeat']);
+const syntheticEmail=/^(reid-browser-|reid-research-|reid\.research\.|reid\.qa\.|reid-os-qa-|admin-control-(owner|target)-)|^reid\.contact\.us\+reid-qa-/i;
 function diffKeys(row:Audit){
   const keys=new Set([...Object.keys(row.old_data||{}),...Object.keys(row.new_data||{})]);
   return [...keys].filter(k=>!omitKeys.has(k)&&JSON.stringify(row.old_data?.[k])!==JSON.stringify(row.new_data?.[k]));
@@ -93,7 +94,7 @@ export function AdminWorkspace({lang,go}:{lang:Lang;go:(page:Page)=>void}){
     if(!window.confirm(tr(lang,decision==='approved'?'اعتماد هذا الإجراء؟':'رفض هذا الإجراء؟',decision==='approved'?'Approve this action?':'Reject this action?')))return;
     setBusy(true);setError('');try{await decideRun(row.id,decision,reason.trim()||undefined);await load();}catch(e){setError(messageFor(toAppError(e),lang));}finally{setBusy(false);}
   };
-  const retiredIds=new Set(accounts.filter(x=>x.control?.reason==='Retired synthetic QA identity').map(x=>x.id));
+  const retiredIds=new Set(accounts.filter(x=>x.control?.reason==='Retired synthetic QA identity'||syntheticEmail.test(x.email||'')).map(x=>x.id));
   const businessAccounts=accounts.filter(x=>!retiredIds.has(x.id));
   const visibleAudits=audits.filter(x=>!x.record_id||!retiredIds.has(x.record_id));
   const names=new Map(businessAccounts.map(x=>[x.id,x.full_name||x.email||x.id.slice(0,8)]));
