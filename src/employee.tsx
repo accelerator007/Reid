@@ -375,7 +375,7 @@ export function EmployeeWorkspace({
           <span>REID PEOPLE</span>
           <h1>{t.title}</h1>
           <p>
-            {selectedProfile?.full_name} · {roles.join(" · ")}
+            {selectedProfile?.full_name || user.user_metadata?.full_name || user.email} · {roles.join(" · ")}
           </p>
         </div>
         <button onClick={profile}>

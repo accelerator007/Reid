@@ -120,6 +120,30 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-11, Asia/Muscat.
 
+### 2026-09-11 unified business lifecycle
+
+- `/business` is the bilingual operating spine for the company: a CRM deal becomes one durable business case that moves through Opportunity, Quote, Contract, Delivery, Invoice, Collection and Close. The database creates and links the quote, contract work record, private delivery project and invoice atomically instead of relying on operators to reconcile separate modules.
+- The employee workspace header now falls back to authenticated session identity while the company directory hydrates. A cold multi-query load can no longer leave the signed-in employee's own name blank or make the authenticated browser journey flaky.
+- Responsibility is enforced in PostgreSQL as well as the interface. Sales can open a case and issue its quote; Owner, Super Admin or Admin approval is required for contract and delivery; only Owner or Super Admin may issue the invoice, record a payment or reverse a payment. Stage skipping is rejected and every transition requires a written reason.
+- Customer payments now use an Owner-only ledger with partial collection, exact remaining balance, full-payment collection, and governed reversal. A browser update cannot mark an invoice paid directly. Reversal requires a reason and reopens both the invoice and business case. The Finance page reports `paid_amount` and sends collection work to Business Flow rather than offering a manual paid state.
+- Cancellation is a governed operation rather than a cosmetic state. It requires management approval, becomes Owner-only after invoicing, refuses to proceed while posted payments remain, voids an unpaid invoice, archives the delivery project, and stores the reason. Early opportunity/quote cancellation also marks the CRM deal lost with that reason.
+- Migrations `202609110003_business_core.sql` through `202609110008_expense_payment_transition.sql` are applied and recorded. `004` and `005` fix pre-existing project deletion blockers: activity-feed children no longer write after their parent disappears, and financial documents retain history while their deleted project link becomes null. `007` closes the legacy stage-RPC cancellation bypass so all cancellation side effects are mandatory. `008` preserves the separate Owner-audited paid transition for company expenses without weakening the customer-invoice ledger.
+- `npm run qa:business` runs live, disposable completion and cancellation paths across Sales → Admin → Owner. It covers quote, contract, project, invoice, partial payment, full payment, reversal, recollection, closure, permission refusal, invoice voiding and project archival. Cleanup is mandatory and verified; the last run left zero QA identities, projects or business cases.
+
+Verification on 2026-09-11:
+
+- `npm run check`: 197/197 Vitest checks and the TypeScript/Vite Production build passed. Vitest was upgraded to 5.0.0 to remove the remaining moderate development-only advisory; the application, Reid service and QR bridge audits now report zero known vulnerabilities at their tested thresholds.
+- `npm run test:e2e`: all 18 runnable Chromium workflows passed; six credential-gated live role workflows were correctly skipped locally.
+- The isolated PostgreSQL 16 harness applied every migration and passed 36/36 business lifecycle/RLS assertions, plus the existing CRM and WhatsApp suites.
+- Live Supabase QA completed closure, cancellation and company-expense payment paths and produced 75 audit receipts. Direct invoice-paid mutation, Sales contract approval, Admin invoice issuance/cancellation, cancellation with a posted payment, legacy-RPC cancellation bypass, and reasonless reversal were all rejected at their database boundaries.
+- Authenticated desktop and 390px browser QA rendered Business Flow and all Reid OS pages against Production data, created/cleaned a finance draft, loaded the live QR connection, found no page exception, and found no document-level mobile overflow.
+
+Still open and must not be presented as complete:
+
+- Finance is now a controlled commercial and collection subledger, but not yet a double-entry accounting system, bank feed, payment gateway, VAT return engine, e-signature service, or PDF quote/invoice generator.
+- Line-item, discount and tax columns are reserved in the schema; their production editing/approval interface and immutable document snapshots remain the next finance increment.
+- Mandatory MFA for L4 payment and ownership actions remains a release gate before real electronic payment execution can be enabled. Current recording documents an external receipt; it never moves money.
+
 ### 2026-09-11 Owner governance and organized company navigation
 
 - `/admin` is now a bilingual Owner/Admin control center and is part of the guarded route manifest. Owner and Super Admin can manage accounts; Admin has an explicit read/review mode. The page combines active-account health, pending governed-agent approvals, the permission map, and the latest 200 audit changes.
