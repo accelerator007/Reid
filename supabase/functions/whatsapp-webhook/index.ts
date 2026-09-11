@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { queueQrText, withQrDispatch } from '../_shared/qr-transport.ts';
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
@@ -20,6 +21,7 @@ async function validSignature(request: Request, raw: string) {
 }
 
 async function sendText(to: string, body: string) {
+  if (Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr') return queueQrText(createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!),to,body);
   const token = Deno.env.get('META_WHATSAPP_ACCESS_TOKEN');
   const phoneId = Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
   if (!token || !phoneId) throw new Error('whatsapp_delivery_not_configured');
@@ -34,6 +36,7 @@ async function sendText(to: string, body: string) {
 }
 
 async function sendApproval(to: string, runId: string, level: number) {
+  if (Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr') return sendText(to,`هذا الأمر يحتاج موافقة L${level}. راجع الأمر والموافقة في https://reidpro.com/dashboard`);
   const token = Deno.env.get('META_WHATSAPP_ACCESS_TOKEN');
   const phoneId = Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
   if (!token || !phoneId) throw new Error('whatsapp_delivery_not_configured');
@@ -52,6 +55,7 @@ async function sendApproval(to: string, runId: string, level: number) {
 }
 
 async function sendChoices(to: string, body: string, choices: string[]) {
+  if (Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr') return sendText(to,body+'\n'+choices.map((v,i)=>`${i+1}. ${v}`).join('\n'));
   const token = Deno.env.get('META_WHATSAPP_ACCESS_TOKEN');
   const phoneId = Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
   if (!token || !phoneId) throw new Error('whatsapp_delivery_not_configured');
@@ -70,6 +74,7 @@ async function sendChoices(to: string, body: string, choices: string[]) {
 }
 
 async function sendList(to: string, body: string, choices: string[]) {
+  if (Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr') return sendText(to,body+'\n'+choices.map((v,i)=>`${i+1}. ${v}`).join('\n'));
   const token = Deno.env.get('META_WHATSAPP_ACCESS_TOKEN');
   const phoneId = Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
   if (!token || !phoneId) throw new Error('whatsapp_delivery_not_configured');
@@ -99,7 +104,7 @@ function assistantReply(value: string) {
 }
 
 async function recordOutbound(admin: any, conversationId: string, body: string, metaMessageId?: string) {
-  await admin.from('whatsapp_messages').insert({ conversation_id: conversationId, meta_message_id: metaMessageId || null, direction: 'outbound', message_type: 'text', body, delivery_status: 'sent' });
+  await admin.from('whatsapp_messages').insert({ conversation_id: conversationId, meta_message_id: metaMessageId || null, direction: 'outbound', message_type: 'text', body, delivery_status: metaMessageId?.startsWith('queued:') ? 'queued' : 'sent' });
   await admin.from('whatsapp_conversations').update({ last_outbound_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', conversationId);
 }
 
@@ -136,8 +141,13 @@ async function ownerIdentity(admin:any, phone:string) {
   const email=ownerEmailFor(phone);
   if(email) {
     const profile=await admin.from('profiles').select('id,full_name,email').eq('email',email).maybeSingle();
-    if(profile.data) return profile.data as {id:string;full_name:string;email:string};
+    if(profile.data) {
+      const [role,control]=await Promise.all([admin.from('user_roles').select('role').eq('user_id',profile.data.id).eq('role','owner').maybeSingle(),admin.from('account_controls').select('status').eq('user_id',profile.data.id).maybeSingle()]);
+      if(role.error||control.error||!role.data||control.data?.status!=='active') throw new Error('owner_not_active');
+      return profile.data as {id:string;full_name:string;email:string};
+    }
   }
+  if(Deno.env.get('REID_WHATSAPP_TRANSPORT')==='qr') throw new Error('explicit_owner_mapping_required');
   const id=Deno.env.get('WHATSAPP_OWNER_USER_ID') || '';
   if(!id) throw new Error('whatsapp_owner_not_configured');
   const profile=await admin.from('profiles').select('id,full_name,email').eq('id',id).single();
@@ -250,7 +260,7 @@ async function notifyOwners(sender:string, name:string|null, message:string|null
   if(!response.ok) throw new Error(`owner_email_${response.status}`);
 }
 
-Deno.serve(async request => {
+async function handleRequest(request: Request) {
   if (request.method === 'GET') {
     const url = new URL(request.url);
     const mode = url.searchParams.get('hub.mode');
@@ -262,11 +272,27 @@ Deno.serve(async request => {
   }
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
-  const raw = await request.text();
-  if (!(await validSignature(request, raw))) return json({ error: 'invalid_signature' }, 401);
-  const payload = JSON.parse(raw);
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const allowed = new Set((Deno.env.get('WHATSAPP_OWNER_NUMBERS') || '').split(',').map(value => value.replace(/\D/g, '')).filter(Boolean));
+  const isQR = Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr';
+  let payload: any;
+  if (isQR) {
+    const expected=Deno.env.get('REID_QR_BRIDGE_TOKEN')||'';
+    if(!expected||!secureEqual(expected,request.headers.get('x-reid-qr-token')||'')) return json({received:true,transport:'qr',ignored:true});
+    const body=await request.json();
+    const job=await admin.from('qr_jobs').select('message_id,input,state,expires_at,qr_conversations(jid,display_name,bot_mode)').eq('message_id',body.messageId).single();
+    if(job.error||job.data.state!=='running'||Date.parse(job.data.expires_at)<Date.now()) return json({error:'qr_job_unavailable'},409);
+    const chat:any=job.data.qr_conversations;
+    if(chat.bot_mode!=='active') return json({handled:true,paused:true});
+    const phone=String(chat.jid).replace(/@s\.whatsapp\.net$/,'');
+    if(!allowed.has(phone)||!ownerEmailFor(phone)) return json({handled:false});
+    await ownerIdentity(admin,phone);
+    payload={entry:[{changes:[{value:{messages:[{id:'qr:'+job.data.message_id,from:phone,type:'text',text:{body:job.data.input}}],contacts:[{wa_id:phone,profile:{name:chat.display_name}}]}}]}]};
+  } else {
+    const raw=await request.text();
+    if(!(await validSignature(request,raw))) return json({error:'invalid_signature'},401);
+    payload=JSON.parse(raw);
+  }
 
   for (const status of deliveryStatuses(payload)) {
     if (!status?.id || !['sent','delivered','read','failed'].includes(status.status)) continue;
@@ -298,7 +324,7 @@ Deno.serve(async request => {
     const incomingText=message?.text?.body?.trim() || message?.interactive?.button_reply?.title || null;
     await admin.from('whatsapp_messages').insert({ conversation_id:conversationId, meta_message_id:message.id, direction:'inbound', message_type:message.type||'unknown', body:incomingText, delivery_status:'received' });
     try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
-    if(conversationResult.data.bot_mode!=='active') continue;
+    if(!isQR && conversationResult.data.bot_mode!=='active') continue;
     const identity=await ownerIdentity(admin,message.from);
     if(incomingText) await rememberOwnerMessage(admin,identity,message.id,incomingText);
     const buttonId = message?.interactive?.button_reply?.id || message?.button?.payload || '';
@@ -318,6 +344,9 @@ Deno.serve(async request => {
       continue;
     }
     const plainDecision=/^(موافقة|وافق|approve|approved|رفض|ارفض|reject)$/i.exec(text)?.[1];
+    if(plainDecision && isQR) {
+      await sendText(message.from,'راجع تفاصيل الأمر والموافقة داخل حسابك في https://reidpro.com/dashboard'); continue;
+    }
     if(plainDecision) {
       const pending=await admin.from('whatsapp_commands').select('id,agent_run_id,command_text,status').eq('sender_phone',message.from).eq('status','pending_approval').order('created_at',{ascending:false}).limit(1).maybeSingle();
       if(!pending.data?.agent_run_id) {
@@ -417,5 +446,6 @@ Deno.serve(async request => {
       const replyBody='تعذر تنفيذ الأمر الآن. تم تسجيل الخطأ للمراجعة من لوحة المالك.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
     }
   }
-  return json({ received: true });
-});
+  return json({ received: true, handled: true });
+}
+Deno.serve(request => withQrDispatch(request.headers.get('x-reid-qr-message') || crypto.randomUUID(), () => handleRequest(request).catch(() => json({error:'dispatch_failed'},503))));

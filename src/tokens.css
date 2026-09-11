@@ -28,11 +28,13 @@
   --purple: var(--brand-500);
 
   /* ---- surfaces and text ---------------------------------------------- */
-  --bg: #f6f4f8;
-  --card: #ffffffbd;
-  --ink: #241c30;
-  --muted: #71677e;
-  --line: #55418b20;
+  --bg: #f7f8fa;
+  --card: #ffffff;
+  --ink: #22232b;
+  --muted: #727583;
+  --line: #e9eaf0;
+  --art-bg: #f0edf7;
+  --shadow-os: 0 2px 5px #24213804;
   --line-strong: #55418b40;
   /* A brand-tinted wash for selected rows and highlighted panels. */
   --brand-fill: #55418b14;
@@ -87,7 +89,9 @@
  * mechanism, not two, so the toggle and the OS can never disagree. */
 .dark {
   --bg: #110d19;
-  --card: #20192bd9;
+  --card: #1c1924;
+  --art-bg: #211c30;
+  --shadow-os: 0 2px 5px #00000020;
   --ink: #f5f0fb;
   --muted: #b9afc4;
   --line: #bba7ef24;

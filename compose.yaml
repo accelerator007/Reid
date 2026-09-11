@@ -1,6 +1,45 @@
 name: reid-local
 
 services:
+  api:
+    build: ./server
+    image: reid-services:local
+    container_name: reid-services
+    restart: unless-stopped
+    env_file: /home/reid/.config/reid-os/service.env
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - qr-session:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8090/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    depends_on: [ai-relay]
+
+  ai-relay:
+    build:
+      context: .
+      dockerfile: deploy/ai-relay.Dockerfile
+    container_name: reid-ai-relay
+    user: "1000:1000"
+    restart: unless-stopped
+    command: ["-NT", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=20", "-o", "ServerAliveCountMax=3", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=/keys/known_hosts", "-i", "/keys/ai_key", "-L", "0.0.0.0:11436:127.0.0.1:11436", "ai-lap@10.162.46.208"]
+    volumes:
+      - /home/reid/.config/reid-os/ai_key:/keys/ai_key:ro
+      - /home/reid/.config/reid-os/known_hosts:/keys/known_hosts:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+
   web:
     build:
       context: .
@@ -21,6 +60,9 @@ services:
       - /var/cache/nginx:size=16m
       - /var/run:size=1m
       - /tmp:size=1m
+    depends_on:
+      api:
+        condition: service_healthy
 
   tunnel:
     image: cloudflare/cloudflared:2026.9.0
@@ -36,3 +78,6 @@ services:
       - /home/reid/.cloudflared/635939a7-92d1-4e60-a2f4-821eaa167ede.json:/etc/cloudflared/635939a7-92d1-4e60-a2f4-821eaa167ede.json:ro
     security_opt:
       - no-new-privileges:true
+
+volumes:
+  qr-session:

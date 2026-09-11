@@ -39,6 +39,7 @@ Deno.serve(async request => {
     return reply({ ok: true });
   }
 
+  if (body.action === 'send' && Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr') return reply({error:'use_qr_inbox',url:'https://reidpro.com/inbox'},410);
   if (body.action !== 'send') return reply({ error: 'invalid_action' }, 400);
   const text = String(body.text || '').trim();
   if (!text || text.length > 4000) return reply({ error: 'invalid_message' }, 400);
@@ -59,4 +60,3 @@ Deno.serve(async request => {
   await admin.from('whatsapp_conversations').update({ last_outbound_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', conversationId);
   return reply({ ok: true, messageId });
 });
-
