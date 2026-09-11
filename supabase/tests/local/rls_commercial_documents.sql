@@ -39,9 +39,13 @@ select public.t_true('commercial_documents','Project kickoff creates a milestone
     from public.business_cases c where c.deal_id='72000000-0000-0000-0000-000000000002'$$);
 select public.t_rejected('commercial_documents','Admin cannot issue the invoice',
   $$select public.issue_business_invoice((select id from public.business_cases where deal_id='72000000-0000-0000-0000-000000000002'),current_date+30,'Unauthorized invoice')$$,'P0001');
+select public.t_rejected('commercial_documents','Admin cannot read the private Owner company snapshot',
+  $$select public.owner_company_snapshot()$$,'P0001');
 
 select public.test_sign_in('71000000-0000-0000-0000-000000000001');
 select public.t_visible('commercial_documents','Owner reads the company document identity','select * from public.company_profile',1);
+select public.t_true('commercial_documents','Owner snapshot carries finance, alerts, stages, trend, receivables, and projects',
+  $$select public.owner_company_snapshot() ?& array['metrics','alerts','stages','cash_trend','receivables','projects']$$);
 select public.t_true('commercial_documents','Quote totals, customer snapshot and immutable issue snapshot are exact',
   $$select d.subtotal=250 and d.discount_amount=10 and d.tax_amount=12 and d.amount=252 and
     jsonb_array_length(d.line_items)=2 and d.counterparty_snapshot->>'email'='client@example.test' and
@@ -77,6 +81,8 @@ select public.t_visible('commercial_documents','Employee cannot read finance doc
 select public.t_visible('commercial_documents','Employee cannot read company legal and bank details','select * from public.company_profile',0);
 select public.t_rejected('commercial_documents','Employee cannot issue a business quote',
   $$select public.issue_business_quote((select id from public.business_cases limit 1),'[{"description":"Bad","quantity":1,"unit_price":1}]',0,0,current_date+1,'No authority')$$,'P0001');
+select public.t_rejected('commercial_documents','Employee cannot read the private Owner company snapshot',
+  $$select public.owner_company_snapshot()$$,'P0001');
 
 select public.t_finish('commercial_documents');
 rollback;

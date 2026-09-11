@@ -40,6 +40,10 @@ try{
   await createUser('admin');
   const salesId=await createUser('sales');
 
+  const ownerSnapshot=await dataOf(clients.owner.rpc('owner_company_snapshot'),'read Owner company snapshot');
+  check(['metrics','alerts','stages','cash_trend','receivables','projects'].every(key=>Object.hasOwn(ownerSnapshot,key)),'Owner snapshot is incomplete');
+  await rejected(clients.admin.rpc('owner_company_snapshot'),'owner_snapshot_denied','admin Owner-snapshot boundary');
+
   const expense=await dataOf(clients.owner.rpc('create_finance_draft',{document_kind:'expense',document_title:`Business QA expense ${stamp}`,document_counterparty:'Infrastructure supplier',document_currency:'OMR',document_items:[{description:'Server capacity',quantity:2,unit_price:25}],document_discount:0,document_tax_rate:0,document_due_date:null,document_valid_until:null,document_notes:'Live QA expense'}),'create expense');expenseId=expense.id;
   await dataOf(clients.owner.from('finance_documents').update({status:'issued'}).eq('id',expenseId).select('id').single(),'issue expense');
   await dataOf(clients.owner.from('finance_documents').update({status:'paid'}).eq('id',expenseId).select('id').single(),'pay expense');
@@ -114,7 +118,7 @@ try{
   if(receipts.error)throw receipts.error;
   check((receipts.count||0)>=12,'lifecycle audit receipts are incomplete');
 
-  console.log(JSON.stringify({ok:true,caseOpened:true,roleBoundaries:true,detailedQuote:true,immutableSnapshot:true,quoteContractProjectInvoice:true,projectPlanSeeded:true,partialAndFullPayment:true,governedReversal:true,closed:true,governedCancellation:true,expensePayment:true,auditReceipts:receipts.count}));
+  console.log(JSON.stringify({ok:true,ownerSnapshot:true,caseOpened:true,roleBoundaries:true,detailedQuote:true,immutableSnapshot:true,quoteContractProjectInvoice:true,projectPlanSeeded:true,partialAndFullPayment:true,governedReversal:true,closed:true,governedCancellation:true,expensePayment:true,auditReceipts:receipts.count}));
 }finally{
   const cleanupErrors=[];
   const clean=async(label,promise)=>{const {error}=await promise;if(error)cleanupErrors.push(`${label}: ${error.message}`);};
