@@ -40,7 +40,7 @@ try{
   await createUser('admin');
   const salesId=await createUser('sales');
 
-  const expense=await dataOf(clients.owner.from('finance_documents').insert({kind:'expense',title:`Business QA expense ${stamp}`,counterparty:'Infrastructure supplier',amount:50,currency:'OMR'}).select('id').single(),'create expense');expenseId=expense.id;
+  const expense=await dataOf(clients.owner.rpc('create_finance_draft',{document_kind:'expense',document_title:`Business QA expense ${stamp}`,document_counterparty:'Infrastructure supplier',document_currency:'OMR',document_items:[{description:'Server capacity',quantity:2,unit_price:25}],document_discount:0,document_tax_rate:0,document_due_date:null,document_valid_until:null,document_notes:'Live QA expense'}),'create expense');expenseId=expense.id;
   await dataOf(clients.owner.from('finance_documents').update({status:'issued'}).eq('id',expenseId).select('id').single(),'issue expense');
   await dataOf(clients.owner.from('finance_documents').update({status:'paid'}).eq('id',expenseId).select('id').single(),'pay expense');
   const paidExpense=await dataOf(service.from('finance_documents').select('status,paid_at').eq('id',expenseId).single(),'verify paid expense');
@@ -53,9 +53,12 @@ try{
 
   const opened=await dataOf(clients.sales.rpc('create_business_case_from_deal',{wanted_deal:dealId}),'sales opens case');
   caseId=opened.id;
-  const quoted=await dataOf(clients.sales.rpc('advance_business_case',{wanted_case:caseId,requested_stage:'quoted',change_reason:'Live QA quote'}),'sales issues quote');
+  const quoted=await dataOf(clients.sales.rpc('issue_business_quote',{wanted_case:caseId,document_items:[{description:'Discovery',quantity:2,unit_price:400},{description:'Delivery',quantity:1,unit_price:200}],document_discount:50,document_tax_rate:5,document_valid_until:new Date(Date.now()+14*86400000).toISOString().slice(0,10),change_reason:'Live QA quote'}),'sales issues detailed quote');
   quoteId=quoted.quote_id;
   check(quoted.stage==='quoted'&&quoteId,'quote was not linked');
+  const quote=await dataOf(service.from('finance_documents').select('subtotal,discount_amount,tax_rate,tax_amount,amount,line_items,document_snapshot,counterparty_snapshot').eq('id',quoteId).single(),'verify quote economics');
+  check(Number(quote.subtotal)===1000&&Number(quote.discount_amount)===50&&Number(quote.tax_amount)===47.5&&Number(quote.amount)===997.5&&quote.line_items.length===2&&quote.document_snapshot,'quote calculation or snapshot failed');
+  await rejected(clients.owner.from('finance_documents').update({line_items:[{description:'Tamper',quantity:1,unit_price:1}]}).eq('id',quoteId),'issued_document_immutable','issued snapshot boundary');
   await rejected(clients.sales.rpc('advance_business_case',{wanted_case:caseId,requested_stage:'contracted',change_reason:'Must be denied'}),'management_approval_required','sales contract boundary');
   const salesDocs=await dataOf(clients.sales.from('finance_documents').select('id'),'sales finance visibility');
   check(salesDocs.length===0,'sales can see protected finance documents');
@@ -65,23 +68,27 @@ try{
   const delivery=await dataOf(clients.admin.rpc('advance_business_case',{wanted_case:caseId,requested_stage:'delivery',change_reason:'Live QA kickoff'}),'admin starts delivery');
   projectId=delivery.project_id;
   check(contractId&&projectId,'contract or delivery project was not linked');
+  const [milestones,tasks]=await Promise.all([dataOf(service.from('project_milestones').select('id').eq('project_id',projectId),'verify kickoff milestone'),dataOf(service.from('tasks').select('id').eq('project_id',projectId),'verify kickoff task')]);
+  check(milestones.length===1&&tasks.length===1,'delivery plan was not seeded');
   await rejected(clients.admin.rpc('advance_business_case',{wanted_case:caseId,requested_stage:'invoiced',change_reason:'Must be denied'}),'finance_approval_required','admin invoice boundary');
 
-  const invoiced=await dataOf(clients.owner.rpc('advance_business_case',{wanted_case:caseId,requested_stage:'invoiced',change_reason:'Live QA accepted delivery'}),'owner issues invoice');
+  const invoiced=await dataOf(clients.owner.rpc('issue_business_invoice',{wanted_case:caseId,document_due_date:new Date(Date.now()+30*86400000).toISOString().slice(0,10),change_reason:'Live QA accepted delivery'}),'owner issues invoice');
   invoiceId=invoiced.invoice_id;
+  const invoice=await dataOf(service.from('finance_documents').select('amount,line_items,parent_document_id,document_snapshot').eq('id',invoiceId).single(),'verify invoice snapshot');
+  check(Number(invoice.amount)===Number(quote.amount)&&JSON.stringify(invoice.line_items)===JSON.stringify(quote.line_items)&&invoice.parent_document_id===quoteId&&invoice.document_snapshot,'invoice did not copy quote snapshot');
   await rejected(clients.owner.from('finance_documents').update({status:'paid'}).eq('id',invoiceId),['payment_ledger_required','invalid_document_transition'],'manual paid boundary');
   await dataOf(clients.owner.rpc('record_business_payment',{wanted_case:caseId,payment_amount:400,payment_method:'bank_transfer',payment_reference:`PART-${stamp}`,payment_date:new Date().toISOString().slice(0,10),payment_notes:'Live QA deposit'}),'partial payment');
   const afterPartial=await dataOf(service.from('finance_documents').select('status,paid_amount').eq('id',invoiceId).single(),'verify partial');
   check(afterPartial.status==='issued'&&Number(afterPartial.paid_amount)===400,'partial payment balance is wrong');
 
-  const finalPayment=await dataOf(clients.owner.rpc('record_business_payment',{wanted_case:caseId,payment_amount:600,payment_method:'bank_transfer',payment_reference:`FINAL-${stamp}`,payment_date:new Date().toISOString().slice(0,10),payment_notes:'Live QA balance'}),'final payment');
+  const finalPayment=await dataOf(clients.owner.rpc('record_business_payment',{wanted_case:caseId,payment_amount:Number(invoice.amount)-400,payment_method:'bank_transfer',payment_reference:`FINAL-${stamp}`,payment_date:new Date().toISOString().slice(0,10),payment_notes:'Live QA balance'}),'final payment');
   finalPaymentId=finalPayment.id;
   const collected=await dataOf(service.from('business_cases').select('stage').eq('id',caseId).single(),'verify collection');
   check(collected.stage==='collected','case was not collected');
   await dataOf(clients.owner.rpc('reverse_business_payment',{wanted_payment:finalPaymentId,reason:'Live QA governed reversal'}),'reverse payment');
   const reopened=await dataOf(service.from('business_cases').select('stage').eq('id',caseId).single(),'verify reopening');
   check(reopened.stage==='invoiced','reversal did not reopen the case');
-  await dataOf(clients.owner.rpc('record_business_payment',{wanted_case:caseId,payment_amount:600,payment_method:'bank_transfer',payment_reference:`REPOST-${stamp}`,payment_date:new Date().toISOString().slice(0,10),payment_notes:'Live QA repost'}),'repost payment');
+  await dataOf(clients.owner.rpc('record_business_payment',{wanted_case:caseId,payment_amount:Number(invoice.amount)-400,payment_method:'bank_transfer',payment_reference:`REPOST-${stamp}`,payment_date:new Date().toISOString().slice(0,10),payment_notes:'Live QA repost'}),'repost payment');
   const closed=await dataOf(clients.owner.rpc('advance_business_case',{wanted_case:caseId,requested_stage:'closed',change_reason:'Live QA completed engagement'}),'close engagement');
   check(closed.stage==='closed','engagement did not close');
 
@@ -91,10 +98,10 @@ try{
   const cancelDeal=await dataOf(service.from('crm_deals').insert({title:`Cancellation lifecycle ${stamp}`,company_id:companyId,owner_id:salesId,value:250,currency:'OMR'}).select('id').single(),'create cancellation deal');
   cancelDealId=cancelDeal.id;
   const cancelOpened=await dataOf(clients.sales.rpc('create_business_case_from_deal',{wanted_deal:cancelDealId}),'open cancellation case');cancelCaseId=cancelOpened.id;
-  await dataOf(clients.sales.rpc('advance_business_case',{wanted_case:cancelCaseId,requested_stage:'quoted',change_reason:'Live QA cancellation quote'}),'issue cancellation quote');
+  await dataOf(clients.sales.rpc('issue_business_quote',{wanted_case:cancelCaseId,document_items:[{description:'Cancellation service',quantity:1,unit_price:250}],document_discount:0,document_tax_rate:0,document_valid_until:new Date(Date.now()+14*86400000).toISOString().slice(0,10),change_reason:'Live QA cancellation quote'}),'issue cancellation quote');
   const cancelContracted=await dataOf(clients.admin.rpc('advance_business_case',{wanted_case:cancelCaseId,requested_stage:'contracted',change_reason:'Live QA cancellation contract'}),'approve cancellation contract');cancelContractId=cancelContracted.contract_id;
   const cancelDelivery=await dataOf(clients.admin.rpc('advance_business_case',{wanted_case:cancelCaseId,requested_stage:'delivery',change_reason:'Live QA cancellation delivery'}),'start cancellation delivery');cancelProjectId=cancelDelivery.project_id;
-  const cancelInvoiced=await dataOf(clients.owner.rpc('advance_business_case',{wanted_case:cancelCaseId,requested_stage:'invoiced',change_reason:'Live QA cancellation invoice'}),'issue cancellation invoice');cancelInvoiceId=cancelInvoiced.invoice_id;
+  const cancelInvoiced=await dataOf(clients.owner.rpc('issue_business_invoice',{wanted_case:cancelCaseId,document_due_date:new Date(Date.now()+30*86400000).toISOString().slice(0,10),change_reason:'Live QA cancellation invoice'}),'issue cancellation invoice');cancelInvoiceId=cancelInvoiced.invoice_id;
   await rejected(clients.admin.rpc('cancel_business_case',{wanted_case:cancelCaseId,change_reason:'Must be denied'}),'finance_approval_required','admin invoiced cancellation boundary');
   await rejected(clients.admin.rpc('advance_business_case',{wanted_case:cancelCaseId,requested_stage:'cancelled',change_reason:'Must be denied'}),'use_governed_cancellation','legacy cancellation bypass boundary');
   await dataOf(clients.owner.rpc('cancel_business_case',{wanted_case:cancelCaseId,change_reason:'Live QA customer cancellation'}),'owner cancels unpaid engagement');
@@ -107,7 +114,7 @@ try{
   if(receipts.error)throw receipts.error;
   check((receipts.count||0)>=12,'lifecycle audit receipts are incomplete');
 
-  console.log(JSON.stringify({ok:true,caseOpened:true,roleBoundaries:true,quoteContractProjectInvoice:true,partialAndFullPayment:true,governedReversal:true,closed:true,governedCancellation:true,expensePayment:true,auditReceipts:receipts.count}));
+  console.log(JSON.stringify({ok:true,caseOpened:true,roleBoundaries:true,detailedQuote:true,immutableSnapshot:true,quoteContractProjectInvoice:true,projectPlanSeeded:true,partialAndFullPayment:true,governedReversal:true,closed:true,governedCancellation:true,expensePayment:true,auditReceipts:receipts.count}));
 }finally{
   const cleanupErrors=[];
   const clean=async(label,promise)=>{const {error}=await promise;if(error)cleanupErrors.push(`${label}: ${error.message}`);};
