@@ -27,6 +27,12 @@ test('protects the dashboard for anonymous visitors', async ({ page }) => {
   await expect(page.getByText('Pending Approvals')).toHaveCount(0);
 });
 
+test('protects Owner administration for anonymous visitors', async ({ page }) => {
+  await page.goto('/admin');
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+  await expect(page.getByText('Every permission. Every decision. Clear.')).toHaveCount(0);
+});
+
 test('protects the employee workspace for anonymous visitors', async ({ page }) => {
   await page.goto('/workspace');
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();

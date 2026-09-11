@@ -111,6 +111,27 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-11, Asia/Muscat.
 
+### 2026-09-11 Owner governance and organized company navigation
+
+- `/admin` is now a bilingual Owner/Admin control center and is part of the guarded route manifest. Owner and Super Admin can manage accounts; Admin has an explicit read/review mode. The page combines active-account health, pending governed-agent approvals, the permission map, and the latest 200 audit changes.
+- Account inspection shows roles and lifecycle state side by side. Every role or status mutation requires a written reason. The active caller cannot modify their own roles or status, Owner accounts cannot be suspended or stripped through this workflow, and only an Owner can grant/change Super Admin access. Ownership transfer is intentionally reserved for a future MFA-backed flow.
+- Reid OS navigation is grouped into Overview, Company Operations, Intelligence, and Administration in both Arabic and English. Retired automated QA identities are quarantined, stripped of roles, and excluded from the company-account and audit views; archived real accounts remain available through an explicit filter.
+- Ali (`alialajmi524@gmail.com`) and Sheikha (`sheikhaalmamari4@gmail.com`) are the two configured Owner identities. Both profiles are active and have the Owner role. Sheikha was sent the official Supabase invitation to `https://reidpro.com/admin`; accepting that email remains a human step.
+- Migration `202609110002_owner_governance.sql` is applied and recorded. It corrects future bootstrap behavior so both designated emails receive Owner (the old rule gave Sheikha Admin), backfills any existing profile, and retires the known synthetic QA patterns.
+
+Verification on 2026-09-11:
+
+- `npm run check`: 166/166 Vitest checks and the TypeScript/Vite Production build passed.
+- `npm run test:e2e`: 11/11 public Chromium workflows passed; six credential-gated live role workflows were correctly skipped locally.
+- `npm run qa:admin`: the deployed `manage-account` function granted and removed a role, suspended and reactivated a disposable user, and stored the real Owner actor in the explicit audit receipt. All disposable identities and receipts were cleaned afterward.
+- Authenticated local-browser QA loaded the real Supabase data, rendered the administration page after account hydration, exercised all new Reid OS routes, created/cleaned a finance document, generated a live WhatsApp QR image, found no page exceptions, and found no mobile horizontal overflow.
+
+Still open and must not be presented as complete:
+
+- Sheikha must accept the invitation email before her first interactive sign-in is complete.
+- Secure ownership transfer/recovery and mandatory MFA for L4 actions are not implemented. The current workflow deliberately refuses Owner-role changes instead of providing an unsafe shortcut.
+- Ninety-six legacy synthetic identities still exist as disabled audit history because hard deletion is blocked by their historical foreign-key receipts. They have no roles, cannot pass the active-account gate, and are hidden from the company account/audit views. Deleting that history requires a dedicated retention migration rather than a blind cascade.
+
 ### 2026-09-11 Reid local rebuild foundation
 
 - Active implementation branch is `feature/reid-os-qr`. The production site and authenticated workspace have been rebuilt with a modern, practical bilingual interface while preserving the Reid name and logo. New focused pages cover Today, Operations, Finance, Assistant, QR Connections and the QR Inbox; existing Employee, Projects, Research, CRM and governed Agent Command remain available under the same session/route gate.

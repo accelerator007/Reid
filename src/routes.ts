@@ -19,6 +19,7 @@ export type Page =
   | "finance"
   | "operations"
   | "assistant"
+  | "admin"
   | "login"
   | "apply"
   | "profile"
@@ -75,6 +76,7 @@ export const routes: readonly Route[] = [
   { page: "finance", path: "/finance", authenticated: true, allow: ["owner", "super_admin"] },
   { page: "operations", path: "/operations", authenticated: true, allow: staff },
   { page: "assistant", path: "/assistant", authenticated: true, allow: ["owner", "super_admin", "admin"] },
+  { page: "admin", path: "/admin", authenticated: true, allow: ["owner", "super_admin", "admin"] },
   { page: "privacy", path: "/privacy" },
   { page: "terms", path: "/terms" },
   { page: "data-deletion", path: "/data-deletion" },
