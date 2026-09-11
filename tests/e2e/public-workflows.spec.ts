@@ -11,7 +11,7 @@ test('renders Reid bilingually and offers human handoff only when requested', as
     .poll(() => brandMark.evaluate((el: HTMLImageElement) => el.naturalWidth))
     .toBeGreaterThan(0);
   await page.getByRole('button', { name: 'EN' }).click();
-  await expect(page.getByText('Good ideas. Built for real.')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Good ideas. Built for real.' })).toBeVisible();
   await page.getByRole('button', { name: 'Open Reid Assistant' }).click();
   await expect(page.getByRole('link', { name: /WhatsApp/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Talk to a person' }).click();

@@ -119,11 +119,13 @@ Last verified: 2026-09-11, Asia/Muscat.
 - Cloud API transport is disabled through `REID_WHATSAPP_TRANSPORT=qr` in both Reid and Supabase. The legacy inbox/history is preserved read-only. The webhook accepts internal QR dispatch only with a private bridge credential and explicit Owner phone-to-email mapping; ordinary customer conversations use a separate fixed public assistant with no company data or tools.
 - Personal reminders now move through the QR outbox and become `sent` only after actual WhatsApp delivery is confirmed. Reminders over 30 minutes late become failed/review-required instead of surprising the recipient after downtime.
 - The public website assistant now uses `ai-lap` through the private Reid relay with a fixed public-only prompt and global/per-IP throttles. Authenticated assistant result polling returns the caller's full stored result rather than only the 280-character dashboard preview.
+- `REID_LOCAL_AI_ONLY=1` disables stale-heartbeat and failed-run fallback to Gemini. An unavailable ai-lap now fails visibly rather than sending Reid prompts to an external model.
 
 Verification on 2026-09-11:
 
 - `npm run check`: 164/164 Vitest checks and the TypeScript/Vite Production build passed.
 - `npm test --prefix server`: 7/7 service tests passed, including encrypted session restart, wrong-key rejection, direct-message filtering, human handoff, expiry, no ambiguous resend, phone-number identity and stale-reminder behavior.
+- `npm run test:e2e`: 10/10 public Chromium workflows passed; six credential-gated live role workflows were correctly skipped locally.
 - `npm audit --prefix server --omit=dev --audit-level=high`: 0 vulnerabilities.
 - Live Supabase RLS workflow passed and rolled back its synthetic users/records. All five updated Edge Functions deployed; an unsigned legacy webhook request returned `{transport:"qr",ignored:true}`, proving it cannot activate Cloud API delivery.
 - A real Reid-to-ai-lap request returned the exact sentinel on `gemma4:12b`; the adapter health confirmed both chat and embedding models.
