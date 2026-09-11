@@ -1,0 +1,38 @@
+/* The stage for src/agent-world.tsx. The canvas paints the outpost; everything
+   here is the interface layered over it, so no rule may assume a colour that
+   the renderer also has to know about. */
+.agent-world{position:relative;min-height:690px;border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;background:linear-gradient(var(--world-sky-top),var(--world-sky-bottom));touch-action:none}
+.agent-world-canvas{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none;opacity:0;transition:opacity .6s ease}
+.agent-world[data-ready="true"] .agent-world-canvas{opacity:1}
+
+/* The nameplates are the accessible map: real buttons the renderer only moves. */
+.agent-world-labels{position:absolute;inset:0;pointer-events:none}
+.agent-world-label{position:absolute;top:0;left:0;transform:translate3d(-100vw,0,0);will-change:transform,opacity;pointer-events:auto;display:flex;align-items:center;gap:.4rem;padding:.3rem .55rem .3rem .35rem;border:1px solid var(--line-strong);border-radius:var(--radius-pill);background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(8px);color:var(--ink);cursor:pointer;box-shadow:var(--shadow-sm);transition:border-color .2s,background .2s;white-space:nowrap}
+.agent-world-label:focus-visible{outline:2px solid var(--purple);outline-offset:3px}
+.agent-world-label[data-hovered="true"],.agent-world-label:hover{border-color:var(--purple);background:color-mix(in srgb,var(--card) 96%,transparent)}
+.agent-world-label[data-selected="true"]{border-color:var(--purple);background:linear-gradient(135deg,color-mix(in srgb,var(--purple) 22%,var(--card)),var(--card))}
+.agent-world-label[data-state="blocked"]{opacity:.85}
+.agent-world-label-icon{width:1.45rem;height:1.45rem;display:grid;place-items:center;border-radius:var(--radius-pill);color:var(--on-brand);background:var(--world-district-executive)}
+.agent-world-label[data-domain="delivery"] .agent-world-label-icon{background:var(--world-district-delivery)}
+.agent-world-label[data-domain="growth"] .agent-world-label-icon{background:var(--world-district-growth)}
+.agent-world-label[data-domain="revenue"] .agent-world-label-icon{background:var(--world-district-revenue)}
+.agent-world-label[data-domain="governance"] .agent-world-label-icon{background:var(--world-district-governance)}
+.agent-world-label[data-domain="knowledge"] .agent-world-label-icon{background:var(--world-district-knowledge)}
+.agent-world-label-icon svg{width:.9rem}
+.agent-world-label-text{display:grid;justify-items:start;line-height:1.15}
+.agent-world-label b{font-size:.72rem}
+.agent-world-label small{display:flex;align-items:center;gap:.25rem;font-size:.56rem;color:var(--muted)}
+.agent-world-label small i{width:.4rem;height:.4rem;border-radius:var(--radius-pill);background:var(--muted)}
+.agent-world-label em{display:grid;place-items:center;min-width:1.15rem;height:1.15rem;padding:0 .2rem;border-radius:var(--radius-pill);background:var(--warn);color:var(--on-brand);font-size:.62rem;font-style:normal}
+
+.agent-world-hud{position:absolute;inset-inline:.75rem;bottom:.75rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem;pointer-events:none}
+.agent-world-hint,.agent-world-reset{display:flex;align-items:center;gap:.35rem;padding:.35rem .65rem;border:1px solid var(--line);border-radius:var(--radius-pill);background:color-mix(in srgb,var(--card) 82%,transparent);backdrop-filter:blur(8px);color:var(--muted);font-size:.66rem}
+.agent-world-hint svg,.agent-world-reset svg{width:.85rem}
+.agent-world-reset{pointer-events:auto;color:var(--ink);cursor:pointer}
+.agent-world-reset:hover{border-color:var(--purple);color:var(--purple)}
+.agent-world-loading{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:.5rem;color:var(--muted);font-size:.8rem;background:color-mix(in srgb,var(--bg) 55%,transparent)}
+.agent-world-loading svg{width:1.4rem;animation:agentOrbit 2.4s ease-in-out infinite}
+
+@media(max-width:900px){.agent-world{min-height:520px}}
+@media(max-width:560px){.agent-world{min-height:440px}.agent-world-hint{display:none}.agent-world-label b{font-size:.66rem}.agent-world-label small{font-size:.52rem}}
+@media(prefers-reduced-motion:reduce){.agent-world-canvas{transition:none}.agent-world-loading svg{animation:none}.agent-world-label{transition:none}}

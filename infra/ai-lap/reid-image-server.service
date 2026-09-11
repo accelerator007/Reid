@@ -1,0 +1,21 @@
+[Unit]
+Description=Reid local image generator
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/reid-image/.venv/bin/python %h/reid-ai/reid_image_server.py
+Environment=REID_IMAGE_MODEL=stabilityai/stable-diffusion-xl-base-1.0
+Environment=HF_HOME=%h/.cache/huggingface
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.cache/huggingface
+MemoryMax=24G
+TasksMax=256
+
+[Install]
+WantedBy=default.target

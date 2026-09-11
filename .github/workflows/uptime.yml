@@ -2,7 +2,12 @@ name: Reid uptime
 on:
   schedule: [{cron: '*/15 * * * *'}]
   workflow_dispatch:
-permissions: {contents: read}
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: reid-production-uptime
+  cancel-in-progress: true
 jobs:
   production:
     runs-on: ubuntu-latest
@@ -13,3 +18,15 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          ALLOW_EDGE_CHALLENGE: '1'
+      - name: Open or update an incident
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '[Production incident] Reid uptime check failed';
+            const { data } = await github.rest.issues.listForRepo({ owner: context.repo.owner, repo: context.repo.repo, state: 'open' });
+            const existing = data.find(issue => issue.title === title);
+            const body = `Automated production check failed at ${new Date().toISOString()}.\n\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            if (existing) await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number, body });
+            else await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body });
