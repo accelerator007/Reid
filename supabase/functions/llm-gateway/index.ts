@@ -375,9 +375,23 @@ Deno.serve(async (request) => {
 
     // A suspended account keeps its JWT until expiry, so re-check the control row.
     const control = await admin.from('account_controls').select('status').eq('user_id', requesterId).maybeSingle();
+    if (control.error) throw new Error('authorization_unavailable');
     if (control.data?.status && control.data.status !== 'active') throw new Error('account_not_active');
 
     const action: string = body.action || 'run';
+    if (action === 'result') {
+      // A result belongs to its requester, even if an administrator can inspect
+      // aggregate execution metadata elsewhere. Never return another user's memory.
+      const result=await admin.from('agent_runs').select('id,run_state,output_preview').eq('id',body.runId).eq('requested_by',requesterId).single();
+      if(result.error) throw new Error('run_not_found');
+      let output=result.data.output_preview||'';
+      if(result.data.run_state==='succeeded') {
+        const memory=await admin.from('memories').select('content').eq('source_run_id',result.data.id).eq('created_by',requesterId).order('created_at',{ascending:false}).limit(1).maybeSingle();
+        if(memory.error)throw new Error('result_unavailable');
+        output=memory.data?.content||output;
+      }
+      return Response.json({status:result.data.run_state,output},{headers:cors});
+    }
     const input: string = action === 'tool'
       ? JSON.stringify({ toolName: body.toolName || '', arguments: body.arguments || {} })
       : (body.input || '').toString();
@@ -457,6 +471,7 @@ Deno.serve(async (request) => {
       const fresh = !heartbeat.error && heartbeat.data?.status === 'online'
         && Date.now() - new Date(heartbeat.data.last_seen_at).getTime() < 90_000;
       if (!fresh) {
+        if(Deno.env.get('REID_LOCAL_AI_ONLY')==='1') throw new Error('local_provider_offline');
         const fallback = await admin.from('llm_providers')
           .select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day')
           .eq('id','gemini').eq('enabled',true).maybeSingle();

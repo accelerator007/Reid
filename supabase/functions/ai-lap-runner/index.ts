@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { queueQrText } from '../_shared/qr-transport.ts';
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 const allowedActions = new Set(['run', 'embed']);
@@ -154,9 +155,13 @@ async function bridgeOperation(admin:ReturnType<typeof createClient>,body:Record
 
 async function notifyWhatsApp(admin: ReturnType<typeof createClient>, runId: string, message: string, status: 'completed'|'failed') {
   const token=Deno.env.get('META_WHATSAPP_ACCESS_TOKEN'), phoneId=Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
-  const command=await admin.from('whatsapp_commands').select('id,sender_phone').eq('agent_run_id',runId).maybeSingle();
+  const command=await admin.from('whatsapp_commands').select('id,sender_phone,message_id').eq('agent_run_id',runId).maybeSingle();
   if(!command.data) return;
   await admin.from('whatsapp_commands').update({status,error:status==='failed'?message:null,updated_at:new Date().toISOString()}).eq('id',command.data.id);
+  if(Deno.env.get('REID_WHATSAPP_TRANSPORT')==='qr') {
+    if(command.data.message_id?.startsWith('qr:')) await queueQrText(admin,command.data.sender_phone,message,`result:${runId}:${status}`);
+    return;
+  }
   if(!token || !phoneId) return;
   await fetch(`https://graph.facebook.com/v26.0/${phoneId}/messages`,{
     method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},
@@ -165,6 +170,7 @@ async function notifyWhatsApp(admin: ReturnType<typeof createClient>, runId: str
 }
 
 async function completeWithGeminiFallback(admin: ReturnType<typeof createClient>, runId: string, localError: string) {
+  if(Deno.env.get('REID_LOCAL_AI_ONLY')==='1') throw new Error('local_only_policy');
   const key=Deno.env.get('GEMINI_API_KEY');
   if(!key) throw new Error('gemini_fallback_not_configured');
   const run=await admin.from('agent_runs').select('id,agent_id,requested_by,classification').eq('id',runId).eq('provider_id','ollama').eq('run_state','running').single();

@@ -34,12 +34,12 @@ Never mark a feature complete because its UI exists. Complete means the UI, data
 - Client: React 19, Vite 7, TypeScript.
 - Data/auth: Supabase project `Reid`, ref `pkogchbrknwmzefjklkr`, Mumbai region.
 - Database: PostgreSQL with RLS, audit triggers, and pgvector.
-- Production hosting: Cloudflare Worker `reid` with static assets, Git-connected to `main`, custom domain `reidpro.com`.
+- Production hosting: the `Reid` Ubuntu host runs the web/API containers; Cloudflare Tunnel `reid-local` privately publishes them at `reidpro.com`. The old Worker is retained without the production custom-domain attachment for rollback.
 - Staging hosting: Cloudflare Pages project `reid-staging`, Git-connected to `develop`, custom domain `staging.reidpro.com`.
 - Branches: `feature/*` -> PR to `develop` -> verified PR to `main`.
 - Model providers are rows in `llm_providers`, not hard-coded hosts. `ollama` (local, `ai-lap`) is the preferred provider and ships disabled; `gemini` (external, Google Gemini API) is enabled as the temporary substitute while `ai-lap` is offline.
 - The Gemini account is on the **free tier**, confirmed by the Owner on 2026-09-04. Free-tier content may be reused to improve Google products, so the provider is capped at `public` data: only material that is already publishable may be sent. Raising the cap requires a paid tier and a recorded Owner decision.
-- Local AI: Ollama on `ai-lap`. The host was offline during the 2026-09-02 audit; never claim live AI integration until it is retested. The Gemma 4 family exists (the Gemini API lists `gemma-4-26b-a4b-it` and `gemma-4-31b-it`), but the exact `gemma4:12b` Ollama tag must be confirmed on the host before the local provider is enabled.
+- Local AI: Ollama on `ai-lap`, exact model `gemma4:12b`. It is reached from Reid only through a restricted private SSH forward to the authenticated loopback adapter; neither Ollama nor the adapter is publicly exposed.
 
 ## Critical paths
 
@@ -118,8 +118,70 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 ## Implemented and verified
 
-Last verified: 2026-09-09, Asia/Muscat.
+Last verified: 2026-09-11, Asia/Muscat.
 
+### 2026-09-11 Owner governance and organized company navigation
+
+- `/admin` is now a bilingual Owner/Admin control center and is part of the guarded route manifest. Owner and Super Admin can manage accounts; Admin has an explicit read/review mode. The page combines active-account health, pending governed-agent approvals, the permission map, and the latest 200 audit changes.
+- Account inspection shows roles and lifecycle state side by side. Every role or status mutation requires a written reason. The active caller cannot modify their own roles or status, Owner accounts cannot be suspended or stripped through this workflow, and only an Owner can grant/change Super Admin access. Ownership transfer is intentionally reserved for a future MFA-backed flow.
+- Reid OS navigation is grouped into Overview, Company Operations, Intelligence, and Administration in both Arabic and English. Retired automated QA identities are quarantined, stripped of roles, and excluded from the company-account and audit views; archived real accounts remain available through an explicit filter.
+- Ali (`alialajmi524@gmail.com`) and Sheikha (`sheikhaalmamari4@gmail.com`) are the two configured Owner identities. Both profiles are active and have the Owner role. Sheikha was sent the official Supabase invitation to `https://reidpro.com/admin`; accepting that email remains a human step.
+- Migration `202609110002_owner_governance.sql` is applied and recorded. It corrects future bootstrap behavior so both designated emails receive Owner (the old rule gave Sheikha Admin), backfills any existing profile, and retires the known synthetic QA patterns.
+
+Verification on 2026-09-11:
+
+- `npm run check`: 192/192 Vitest checks and the TypeScript/Vite Production build passed after merging current `develop`.
+- `npm run test:e2e`: all 17 runnable Chromium workflows passed (11 public/access routes and six 3D-agent-world workflows); six credential-gated live role workflows were correctly skipped locally.
+- `npm test --prefix server`: 7/7 Reid QR service tests passed. `npm test --prefix infra/whatsapp-bridge`: 30/30 isolated bridge, policy, reminder, and generated-artifact tests passed.
+- `npm run qa:admin`: the deployed `manage-account` function granted and removed a role, suspended and reactivated a disposable user, and stored the real Owner actor in the explicit audit receipt. All disposable identities and receipts were cleaned afterward.
+- Authenticated local-browser QA loaded the real Supabase data, rendered the administration page after account hydration, exercised all new Reid OS routes, created/cleaned a finance document, generated a live WhatsApp QR image, found no page exceptions, and found no mobile horizontal overflow.
+
+Still open and must not be presented as complete:
+
+- Sheikha must accept the invitation email before her first interactive sign-in is complete.
+- Secure ownership transfer/recovery and mandatory MFA for L4 actions are not implemented. The current workflow deliberately refuses Owner-role changes instead of providing an unsafe shortcut.
+- Ninety-six legacy synthetic identities still exist as disabled audit history because hard deletion is blocked by their historical foreign-key receipts. They have no roles, cannot pass the active-account gate, and are hidden from the company account/audit views. Deleting that history requires a dedicated retention migration rather than a blind cascade.
+
+### 2026-09-11 Reid local rebuild foundation
+
+- Active implementation branch is `feature/reid-os-qr`. The production site and authenticated workspace have been rebuilt with a modern, practical bilingual interface while preserving the Reid name and logo. New focused pages cover Today, Operations, Finance, Assistant, QR Connections and the QR Inbox; existing Employee, Projects, Research, CRM and governed Agent Command remain available under the same session/route gate.
+- Supabase remains the system of record. Migration `202609110001_reid_os_qr.sql` is applied and recorded in remote migration history. It adds Owner-only QR message/job/outbox storage, scoped operational records and Owner/Super Admin finance documents with RLS, transition guards and audit receipts.
+- Reid hosts the QR linked-device service. Session credentials and Signal keys are encrypted at rest in a persistent SQLite volume with a separate 32-byte key outside Git; outbound messages use a durable idempotent outbox, and ambiguous delivery is never retried automatically.
+- Cloud API transport is disabled through `REID_WHATSAPP_TRANSPORT=qr` in both Reid and Supabase. The legacy inbox/history is preserved read-only. The webhook accepts internal QR dispatch only with a private bridge credential and explicit Owner phone-to-email mapping; ordinary customer conversations use a separate fixed public assistant with no company data or tools.
+- Personal reminders now move through the QR outbox and become `sent` only after actual WhatsApp delivery is confirmed. Reminders over 30 minutes late become failed/review-required instead of surprising the recipient after downtime.
+- The public website assistant now uses `ai-lap` through the private Reid relay with a fixed public-only prompt and global/per-IP throttles. Authenticated assistant result polling returns the caller's full stored result rather than only the 280-character dashboard preview.
+- `REID_LOCAL_AI_ONLY=1` disables stale-heartbeat and failed-run fallback to Gemini. An unavailable ai-lap now fails visibly rather than sending Reid prompts to an external model.
+
+Verification on 2026-09-11:
+
+- `npm run check`: 164/164 Vitest checks and the TypeScript/Vite Production build passed.
+- `npm test --prefix server`: 7/7 service tests passed, including encrypted session restart, wrong-key rejection, direct-message filtering, human handoff, expiry, no ambiguous resend, phone-number identity and stale-reminder behavior.
+- `npm run test:e2e`: 10/10 public Chromium workflows passed; six credential-gated live role workflows were correctly skipped locally.
+- `npm audit --prefix server --omit=dev --audit-level=high`: 0 vulnerabilities.
+- Live Supabase RLS workflow passed and rolled back its synthetic users/records. All five updated Edge Functions deployed; an unsigned legacy webhook request returned `{transport:"qr",ignored:true}`, proving it cannot activate Cloud API delivery.
+- A real Reid-to-ai-lap request returned the exact sentinel on `gemma4:12b`; the adapter health confirmed both chat and embedding models.
+- Authenticated Playwright QA rendered Today, Finance, Operations, Assistant, Connections and Inbox, created/cleaned an actual finance row, generated a real QR image, and found no page exceptions or mobile horizontal overflow.
+
+Still open and must not be presented as complete:
+
+- The Reid phone has not yet scanned the current QR, so real inbound/outbound WhatsApp and reminder acceptance cannot be claimed. Media, voice notes, historical sync and groups are intentionally absent from this text-first release.
+- Finance is a controlled document/collection register, not an accounting ledger, bank integration, tax engine or payment rail. Existing Employee, Project, CRM and Research workflows were preserved, not comprehensively redesigned in this increment.
+- QR linked-device automation uses an unofficial library. It may require relinking after a WhatsApp protocol/session change and must be monitored accordingly.
+
+- The hosting foundation began on `feature/local-rebuild` and continued on `feature/reid-os-qr`; the local origin and tunnel have now passed cutover verification.
+- Added a reproducible Docker build for the React application, an unprivileged local-only origin on `127.0.0.1:8080`, an Nginx SPA fallback, a dedicated `/healthz` probe, immutable asset caching, baseline response headers, and automatic container restart.
+- Per the Owner's 2026-09-11 decision, database, Auth, Storage, Realtime, and Edge Functions remain on the existing Supabase project. "Local hosting" means the web origin runs on Reid; it does not mean moving Supabase data to the host.
+
+Verification log:
+
+- Pending: `npm run check` on `feature/local-rebuild`.
+- Pending: `docker compose build` and `/healthz` on the Reid host.
+- Cloudflare Tunnel `reid-local` was created for the Reid host. Its credential is stored outside the repository; `local.reidpro.com` is the pre-cutover verification hostname.
+- Local Supabase startup was cancelled before any containers or database volumes were created. No production data or Supabase configuration was changed.
+- `local.reidpro.com` passed external HTTPS, all declared application routes, tunnel redundancy, production Supabase configuration, and a live PostgREST request on 2026-09-11.
+- The Nginx origin emits `X-Reid-Origin: local-reid` so post-cutover probes can prove traffic reached Reid instead of the previous Cloudflare Worker.
+- Production cutover completed on 2026-09-11: the old Worker custom-domain attachment was removed and `reidpro.com` plus `www.reidpro.com` were routed to `reid-local`. The Worker itself was retained for rollback; only its production-domain attachment changed.
+- Post-cutover verification passed for `/`, `/login`, `/privacy`, `/dashboard`, `/workspace`, `/projects`, `/research`, and `/crm`; every response returned HTTP 200 with `X-Reid-Origin: local-reid`. The web and tunnel containers are healthy, use `restart: unless-stopped`, and Docker is enabled at boot.
 ### 2026-09-09 the outpost was modelled rather than assembled
 
 - The robots are built, not implied. Each is 1.85 m of painted shell over dark machined limbs, with a jointed neck, shoulders, elbows, hips and knees, standing at a 0.74 m desk with a chair, a monitor, a keyboard and a mug. The whole world is modelled in metres, which is most of what separates a scene that looks built from one that looks assembled from primitives.
