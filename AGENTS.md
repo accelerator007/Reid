@@ -120,6 +120,29 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-11, Asia/Muscat.
 
+### 2026-09-11 commercial documents and project kickoff
+
+- Finance now has a bilingual commercial-document workspace rather than a single amount field. Owner/Super Admin can create and edit drafts with up to 100 validated line items, quantity, unit price, discount, document-level tax rate, due/validity dates, terms and supported currency. PostgreSQL—not the browser—calculates subtotal, tax and final amount.
+- Business Flow collects the quote lines when Sales moves an opportunity to Quoted. Contract approval freezes that quote, invoice issuance copies its exact approved economics, and starting delivery creates a bilingual kickoff milestone plus an assigned planning task. The estimate on the CRM deal/business case is updated to the database-calculated quote total.
+- Issuing a quote, invoice or expense stores an immutable private snapshot of Reid, the customer/supplier, line items, totals, dates and terms. Later edits to the Owner-only company identity cannot rewrite history. The Finance preview uses that frozen copy and provides a clean A4 browser print / Save as PDF path in Arabic or English.
+- Reid's legal, contact and payment identity is editable only by Owner/Super Admin. Its general audit receipt deliberately stores no CR, VAT, IBAN or bank values. Sales, Admin, employees and guests cannot read the table; Sales can still issue a case-bound quote through the narrow governed function without gaining finance-ledger access.
+- Migrations `202609110009_commercial_documents.sql` and `202609110010_finance_calculator_permission.sql` are applied and recorded in Production. The second grants only the immutable JSON arithmetic helper needed by hosted Supabase's authenticated trigger execution; the helper reads no table or company data.
+
+Verification on 2026-09-11:
+
+- `npm run check`: 200/200 Vitest checks and the TypeScript/Vite Production build passed; `git diff --check` passed.
+- `npm run test:e2e`: all 18 runnable Chromium workflows passed; six credential-gated live role workflows were correctly skipped locally. Application, Reid service and QR bridge dependency audits report zero known vulnerabilities at their enforced thresholds.
+- The isolated PostgreSQL 16 harness applied every migration and passed commercial documents 20/20, business lifecycle 36/36, CRM 15/15, and WhatsApp 14/14.
+- Live `npm run qa:business` used disposable Sales, Admin and Owner identities to issue a two-line discounted/taxed quote, reject issued-line tampering, approve the contract, seed delivery, copy the quote into an invoice, collect/reverse/recollect/close it, cancel a separate flow, and pay a company expense. It produced 84 audit receipts and its mandatory cleanup completed.
+- Production browser QA rendered Today, Business, Finance, Operations, Assistant, Admin, Connections and Inbox, loaded the real QR, created/previewed/issued a detailed invoice, issued/paid an expense, and cleaned its disposable Owner and documents. Desktop and 390px finance/business/workspace views had no JavaScript exception or document overflow.
+- `https://reidpro.com/finance` returned HTTP 200 with `X-Reid-Origin: local-reid`; `reid-web`, `reid-services`, `reid-ai-relay`, and `reid-tunnel` were running, with both health-checked containers healthy.
+
+Still open and must not be presented as complete:
+
+- Browser printing can save a compliant-looking PDF, but Reid does not yet cryptographically sign documents, email/share them to a customer portal, generate Oman Tax Authority e-invoice payloads, or file a VAT return.
+- Finance remains a governed commercial/collection subledger, not double-entry accounting, bank reconciliation, payment gateway, payroll, or a tax-return engine.
+- Mandatory MFA for L4 payment and ownership actions remains a release gate before any real electronic payment execution is enabled. Current collection records an external receipt; it never moves money.
+
 ### 2026-09-11 unified business lifecycle
 
 - `/business` is the bilingual operating spine for the company: a CRM deal becomes one durable business case that moves through Opportunity, Quote, Contract, Delivery, Invoice, Collection and Close. The database creates and links the quote, contract work record, private delivery project and invoice atomically instead of relying on operators to reconcile separate modules.
@@ -140,8 +163,7 @@ Verification on 2026-09-11:
 
 Still open and must not be presented as complete:
 
-- Finance is now a controlled commercial and collection subledger, but not yet a double-entry accounting system, bank feed, payment gateway, VAT return engine, e-signature service, or PDF quote/invoice generator.
-- Line-item, discount and tax columns are reserved in the schema; their production editing/approval interface and immutable document snapshots remain the next finance increment.
+- Finance is now a controlled commercial and collection subledger with line items and browser print/PDF output, but not yet a double-entry accounting system, bank feed, payment gateway, VAT return engine, tax-authority e-invoice generator, e-signature service, or customer delivery portal.
 - Mandatory MFA for L4 payment and ownership actions remains a release gate before real electronic payment execution can be enabled. Current recording documents an external receipt; it never moves money.
 
 ### 2026-09-11 Owner governance and organized company navigation
