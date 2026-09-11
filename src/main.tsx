@@ -18,12 +18,13 @@ import { EmployeeWorkspace } from "./employee";
 import { ProjectWorkspace } from "./projects";
 import { AgentCommand } from "./agent-command";
 import { AdminWorkspace } from "./admin-workspace";
+import { BusinessFlow } from "./business-flow";
 import { Today, Operations, Finance, AssistantWorkspace } from "./os-workspace";
 import { Connections, QrInbox } from "./qr-workspace";
 import { PublicHome } from "./public-home";
 import { ResearchWorkspace } from "./research";
 import { CrmWorkspace } from "./crm";
-import { Building2, FolderKanban, FlaskConical, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X, CalendarDays, Wallet, Settings2, BriefcaseBusiness, Search, ShieldCheck } from "lucide-react";
+import { Building2, FolderKanban, FlaskConical, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X, CalendarDays, Wallet, Settings2, BriefcaseBusiness, Search, ShieldCheck, Workflow } from "lucide-react";
 // Imported rather than written as a literal URL. The assets directory sits
 // outside Vite's public directory, so a hard-coded path is never emitted to
 // dist and the header mark 404s in production while still resolving in dev.
@@ -1318,6 +1319,7 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
     case "inbox": return lang === "ar" ? "المحادثات" : "Inbox";
     case "connections": return lang === "ar" ? "الاتصالات" : "Connections";
     case "finance": return lang === "ar" ? "المالية" : "Finance";
+    case "business": return lang === "ar" ? "دورة العمل" : "Business flow";
     case "operations": return lang === "ar" ? "إدارة الأعمال" : "Operations";
     case "assistant": return lang === "ar" ? "مساعد ريّد" : "Reid assistant";
     case "admin": return lang === "ar" ? "إدارة النظام" : "Administration";
@@ -1345,6 +1347,7 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
 const workspaceIcons: Partial<Record<Page, React.ReactNode>> = {
   today: <CalendarDays />, inbox: <MessageCircle />, connections: <Settings2 />,
   finance: <Wallet />, operations: <BriefcaseBusiness />, assistant: <Sparkles />,
+  business: <Workflow />,
   admin: <ShieldCheck />,
   dashboard: <LayoutDashboard />, workspace: <UsersRound />, projects: <FolderKanban />,
   research: <FlaskConical />, crm: <Handshake />, profile: <UserRound />,
@@ -1354,7 +1357,7 @@ function WorkspaceSidebar({ lang, page, navigation, open, go, signout }: { lang:
   const t = tr[lang];
   const groups:{ar:string;en:string;pages:Page[]}[] = [
     {ar:"نظرة سريعة",en:"Overview",pages:["today","inbox"]},
-    {ar:"تشغيل الشركة",en:"Company operations",pages:["projects","crm","workspace","operations","finance","research"]},
+    {ar:"تشغيل الشركة",en:"Company operations",pages:["business","projects","crm","workspace","operations","finance","research"]},
     {ar:"الذكاء",en:"Intelligence",pages:["assistant","dashboard"]},
     {ar:"الإدارة",en:"Administration",pages:["admin","connections","profile"]},
   ];
@@ -1398,7 +1401,7 @@ function Chrome({ session }: { session: Session | null }) {
   );
   const navigation = useNavigation();
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const internalPage = session && ["today", "inbox", "connections", "finance", "operations", "assistant", "admin", "dashboard", "workspace", "projects", "research", "crm", "profile"].includes(page);
+  const internalPage = session && ["today", "inbox", "connections", "business", "finance", "operations", "assistant", "admin", "dashboard", "workspace", "projects", "research", "crm", "profile"].includes(page);
   React.useEffect(() => {
     const client = supabase;
     if (!session || !client) return;
@@ -1449,12 +1452,13 @@ function Chrome({ session }: { session: Session | null }) {
       </header>
       {internalPage && <WorkspaceSidebar lang={lang} page={page} navigation={navigation} open={menuOpen} go={(target) => { setMenuOpen(false); go(target); }} signout={async () => { await supabase?.auth.signOut(); go("home"); }} />}
       {page === "home" && <><PublicHome lang={lang} go={go} /><Chat lang={lang} /></>}
-      {(["today", "inbox", "connections", "finance", "operations", "assistant", "admin"] as Page[]).includes(page) && (
+      {(["today", "inbox", "connections", "business", "finance", "operations", "assistant", "admin"] as Page[]).includes(page) && (
         <Guarded page={page} lang={lang} renderSignIn={() => <Login lang={lang} done={() => go(page)} apply={() => go("apply")} />} onProfile={() => go("profile")}>
           {page === "today" && <Today lang={lang} go={go} />}
           {page === "inbox" && <QrInbox lang={lang} go={go} />}
           {page === "connections" && <Connections lang={lang} go={go} />}
-          {page === "finance" && <Finance lang={lang} />}
+          {page === "finance" && <Finance lang={lang} go={go} />}
+          {page === "business" && <BusinessFlow lang={lang} go={go} />}
           {page === "operations" && <Operations lang={lang} />}
           {page === "assistant" && <AssistantWorkspace lang={lang} />}
           {page === "admin" && <AdminWorkspace lang={lang} go={go} />}

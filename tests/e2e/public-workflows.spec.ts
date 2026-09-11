@@ -33,6 +33,12 @@ test('protects Owner administration for anonymous visitors', async ({ page }) =>
   await expect(page.getByText('Every permission. Every decision. Clear.')).toHaveCount(0);
 });
 
+test('protects the company business flow for anonymous visitors', async ({ page }) => {
+  await page.goto('/business');
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+  await expect(page.getByText('From first opportunity to final collection.')).toHaveCount(0);
+});
+
 test('protects the employee workspace for anonymous visitors', async ({ page }) => {
   await page.goto('/workspace');
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
