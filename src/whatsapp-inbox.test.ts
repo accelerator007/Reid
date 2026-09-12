@@ -47,6 +47,12 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("notifyOwners");
     expect(webhook).toContain("ADMIN_NOTIFICATION_EMAILS");
     expect(webhook).toContain("owner_notification_failed");
+    expect(webhook).toContain("humanHandoff");
+    expect(webhook).toContain("'handoff'");
+    expect(webhook).toContain("عميل واتساب يطلب موظفًا");
+    expect(qrService).toContain("if(result.handoff)");
+    expect(qrService).toContain("bot_mode:'human'");
+    expect(qrService).toContain("إذا تريد تتكلم مع شخص من فريق ريّد اكتب: موظف");
   });
 
   it("maps each WhatsApp Owner to separate context and redacts obvious secrets", () => {
@@ -94,6 +100,11 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(qrService).toContain("if(!item.addressed)");
     expect(qrService).toContain("async function persistInbound");
     expect(qrService).toContain("setTimeout(resolve,300)");
+    expect(qrService).toContain("authorizedGroupOwner(item.senderPhone)");
+    expect(qrService).toContain(".replace(/[\\u0000-\\u001f\\u007f]/g");
+    expect(qrService).toContain("startsWith('Closing session:')");
+    expect(qrService).toContain("conversation_insert");
+    expect(qrService).not.toContain("stage='conversation_upsert'");
   });
 
   it("accepts typed Arabic approval and rejection for the latest pending command", () => {
