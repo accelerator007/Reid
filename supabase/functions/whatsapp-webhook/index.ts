@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { queueQrText, withQrDispatch } from '../_shared/qr-transport.ts';
+import { queueQrText, targetQrConversation, withQrDispatch } from '../_shared/qr-transport.ts';
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
@@ -163,10 +163,11 @@ const redactSecrets=(value:string)=>value
   .replace(/(password|كلمة المرور|secret|api[_ -]?key)\s*[:=]?\s*\S+/gi,'$1 [محذوف]')
   .slice(0,1200);
 
-async function personalizedInput(admin:any, conversationId:string, identity:AdminIdentity, current:string) {
+async function personalizedInput(admin:any, conversationId:string, identity:AdminIdentity, current:string, ownerGroup=false) {
   const history=await admin.from('whatsapp_messages').select('direction,body,created_at').eq('conversation_id',conversationId).not('body','is',null).order('created_at',{ascending:false}).limit(12);
   const lines=(history.data || []).reverse().map((item:any)=>`${item.direction==='inbound'?'المسؤول':'ريّد'}: ${redactSecrets(String(item.body))}`);
-  return `أنت مساعد ${identity.full_name} الشخصي ورئيس مكتبه الرقمي، وفي الوقت نفسه مختص معتمد في نظام شركة ريّد. صلاحيات الحساب: ${identity.roles.join(', ')}. تحدث معه طبيعيًا وذكيًا وبنفس لغته ولهجته، وأجب مباشرة عن التحية والأسئلة العامة وأسئلة قدراتك من دون طلب موافقة. ساعده في الصياغة والتخطيط وترتيب الأولويات والتذكيرات والمواعيد. عند ارتباط الطلب بالشركة استخدم سياق ريّد والوكيل والأدوات المصرح بها، وميّز بوضوح بين إجابة أو اقتراح وبين فعل حقيقي. الموافقة مطلوبة فقط عند استدعاء أداة تنفيذية بمستوى L2-L4، وليست مطلوبة للمحادثة أو التحليل. اجعل الحوار متكيفًا: إذا كان الطلب واضحًا فأجب مباشرة؛ إذا نقصته معلومة فاسأل سؤالًا واحدًا محددًا؛ وإذا كان الاختيار سيسهّل القرار فاختم بسطر وحيد بصيغة "خيارات: خيار قصير | خيار قصير | خيار قصير" مع خيارين أو ثلاثة فقط، ولا تستخدم هذا السطر عندما لا يفيد. كل خيار يجب ألا يتجاوز 20 حرفًا. طابق ملف أسلوبه المجمع باحترام من غير تقليد مبالغ أو ادعاء معرفة شخصية. ملف الأسلوب: ${JSON.stringify(identity.style_profile)}. لا تنفذ إجراءً أو تدّعي إنشاء تذكير أو مهمة إلا بعد نتيجة أداة فعلية. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
+  const groupPersonality=ownerGroup?'هذه محادثة داخل مجموعة المالك الخاصة. يجوز لك إظهار انزعاج أو حماس أو مزح خليجي واضح، واستخدام أي إيموجي مناسب—including 🖕🏻—فقط عندما يبدأ المالك مزحًا صريحًا أو يطلب ذلك. يجوز رد ساخر أو شتيمة عامية خفيفة وغير جارحة في المزاح المتبادل، لكن لا تبدأ بالإهانة، ولا تكررها، ولا تهدد أو تحرّض أو تهين فئة محمية أو عميلًا أو موظفًا، ولا تستخدمها في المال أو الموارد البشرية أو الأزمات أو أي سياق رسمي. إذا ظهرت جدية أو ضيق حقيقي فاهدأ وتعاطف فورًا.':'هذه محادثة إدارية خاصة؛ حافظ على الدفء والإيموجي المناسب من دون شتائم أو إشارات جارحة.';
+  return `أنت مساعد ${identity.full_name} الشخصي ورئيس مكتبه الرقمي، وفي الوقت نفسه مختص معتمد في نظام شركة ريّد. صلاحيات الحساب: ${identity.roles.join(', ')}. تحدث معه بخليجي عُماني طبيعي وذكي ودافئ، وبنفس لغته ولهجته. التقط نبرة الكلام وتفاعل معها بلباقة وتعاطف وروح خفيفة حين يناسب، من غير تصنع أو مبالغة أو ادعاء امتلاك مشاعر بشرية. استخدم طيف الإيموجي كاملًا بذكاء عندما يضيف إحساسًا أو يوضح نجاحًا أو تنبيهًا، وطابق معدل استخدامه في ملف الأسلوب؛ لا تضع إيموجي في كل جملة ولا تستخدم إيموجيًا مرحًا مع موضوع حساس. ${groupPersonality} أجب مباشرة عن التحية والأسئلة العامة وأسئلة قدراتك من دون طلب موافقة. ساعده في الصياغة والتخطيط وترتيب الأولويات والتذكيرات والمواعيد. عند ارتباط الطلب بالشركة استخدم سياق ريّد والوكيل والأدوات المصرح بها، وميّز بوضوح بين إجابة أو اقتراح وبين فعل حقيقي. الموافقة مطلوبة فقط عند استدعاء أداة تنفيذية بمستوى L2-L4، وليست مطلوبة للمحادثة أو التحليل. اجعل الحوار متكيفًا: إذا كان الطلب واضحًا فأجب مباشرة؛ إذا نقصته معلومة فاسأل سؤالًا واحدًا محددًا؛ وإذا كان الاختيار سيسهّل القرار فاختم بسطر وحيد بصيغة "خيارات: خيار قصير | خيار قصير | خيار قصير" مع خيارين أو ثلاثة فقط، ولا تستخدم هذا السطر عندما لا يفيد. كل خيار يجب ألا يتجاوز 20 حرفًا. طابق ملف أسلوبه المجمع باحترام من غير تقليد مبالغ أو ادعاء معرفة شخصية. ملف الأسلوب: ${JSON.stringify(identity.style_profile)}. لا تنفذ إجراءً أو تدّعي إنشاء تذكير أو مهمة إلا بعد نتيجة أداة فعلية. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
 }
 
 async function learnAdminMessage(admin:any, identity:AdminIdentity, text:string) {
@@ -280,13 +281,14 @@ async function handleRequest(request: Request) {
     const expected=Deno.env.get('REID_QR_BRIDGE_TOKEN')||'';
     if(!expected||!secureEqual(expected,request.headers.get('x-reid-qr-token')||'')) return json({received:true,transport:'qr',ignored:true});
     const body=await request.json();
-    const job=await admin.from('qr_jobs').select('message_id,input,state,expires_at,qr_conversations(jid,display_name,bot_mode)').eq('message_id',body.messageId).single();
+    const job=await admin.from('qr_jobs').select('message_id,input,sender_phone,state,expires_at,qr_conversations(id,jid,display_name,bot_mode)').eq('message_id',body.messageId).single();
     if(job.error||job.data.state!=='running'||Date.parse(job.data.expires_at)<Date.now()) return json({error:'qr_job_unavailable'},409);
     const chat:any=job.data.qr_conversations;
     if(chat.bot_mode!=='active') return json({handled:true,paused:true});
-    const phone=String(chat.jid).replace(/@s\.whatsapp\.net$/,'');
+    targetQrConversation(chat.id);
+    const phone=String(job.data.sender_phone||chat.jid).replace(/@s\.whatsapp\.net$/,'');
     try { await adminIdentity(admin,phone); } catch { return json({handled:false}); }
-    payload={entry:[{changes:[{value:{messages:[{id:'qr:'+job.data.message_id,from:phone,type:'text',text:{body:job.data.input}}],contacts:[{wa_id:phone,profile:{name:chat.display_name}}]}}]}]};
+    payload={entry:[{changes:[{value:{messages:[{id:'qr:'+job.data.message_id,from:phone,type:'text',text:{body:job.data.input},qr_group:String(chat.jid).endsWith('@g.us')}],contacts:[{wa_id:phone,profile:{name:chat.display_name}}]}}]}]};
   } else {
     const raw=await request.text();
     if(!(await validSignature(request,raw))) return json({error:'invalid_signature'},401);
@@ -323,7 +325,7 @@ async function handleRequest(request: Request) {
     const conversationId=conversationResult.data.id;
     const incomingText=message?.text?.body?.trim() || message?.interactive?.button_reply?.title || null;
     await admin.from('whatsapp_messages').insert({ conversation_id:conversationId, meta_message_id:message.id, direction:'inbound', message_type:message.type||'unknown', body:incomingText, delivery_status:'received' });
-    try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
+    if(!message.qr_group)try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
     if(!isQR && conversationResult.data.bot_mode!=='active') continue;
     if(incomingText) await learnAdminMessage(admin,identity,incomingText);
     const buttonId = message?.interactive?.button_reply?.id || message?.button?.payload || '';
@@ -426,7 +428,7 @@ async function handleRequest(request: Request) {
     const command=await admin.from('whatsapp_commands').insert({ sender_phone:message.from,message_id:message.id,command_text:text,status:'received' }).select('id').single();
     if(command.error) throw command.error;
     try {
-      const input=await personalizedInput(admin,conversationId,identity,text);
+      const input=await personalizedInput(admin,conversationId,identity,text,Boolean(message.qr_group));
       const result=await gateway({action:'run',agentId:agentFor(text),input,requesterId:identity.id});
       const runId=result.run?.id || result.runId;
       if(result.status==='pending_approval') {

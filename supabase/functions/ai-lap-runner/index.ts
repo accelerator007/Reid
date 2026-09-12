@@ -160,7 +160,10 @@ async function notifyWhatsApp(admin: ReturnType<typeof createClient>, runId: str
   if(!command.data) return;
   await admin.from('whatsapp_commands').update({status,error:status==='failed'?message:null,updated_at:new Date().toISOString()}).eq('id',command.data.id);
   if(Deno.env.get('REID_WHATSAPP_TRANSPORT')==='qr') {
-    if(command.data.message_id?.startsWith('qr:')) await queueQrText(admin,command.data.sender_phone,message,`result:${runId}:${status}`);
+    if(command.data.message_id?.startsWith('qr:')) {
+      const qrJob=await admin.from('qr_jobs').select('conversation_id').eq('message_id',command.data.message_id.slice(3)).maybeSingle();
+      await queueQrText(admin,command.data.sender_phone,message,`result:${runId}:${status}`,qrJob.data?.conversation_id);
+    }
     return;
   }
   if(!token || !phoneId) return;
