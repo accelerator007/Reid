@@ -120,6 +120,25 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 Last verified: 2026-09-11, Asia/Muscat.
 
+### 2026-09-11 Owner operating brief
+
+- `/owner` is the Owner/Super Admin-only bilingual operating brief. It brings together active company accounts, projects and business cases; 30-day invoicing/collection; outstanding and overdue receivables; pending approvals/applications; overdue tasks; stalled cases; agent failures; six-month OMR collection history; stage distribution; and the eight receivables/projects needing attention.
+- The page links each signal back to Finance, Business Flow, Projects, Administration or the Agent Command center. It explicitly labels financial aggregates as OMR-only rather than silently combining currencies, and it does not invent margin, profit, tax liability or bank-balance metrics that the current subledger cannot support.
+- Migration `202609110011_owner_company_snapshot.sql` is applied and recorded in Production. The fixed, zero-argument `SECURITY DEFINER` function rejects Admin, Employee and unauthenticated callers before querying, uses an empty search path and fully qualified relations, returns bounded lists, and performs no mutation.
+
+Verification on 2026-09-11:
+
+- `npm run check`: 202/202 Vitest route, authorization, design-token and application checks passed with the Production build.
+- `npm run test:e2e`: all 19 runnable Chromium workflows passed, including anonymous rejection at `/owner`; six credential-gated live role workflows were correctly skipped locally.
+- The isolated PostgreSQL 16 harness passed commercial/Owner checks 23/23, business lifecycle 36/36, CRM 15/15 and WhatsApp 14/14. It proves the Owner snapshot succeeds for Owner and is rejected for Admin and Employee.
+- Supabase schema lint returned zero errors before the single migration was applied. Production browser QA rendered the live Owner brief and every Reid OS page with a disposable Owner, then exercised commercial documents and cleaned all fixtures. The 390px Owner/Finance/Business/Today views had no JavaScript exception or document overflow. Live `npm run qa:business` also verified the Owner snapshot, rejected Admin, completed the governed commercial lifecycle and cleaned all temporary identities with 84 audit receipts.
+- Production `reid-web` rebuilt healthy on Reid; the Cloudflare tunnel continued to serve the local origin.
+
+Still open and must not be presented as complete:
+
+- The Owner brief is an operational snapshot, not audited financial statements. Profit, cash-at-bank, double-entry ledgers, tax liability, forecasts and budget variance require accounting-grade source data before they may be shown.
+- Thresholds are currently fixed (14-day stalled case and normal due-date semantics). Owner-configurable targets, monthly board packs and scheduled exception alerts remain future increments.
+
 ### 2026-09-11 commercial documents and project kickoff
 
 - Finance now has a bilingual commercial-document workspace rather than a single amount field. Owner/Super Admin can create and edit drafts with up to 100 validated line items, quantity, unit price, discount, document-level tax rate, due/validity dates, terms and supported currency. PostgreSQL—not the browser—calculates subtotal, tax and final amount.

@@ -30,7 +30,7 @@ try{
   const ctx=await browser.newContext({viewport:{width:1440,height:1000},colorScheme:'light'});
   await ctx.addInitScript(session=>localStorage.setItem('sb-pkogchbrknwmzefjklkr-auth-token',JSON.stringify(session)),signed.data.session);
   const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('dialog',dialog=>void dialog.accept());
-  for(const [route,heading] of [['today','أهلًا'],['business','أول فرصة'],['finance','وضوح'],['operations','التفاصيل'],['assistant','فكرتك'],['admin','كل صلاحية'],['connections','كل أدواتك'],['inbox','كل محادثة']]){
+  for(const [route,heading] of [['owner','الشركة في صورة'],['today','أهلًا'],['business','أول فرصة'],['finance','وضوح'],['operations','التفاصيل'],['assistant','فكرتك'],['admin','كل صلاحية'],['connections','كل أدواتك'],['inbox','كل محادثة']]){
     await page.goto(`${base}/${route}`);await page.getByRole('heading',{name:new RegExp(heading)}).first().waitFor({timeout:20000});if(route==='admin')await page.getByText('Sheikha Almamari',{exact:true}).waitFor({timeout:20000});else await pause(1500);await page.screenshot({path:`${folder}/${route}.png`,fullPage:true});console.log(`${route}: rendered`);
   }
   await page.goto(`${base}/connections`);
@@ -45,6 +45,7 @@ try{
   await page.setViewportSize({width:390,height:844});await page.goto(`${base}/business`);await page.getByRole('heading',{name:/أول فرصة/}).waitFor();await page.screenshot({path:`${folder}/business-mobile.png`,fullPage:true});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2))throw Error('business_mobile_overflow');
   await page.goto(`${base}/today`);await page.getByRole('heading',{name:/أهلًا/}).waitFor();await page.screenshot({path:`${folder}/today-mobile.png`,fullPage:true});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2))throw Error('workspace_mobile_overflow');
   await page.goto(`${base}/finance`);await page.getByRole('heading',{name:/وضوح/}).waitFor();await page.screenshot({path:`${folder}/finance-mobile.png`,fullPage:true});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2))throw Error('finance_mobile_overflow');
+  await page.goto(`${base}/owner`);await page.getByRole('heading',{name:/الشركة في صورة/}).waitFor();await page.screenshot({path:`${folder}/owner-mobile.png`,fullPage:true});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2))throw Error('owner_mobile_overflow');
   if(errors.length)throw Error(JSON.stringify(errors));console.log('Browser QA passed; no page exceptions');
 }finally{
   if(userId){await admin.from('finance_documents').delete().eq('created_by',userId);await admin.auth.admin.deleteUser(userId);}
