@@ -44,6 +44,9 @@ async function allowedOwnerGroup(item) {
   if(!ownerId){console.info('group_message_denied_owner');return null;}
   const registered=await check(admin.from('whatsapp_qr_groups').select('jid,display_name,enabled').eq('jid',item.jid).maybeSingle());
   if(registered)return registered.enabled?registered:null;
+  // An unregistered group can only bootstrap from an explicit invocation. Once
+  // its exact JID is registered, the Owner group is intentionally always-on.
+  if(!item.addressed){console.info('group_message_denied_unregistered');return null;}
   const metadata=await socket.groupMetadata(item.jid);
   if(metadata?.subject?.trim()!==bootstrapGroupName){console.info('group_message_denied_subject');return null;}
   const duplicate=await check(admin.from('whatsapp_qr_groups').select('jid').eq('display_name',bootstrapGroupName).eq('enabled',true).limit(1).maybeSingle());
