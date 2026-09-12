@@ -9,7 +9,7 @@ const reminderMigration = readFileSync(new URL("../supabase/migrations/202609070
 const reminderDispatch = readFileSync(new URL("../supabase/functions/reminder-dispatch/index.ts", import.meta.url), "utf8");
 const adminMemoryMigration = readFileSync(new URL("../supabase/migrations/202609120002_whatsapp_admin_memory.sql", import.meta.url), "utf8");
 const ownerGroupMigration = readFileSync(new URL("../supabase/migrations/202609120003_owner_whatsapp_group.sql", import.meta.url), "utf8");
-const ownerGroupAlwaysActive = readFileSync(new URL("../supabase/migrations/202609120004_owner_group_always_active.sql", import.meta.url), "utf8");
+const ownerGroupPinned = readFileSync(new URL("../supabase/migrations/202609120004_owner_group_always_active.sql", import.meta.url), "utf8");
 const qrPolicy = readFileSync(new URL("../server/policy.mjs", import.meta.url), "utf8");
 const qrService = readFileSync(new URL("../server/index.mjs", import.meta.url), "utf8");
 const qrTransport = readFileSync(new URL("../supabase/functions/_shared/qr-transport.ts", import.meta.url), "utf8");
@@ -74,7 +74,7 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).not.toContain("WHATSAPP_OWNER_USER_ID");
   });
 
-  it("keeps only the exact Owner group always active for mapped Owners", () => {
+  it("keeps the exact Owner group invocation-only for mapped Owners", () => {
     expect(ownerGroupMigration).toContain("whatsapp_qr_groups");
     expect(qrService).toContain("REID_QR_BOOTSTRAP_GROUP_NAME");
     expect(qrService).toContain("authorizedGroupOwner");
@@ -88,9 +88,12 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("including 🖕🏻");
     expect(webhook).toContain("لا تبدأ بالإهانة");
     expect(webhook).toContain("لا تهدد");
-    expect(ownerGroupAlwaysActive).toContain("120363412585944970@g.us");
-    expect(qrPolicy).toContain("addressed=mentioned||reidName.test(text)");
+    expect(ownerGroupPinned).toContain("120363412585944970@g.us");
+    expect(qrPolicy).toContain("repliedToBot");
+    expect(qrPolicy).toContain("addressed=mentioned||reidName.test(text)||repliedToBot");
     expect(qrService).toContain("if(!item.addressed)");
+    expect(qrService).toContain("async function persistInbound");
+    expect(qrService).toContain("setTimeout(resolve,300)");
   });
 
   it("accepts typed Arabic approval and rejection for the latest pending command", () => {
