@@ -6,8 +6,8 @@ const jidPhone=value=>String(value||'').split('@')[0].split(':')[0].replace(/\D/
 const reidName=/(?:^|[\s@])(?:reid|ري[ّ]?د)(?=$|\s)/iu;
 
 export function inboundText(message, botJids=[]) {
-  // Process only new direct text or an explicitly addressed Owner-group text.
-  // History, status and protocol events must never trigger autonomous replies.
+  // Surface fresh group text to the service's exact-JID/Owner allow-list. History,
+  // status and protocol events must never trigger autonomous replies.
   if (!message?.key?.id || message.key.fromMe || message.requestId) return null;
   let jid = message.key.remoteJid || '';
   const isGroup=/^[0-9]+@g\.us$/.test(jid);
@@ -24,8 +24,8 @@ export function inboundText(message, botJids=[]) {
     const context=message.message?.extendedTextMessage?.contextInfo||{};
     const botPhones=new Set((Array.isArray(botJids)?botJids:[botJids]).map(jidPhone).filter(Boolean));
     const mentioned=(context.mentionedJid||[]).some(value=>botPhones.has(jidPhone(value)));
-    if(!mentioned&&!reidName.test(text))return null;
-    return {jid,text:text.trim().slice(0,8000),id:message.key.id,senderPhone,isGroup:true,addressed:true};
+    const addressed=mentioned||reidName.test(text);
+    return {jid,text:text.trim().slice(0,8000),id:message.key.id,senderPhone,isGroup:true,addressed};
   }
   return { jid, text: text.trim().slice(0, 8000), id: message.key.id, senderPhone:jidPhone(jid),isGroup:false,addressed:true };
 }
