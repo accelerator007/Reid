@@ -41,13 +41,13 @@ async function authorizedGroupOwner(phone) {
 
 async function allowedOwnerGroup(item) {
   const ownerId=await authorizedGroupOwner(item.senderPhone);
-  if(!ownerId)return null;
+  if(!ownerId){console.info('group_message_denied_owner');return null;}
   const registered=await check(admin.from('whatsapp_qr_groups').select('jid,display_name,enabled').eq('jid',item.jid).maybeSingle());
   if(registered)return registered.enabled?registered:null;
   const metadata=await socket.groupMetadata(item.jid);
-  if(metadata?.subject?.trim()!==bootstrapGroupName)return null;
+  if(metadata?.subject?.trim()!==bootstrapGroupName){console.info('group_message_denied_subject');return null;}
   const duplicate=await check(admin.from('whatsapp_qr_groups').select('jid').eq('display_name',bootstrapGroupName).eq('enabled',true).limit(1).maybeSingle());
-  if(duplicate&&duplicate.jid!==item.jid)return null;
+  if(duplicate&&duplicate.jid!==item.jid){console.info('group_message_denied_duplicate');return null;}
   await check(admin.from('whatsapp_qr_groups').upsert({jid:item.jid,display_name:bootstrapGroupName,enabled:true,created_by:ownerId},{onConflict:'jid',ignoreDuplicates:true}));
   return {jid:item.jid,display_name:bootstrapGroupName,enabled:true};
 }
