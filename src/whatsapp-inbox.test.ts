@@ -8,6 +8,10 @@ const migration = readFileSync(new URL("../supabase/migrations/202609060004_what
 const reminderMigration = readFileSync(new URL("../supabase/migrations/202609070001_personal_reminders_memory_v2.sql", import.meta.url), "utf8");
 const reminderDispatch = readFileSync(new URL("../supabase/functions/reminder-dispatch/index.ts", import.meta.url), "utf8");
 const adminMemoryMigration = readFileSync(new URL("../supabase/migrations/202609120002_whatsapp_admin_memory.sql", import.meta.url), "utf8");
+const ownerGroupMigration = readFileSync(new URL("../supabase/migrations/202609120003_owner_whatsapp_group.sql", import.meta.url), "utf8");
+const qrPolicy = readFileSync(new URL("../server/policy.mjs", import.meta.url), "utf8");
+const qrService = readFileSync(new URL("../server/index.mjs", import.meta.url), "utf8");
+const qrTransport = readFileSync(new URL("../supabase/functions/_shared/qr-transport.ts", import.meta.url), "utf8");
 
 describe("WhatsApp Owner inbox contract", () => {
   it("keeps the permanent Meta token on the server", () => {
@@ -67,6 +71,22 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("['owner','super_admin','admin']");
     expect(adminMemoryMigration).toContain("whatsapp_admin_profiles_owner_manage");
     expect(webhook).not.toContain("WHATSAPP_OWNER_USER_ID");
+  });
+
+  it("allows only the exact Owner group when Reid is mentioned or named", () => {
+    expect(ownerGroupMigration).toContain("whatsapp_qr_groups");
+    expect(qrService).toContain("REID_QR_BOOTSTRAP_GROUP_NAME");
+    expect(qrService).toContain("authorizedGroupOwner");
+    expect(qrPolicy).toContain("reid|ري[ّ]?د");
+    expect(qrPolicy).toContain("mentionedJid");
+    expect(qrTransport).toContain("targetQrConversation");
+    expect(webhook).toContain("sender_phone");
+    expect(webhook).toContain("qr_group");
+    expect(qrService).toContain("group_admin_dispatch_denied");
+    expect(webhook).toContain("ownerGroup=false");
+    expect(webhook).toContain("including 🖕🏻");
+    expect(webhook).toContain("لا تبدأ بالإهانة");
+    expect(webhook).toContain("لا تهدد");
   });
 
   it("accepts typed Arabic approval and rejection for the latest pending command", () => {

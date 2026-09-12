@@ -4,6 +4,8 @@ This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers
 
 ## 2026-09-12 governed agent quality and WhatsApp administrator memory
 
+- The Production QR service accepts group messages only from the exact database-registered `Reid_Owner` JID and only when the authenticated sender is an enabled active Owner. The first addressed message from Ali or Sheikha may bootstrap that exact JID by matching the group subject; every other group remains silent. Invocation requires an actual bot mention or the standalone name `ريد`/`ريّد`/`Reid` (case-insensitive).
+- Owner-group replies use natural Gulf/Omani Arabic, adaptive warmth and context-appropriate emoji. Mild reciprocal banter—including an insulting gesture—may appear only after clearly playful Owner context. The assistant never initiates abuse, threatens, targets protected classes, customers or employees, or uses that tone for finance, HR, crises or formal work. Private administrator chats and all customer chats retain the respectful profile.
 - The local `ai-lap` runner is version 1.2.0. Every chat answer is checked before delivery for language, grounded Reid citations, missing-evidence calibration, prompt leakage, fabricated external actions and invalid citations. A failed answer receives one automatic model revision; a second failure is stopped instead of being delivered. Embedding jobs use a separate completion contract.
 - `llm-gateway` now supplies the local queued runner with the governed Reid context and up to eight bounded recent conversation turns. Company claims require `[Reid:collection:id]` citations, context values are untrusted data, and chat cannot claim that an external action occurred.
 - QR WhatsApp administrator identity is database-managed. Ali and Sheikha are the two enabled Owner mappings. Owner/Super Admin can link enabled Owner/Super Admin/Admin accounts; each administrator can read only their own binding and cannot change it. Conversations remain in the QR/normalized message ledgers, explicit durable preferences are scoped to that administrator, and only aggregate style signals are learned per administrator.
@@ -11,16 +13,16 @@ This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers
 
 Verification on 2026-09-12:
 
-- `npm run check`: 208/208 application tests and the Production TypeScript/Vite build passed. The server suite passed 7/7, the isolated QR bridge passed 30/30, and the ai-lap Python quality/adapter suite passed 7/7.
-- The full throwaway PostgreSQL 16 migration/RLS harness passed, including WhatsApp 18/18, agents 48 checks, research 80 checks, business core 36/36, commercial documents 23/23 and CRM 15/15.
-- Migrations `202609120001_agent_quality_v2.sql` and `202609120002_whatsapp_admin_memory.sql` are applied to Production. `llm-gateway`, `ai-lap-runner` and `whatsapp-webhook` were deployed; the Reid web container and both ai-lap services are healthy.
+- `npm run check`: 209/209 application tests and the Production TypeScript/Vite build passed. The server suite passed 8/8, the isolated QR bridge passed 30/30, and the ai-lap Python quality/adapter suite passed 7/7.
+- The full throwaway PostgreSQL 16 migration/RLS harness passed, including WhatsApp 22/22, agents 48 checks, research 80 checks, business core 36/36, commercial documents 23/23 and CRM 15/15.
+- Migrations `202609120001_agent_quality_v2.sql`, `202609120002_whatsapp_admin_memory.sql` and `202609120003_owner_whatsapp_group.sql` are applied to Production. `llm-gateway`, `ai-lap-runner` and `whatsapp-webhook` were deployed; the Reid web container and both ai-lap services are healthy.
 - The live synthetic model gate passed 5/5 at 100/100 average: Arabic project evidence, English finance arithmetic, missing evidence, a read-only external-action request and context prompt injection.
 - Authenticated Production browser QA rendered every Reid OS page, both Owner WhatsApp identities and all isolated memory/style controls, found no page exceptions or mobile overflow, and cleaned its disposable Owner and finance records.
 
 Still open and must not be presented as complete:
 
 - Style learning begins with new inbound administrator messages; historical messages are preserved but are not retrospectively profiled. It learns presentation preferences, not personal identity, confidential facts or autonomous permissions.
-- QR automation uses an unofficial linked-device library and can require a fresh phone scan after a WhatsApp protocol/session change. The current phone session was connected during this verification, so no new QR scan was triggered.
+- QR automation uses an unofficial linked-device library and can require a fresh phone scan after a WhatsApp protocol/session change. The encrypted session was recovered from its existing identity and keys after a stale registration flag, backed up before repair, and reconnected without a new QR scan.
 
 ## 2026-09-07 stability monitoring correction
 

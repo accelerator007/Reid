@@ -27,6 +27,30 @@ function rate(key,max=60,window=60000) {
   return item.n<=max;
 }
 const check=async query=>{const {data,error}=await query;if(error)throw new Error(`database_${error.code||'failed'}`);return data;};
+const bootstrapGroupName=(env.REID_QR_BOOTSTRAP_GROUP_NAME||'Reid_Owner').trim();
+
+async function authorizedGroupOwner(phone) {
+  const link=await check(admin.from('whatsapp_admin_profiles').select('user_id').eq('phone_e164',phone).eq('enabled',true).maybeSingle());
+  if(!link)return null;
+  const [role,control]=await Promise.all([
+    check(admin.from('user_roles').select('role').eq('user_id',link.user_id).eq('role','owner').maybeSingle()),
+    check(admin.from('account_controls').select('status').eq('user_id',link.user_id).maybeSingle()),
+  ]);
+  return role&&control?.status==='active'?link.user_id:null;
+}
+
+async function allowedOwnerGroup(item) {
+  const ownerId=await authorizedGroupOwner(item.senderPhone);
+  if(!ownerId){console.info('group_message_denied_owner');return null;}
+  const registered=await check(admin.from('whatsapp_qr_groups').select('jid,display_name,enabled').eq('jid',item.jid).maybeSingle());
+  if(registered)return registered.enabled?registered:null;
+  const metadata=await socket.groupMetadata(item.jid);
+  if(metadata?.subject?.trim()!==bootstrapGroupName){console.info('group_message_denied_subject');return null;}
+  const duplicate=await check(admin.from('whatsapp_qr_groups').select('jid').eq('display_name',bootstrapGroupName).eq('enabled',true).limit(1).maybeSingle());
+  if(duplicate&&duplicate.jid!==item.jid){console.info('group_message_denied_duplicate');return null;}
+  await check(admin.from('whatsapp_qr_groups').upsert({jid:item.jid,display_name:bootstrapGroupName,enabled:true,created_by:ownerId},{onConflict:'jid',ignoreDuplicates:true}));
+  return {jid:item.jid,display_name:bootstrapGroupName,enabled:true};
+}
 app.get('/healthz',(_req,res)=>res.json({ok:true}));
 // Public chat is a separate, fixed-context capability, never an administrative
 // gateway. It receives no database records, tools, or company memories.
@@ -118,14 +142,17 @@ async function connect() {
   socket.ev.on('messages.upsert',async event=>{
     if(event.type!=='notify')return;
     for(const message of event.messages) {
-      const item=inboundText(message);if(!item)continue;
+      const item=inboundText(message,[socket.user?.id,socket.user?.lid]);if(!item)continue;
       try {
-        await check(admin.from('qr_conversations').upsert({jid:item.jid,display_name:message.pushName||item.jid.split('@')[0]},{onConflict:'jid',ignoreDuplicates:true}));
+        const group=item.isGroup?await allowedOwnerGroup(item):null;
+        if(item.isGroup&&!group){console.info('group_message_denied');continue;}
+        const displayName=group?.display_name||message.pushName||item.jid.split('@')[0];
+        await check(admin.from('qr_conversations').upsert({jid:item.jid,display_name,...(item.isGroup?{bot_mode:'active'}:{})},{onConflict:'jid',ignoreDuplicates:true}));
         const chat=await check(admin.from('qr_conversations').select('*').eq('jid',item.jid).single());
-        const {data,error}=await admin.from('qr_messages').upsert({conversation_id:chat.id,message_id:item.id,direction:'inbound',body:item.text},{onConflict:'message_id',ignoreDuplicates:true}).select('id');
+        const {data,error}=await admin.from('qr_messages').upsert({conversation_id:chat.id,message_id:item.id,direction:'inbound',body:item.text,sender_phone:item.senderPhone},{onConflict:'message_id',ignoreDuplicates:true}).select('id');
         if(error)throw error;if(!data?.length)continue;
         await check(admin.from('qr_conversations').update({last_message:item.text.slice(0,180),updated_at:new Date().toISOString()}).eq('id',chat.id));
-        if(chat.bot_mode==='active'&&rate(`in:${chat.id}`,6))await check(admin.from('qr_jobs').upsert({conversation_id:chat.id,message_id:item.id,input:item.text},{onConflict:'message_id',ignoreDuplicates:true}));
+        if(chat.bot_mode==='active'&&rate(`in:${chat.id}`,6))await check(admin.from('qr_jobs').upsert({conversation_id:chat.id,message_id:item.id,input:item.text,sender_phone:item.senderPhone},{onConflict:'message_id',ignoreDuplicates:true}));
       }catch{console.error('inbound_persistence_failed');}
     }
   });
@@ -147,6 +174,9 @@ async function processJob() {
       if(result.ignored)throw Error('bridge_authentication_failed');
       if(result.handled){await check(admin.from('qr_jobs').update({state:'done'}).eq('id',job.id).eq('state','running'));return;}
     }
+    // The owner group is an administrative channel. If the authenticated
+    // admin dispatcher declines it, never fall back to the public assistant.
+    if(chat.jid.endsWith('@g.us'))throw Error('group_admin_dispatch_denied');
     const history=await check(admin.from('qr_messages').select('direction,body').eq('conversation_id',chat.id).order('created_at',{ascending:false}).limit(10));
     const response=await fetch(`${env.AI_URL}/api/chat`,{
       method:'POST',headers:{'Content-Type':'application/json','x-reid-origin-token':env.AI_TOKEN},signal:AbortSignal.timeout(110000),

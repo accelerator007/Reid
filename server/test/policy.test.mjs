@@ -7,13 +7,19 @@ test('owner access fails closed for suspension and staff', () => {
   assert.equal(isOwner(['owner'], 'suspended'), false);
   assert.equal(isOwner(['admin'], 'active'), false);
 });
-test('only fresh direct text can invoke AI', () => {
+test('only fresh direct or explicitly addressed group text can invoke AI', () => {
   const base = { key: { id:'123', remoteJid:'96812345678@s.whatsapp.net' }, message:{ conversation:'مرحبا' } };
   assert.equal(inboundText(base).text, 'مرحبا');
   assert.equal(inboundText({...base, requestId:'forged'}), null);
   assert.equal(inboundText({...base, key:{...base.key, fromMe:true}}), null);
-  assert.equal(inboundText({...base, key:{...base.key, remoteJid:'123@g.us'}}), null);
   assert.equal(inboundText({...base, message:{protocolMessage:{}}}), null);
+  const group={key:{id:'g1',remoteJid:'123@g.us',participantPn:'96896709444@s.whatsapp.net'},message:{conversation:'هلا ريد'}};
+  assert.equal(inboundText(group).senderPhone,'96896709444');
+  assert.equal(inboundText({...group,message:{conversation:'hello Reid'}}).isGroup,true);
+  assert.equal(inboundText({...group,message:{conversation:'hello reid'}}).addressed,true);
+  assert.equal(inboundText({...group,message:{conversation:'كلام عادي'}}),null);
+  const mentioned={...group,message:{extendedTextMessage:{text:'هلا',contextInfo:{mentionedJid:['96897308003@s.whatsapp.net']}}}};
+  assert.equal(inboundText(mentioned,['96897308003:1@s.whatsapp.net']).addressed,true);
 });
 test('human takeover, expiry and ambiguous deliveries suppress auto resend', () => {
   const row={status:'queued', origin:'bot', expires_at:new Date(Date.now()+60000).toISOString()};

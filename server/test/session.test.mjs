@@ -29,3 +29,9 @@ test('authenticated PN alternate is used for Owner mapping, display names never 
   assert.equal(inboundText({key:{id:'pn-test',remoteJid:'123@lid',remoteJidAlt:'96890000000@s.whatsapp.net'},message:{conversation:'hello'}}).jid,'96890000000@s.whatsapp.net');
   assert.equal(inboundText({key:{id:'pn-test',remoteJid:'123@lid'},pushName:'96890000000',message:{conversation:'hello'}}).jid,'123@lid');
 });
+
+test('group identity comes from the authenticated participant PN',()=>{
+  const item=inboundText({key:{id:'group-pn',remoteJid:'120363000000000@g.us',participant:'12345@lid',participantPn:'96892797586@s.whatsapp.net'},message:{conversation:'Reid هلا'}});
+  assert.equal(item.senderPhone,'96892797586');
+  assert.equal(item.jid,'120363000000000@g.us');
+});
