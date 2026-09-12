@@ -7,6 +7,7 @@ const webhook = readFileSync(new URL("../supabase/functions/whatsapp-webhook/ind
 const migration = readFileSync(new URL("../supabase/migrations/202609060004_whatsapp_owner_inbox.sql", import.meta.url), "utf8");
 const reminderMigration = readFileSync(new URL("../supabase/migrations/202609070001_personal_reminders_memory_v2.sql", import.meta.url), "utf8");
 const reminderDispatch = readFileSync(new URL("../supabase/functions/reminder-dispatch/index.ts", import.meta.url), "utf8");
+const adminMemoryMigration = readFileSync(new URL("../supabase/migrations/202609120002_whatsapp_admin_memory.sql", import.meta.url), "utf8");
 
 describe("WhatsApp Owner inbox contract", () => {
   it("keeps the permanent Meta token on the server", () => {
@@ -50,11 +51,22 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("requesterId:identity.id");
   });
 
-  it("acts as a personal chief of staff and persists isolated user memory", () => {
+  it("acts as a personal chief of staff with isolated durable memory and learned style", () => {
     expect(webhook).toContain("رئيس مكتبه الرقمي");
-    expect(webhook).toContain("rememberOwnerMessage");
+    expect(webhook).toContain("learnAdminMessage");
+    expect(webhook).toContain("learn_whatsapp_admin_style");
+    expect(adminMemoryMigration).toContain("whatsapp_admin_profiles");
+    expect(adminMemoryMigration).toContain("style_learning_enabled");
     expect(webhook).toContain("scope:'user'");
     expect(webhook).toContain("scope_id:identity.id");
+  });
+
+  it("binds each authorized administrator phone to an active account", () => {
+    expect(webhook).toContain("WHATSAPP_ADMIN_EMAIL_MAP");
+    expect(webhook).toContain("adminIdentity");
+    expect(webhook).toContain("['owner','super_admin','admin']");
+    expect(adminMemoryMigration).toContain("whatsapp_admin_profiles_owner_manage");
+    expect(webhook).not.toContain("WHATSAPP_OWNER_USER_ID");
   });
 
   it("accepts typed Arabic approval and rejection for the latest pending command", () => {

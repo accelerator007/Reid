@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { queueQrText } from '../_shared/qr-transport.ts';
+import { assessAgentResponse, qualitySubject } from '../_shared/agent-quality.ts';
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 const allowedActions = new Set(['run', 'embed']);
@@ -199,9 +200,12 @@ async function completeWithGeminiFallback(admin: ReturnType<typeof createClient>
   if(!response.ok) throw new Error(`gemini_fallback_http_${response.status}`);
   const output=result?.candidates?.[0]?.content?.parts?.map((part:{text?:string})=>part.text||'').join('').trim()||'';
   if(!output) throw new Error('gemini_fallback_empty');
+  const quality=assessAgentResponse({...qualitySubject(payload.data.input),output});
+  if(!quality.passed) throw new Error(`gemini_fallback_quality_failed:${quality.flags.join(',')}`);
   const updated=await admin.from('agent_runs').update({
     provider_id:'gemini',run_state:'succeeded',status:'succeeded',token_usage:result?.usageMetadata?.totalTokenCount??null,
     output_preview:output.slice(0,280),error:null,finished_at:new Date().toISOString(),
+    quality_score:quality.score,quality_flags:quality.flags,quality_version:quality.version,revision_count:0,
     logs:[{at:new Date().toISOString(),event:'local_failed_gemini_fallback',local_error:localError.slice(0,180)}],
   }).eq('id',runId).eq('run_state','running');
   if(updated.error) throw updated.error;
@@ -267,9 +271,24 @@ Deno.serve(async request => {
     if (body.action === 'complete') {
       const output = typeof body.output === 'string' ? body.output.slice(0,12000) : '';
       const embedding = Array.isArray(body.embedding) && body.embedding.length === 768 ? body.embedding : null;
-      const run = await admin.from('agent_runs').select('id,agent_id,requested_by,classification').eq('id',body.runId).eq('provider_id','ollama').eq('run_state','running').single();
+      const qualityScore=Math.max(0,Math.min(100,Number(body.qualityScore)||0));
+      const qualityFlags=Array.isArray(body.qualityFlags)?body.qualityFlags.map(String).slice(0,12):[];
+      const qualityVersion=String(body.qualityVersion||'').slice(0,40)||null;
+      const revisionCount=Math.max(0,Math.min(2,Number(body.revisionCount)||0));
+      const [run,payload] = await Promise.all([
+        admin.from('agent_runs').select('id,agent_id,requested_by,classification').eq('id',body.runId).eq('provider_id','ollama').eq('run_state','running').single(),
+        admin.from('agent_run_payloads').select('action').eq('run_id',body.runId).single(),
+      ]);
       if (run.error) throw new Error('run_not_claimed');
-      const updated = await admin.from('agent_runs').update({run_state:'succeeded',status:'succeeded',latency_ms:Number(body.latencyMs)||null,token_usage:Number(body.tokenUsage)||null,output_preview:output.slice(0,280),finished_at:new Date().toISOString()}).eq('id',run.data.id);
+      if(payload.error || !allowedActions.has(payload.data.action)) throw new Error('invalid_local_job');
+      const isChat=payload.data.action==='run';
+      if(isChat && (!output || qualityScore<70 || !qualityVersion)) throw new Error('runner_quality_attestation_required');
+      if(!isChat && !embedding) throw new Error('runner_embedding_required');
+      const updated = await admin.from('agent_runs').update({
+        run_state:'succeeded',status:'succeeded',latency_ms:Number(body.latencyMs)||null,token_usage:Number(body.tokenUsage)||null,
+        output_preview:output.slice(0,280),quality_score:isChat?qualityScore:null,quality_flags:isChat?qualityFlags:[],
+        quality_version:isChat?qualityVersion:null,revision_count:isChat?revisionCount:0,finished_at:new Date().toISOString(),
+      }).eq('id',run.data.id);
       if (updated.error) throw updated.error;
       if (output) await admin.from('memories').insert({scope:'agent',scope_id:run.data.agent_id,title:`Run ${run.data.id}`,content:output.slice(0,4000),embedding,classification:run.data.classification,created_by:run.data.requested_by,source_run_id:run.data.id});
       await admin.from('agent_run_payloads').delete().eq('run_id',run.data.id);

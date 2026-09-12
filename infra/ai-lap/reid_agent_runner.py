@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import json, os, subprocess, time, urllib.request
+from agent_quality import assess, language, revision_instruction, subject
 
 RUNNER_URL=os.environ['REID_RUNNER_URL']; RUNNER_TOKEN=os.environ['REID_RUNNER_TOKEN']; ORIGIN_TOKEN=os.environ['REID_ORIGIN_TOKEN']
 ADAPTER=os.environ.get('REID_ADAPTER_URL','http://127.0.0.1:11436')
-VERSION='1.1.1'; last_heartbeat=0.0; last_ping=None
+VERSION='1.2.0'; last_heartbeat=0.0; last_ping=None
 
 def telemetry():
     result={}
@@ -48,7 +49,14 @@ while True:
         messages=[]
         if job.get('system_prompt'): messages.append({'role':'system','content':job['system_prompt']})
         messages.append({'role':'user','content':job['input']})
-        result=adapter('/api/chat',{'messages':messages}); output=result.get('message',{}).get('content',''); tokens=(result.get('prompt_eval_count',0)+result.get('eval_count',0)); emb=adapter('/api/embeddings',{'prompt':output[:4000]}).get('embedding',[]) if output else []
-      post(RUNNER_URL,{'action':'complete','runId':job['id'],'output':output,'embedding':emb,'tokenUsage':tokens,'latencyMs':round((time.monotonic()-started)*1000)})
+        result=adapter('/api/chat',{'messages':messages}); output=result.get('message',{}).get('content','').strip(); tokens=(result.get('prompt_eval_count',0)+result.get('eval_count',0)); quality=assess(job['input'],output); revisions=0
+        if not quality['passed']:
+          request,_=subject(job['input']); messages.extend([{'role':'assistant','content':output},{'role':'user','content':revision_instruction(quality,language(request))}])
+          revised=adapter('/api/chat',{'messages':messages}); output=revised.get('message',{}).get('content','').strip(); tokens+=(revised.get('prompt_eval_count',0)+revised.get('eval_count',0)); quality=assess(job['input'],output); revisions=1
+        if not quality['passed']: raise RuntimeError('response_quality_failed:'+','.join(quality['flags']))
+        emb=adapter('/api/embeddings',{'prompt':output[:4000]}).get('embedding',[])
+      payload={'action':'complete','runId':job['id'],'output':output,'embedding':emb,'tokenUsage':tokens,'latencyMs':round((time.monotonic()-started)*1000)}
+      if job['action']!='embed': payload.update(qualityScore=quality['score'],qualityFlags=quality['flags'],qualityVersion=quality['version'],revisionCount=revisions)
+      post(RUNNER_URL,payload)
     except Exception as error: post(RUNNER_URL,{'action':'fail','runId':job['id'],'error':type(error).__name__})
   except Exception: time.sleep(5)

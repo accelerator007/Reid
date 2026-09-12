@@ -34,6 +34,10 @@ try{
     await page.goto(`${base}/${route}`);await page.getByRole('heading',{name:new RegExp(heading)}).first().waitFor({timeout:20000});if(route==='admin')await page.getByText('Sheikha Almamari',{exact:true}).waitFor({timeout:20000});else await pause(1500);await page.screenshot({path:`${folder}/${route}.png`,fullPage:true});console.log(`${route}: rendered`);
   }
   await page.goto(`${base}/connections`);
+  await page.getByRole('heading',{name:'الإدارة عبر واتساب'}).waitFor({timeout:20000});
+  await page.getByText('+96896709444',{exact:true}).waitFor({timeout:20000});
+  await page.getByText('+96892797586',{exact:true}).waitFor({timeout:20000});
+  console.log('Connections: both Owner WhatsApp identities and isolated memory controls rendered');
   const connectButton=page.getByRole('button',{name:'إظهار QR code'}),qrImage=page.getByRole('img',{name:'امسح هذا الكود من واتساب لربط رقم ريّد'});
   if(await connectButton.count())await connectButton.click();
   if(await qrImage.count()||await qrImage.waitFor({timeout:45000}).then(()=>true).catch(()=>false)){await qrImage.screenshot({path:`${folder}/qr.png`});console.log('QR: available from real service');}
