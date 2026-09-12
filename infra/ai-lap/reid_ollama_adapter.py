@@ -111,7 +111,8 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(messages, list) or not messages or len(messages) > 32:
                 return self.reply(400, {"error": "invalid_messages"})
             upstream = {"model": CHAT_MODEL, "stream": False, "think": False, "messages": messages,
-                        "options": {"temperature": 0.2, "num_predict": 2048}}
+                        "options": {"temperature": 0.15, "top_p": 0.9, "repeat_penalty": 1.05,
+                                    "num_ctx": 16384, "num_predict": 3072}}
             return self.proxy("/api/chat", upstream)
 
         if self.path == "/api/transcribe":

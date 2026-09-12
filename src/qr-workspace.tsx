@@ -2,22 +2,31 @@ import React from 'react';
 import { QrCode, Smartphone, RefreshCw, CheckCircle2, MessageCircle, Send, Bot, UserRound, Search, Wifi, ArrowUpRight } from 'lucide-react';
 import { localApi, localError } from './local-api';
 import type { Page } from './routes';
+import { supabase } from './supabase';
+import { useSession } from './shell';
 
 type Lang = 'ar'|'en';
 type Status={connection:string;qr:string|null;number:string|null;lastError:string|null};
 type Conversation={id:string;jid:string;display_name:string;bot_mode:'active'|'human';last_message:string;updated_at:string};
 type Message={id:string;direction:'inbound'|'outbound';body:string;status:string;created_at:string};
 type Outbox={id:string;conversation_id:string;status:string;error:string|null;created_at:string};
+type AdminPerson={id:string;full_name:string;email:string;role:string};
+type AdminLink={user_id:string;phone_e164:string;enabled:boolean;memory_enabled:boolean;style_learning_enabled:boolean;style_profile:Record<string,unknown>;sample_count:number};
 const choose=(lang:Lang, ar:string,en:string)=>lang==='ar'?ar:en;
 
 export function Connections({lang,go}:{lang:Lang;go:(page:Page)=>void}) {
+  const {user}=useSession();
   const [status,setStatus]=React.useState<Status|null>(null),[error,setError]=React.useState(''),[busy,setBusy]=React.useState(false);
   const [ai,setAi]=React.useState<{online:boolean;model:string}|null>(null);
+  const [people,setPeople]=React.useState<AdminPerson[]>([]),[links,setLinks]=React.useState<AdminLink[]>([]),[person,setPerson]=React.useState(''),[phone,setPhone]=React.useState('');
+  const loadAdmins=React.useCallback(async()=>{if(!supabase)return;const [roles,profiles,linked]=await Promise.all([supabase.from('user_roles').select('user_id,role').in('role',['owner','super_admin','admin']),supabase.from('profiles').select('id,full_name,email'),supabase.from('whatsapp_admin_profiles').select('user_id,phone_e164,enabled,memory_enabled,style_learning_enabled,style_profile,sample_count').order('created_at')]);if(roles.error||profiles.error||linked.error){setError(choose(lang,'تعذر تحميل حسابات واتساب الإدارية.','Could not load administrative WhatsApp accounts.'));return;}const profileMap=new Map((profiles.data||[]).map(row=>[row.id,row]));const rows=(roles.data||[]).flatMap(role=>{const profile=profileMap.get(role.user_id);return profile?[{...profile,role:role.role}]:[]});setPeople(rows);setLinks((linked.data||[]) as AdminLink[]);setPerson(value=>value||rows[0]?.id||'');},[lang]);
   const load=React.useCallback(async()=>{
     try{setStatus(await localApi<Status>('whatsapp/status'));setError('');}catch(e){setError(localError(e,lang));}
   },[lang]);
-  React.useEffect(()=>{void load();const timer=setInterval(()=>void load(),4000);void localApi<{online:boolean;model:string}>('ai/health').then(setAi).catch(()=>setAi({online:false,model:'gemma4:12b'}));return()=>clearInterval(timer);},[load]);
+  React.useEffect(()=>{void load();void loadAdmins();const timer=setInterval(()=>void load(),4000);void localApi<{online:boolean;model:string}>('ai/health').then(setAi).catch(()=>setAi({online:false,model:'gemma4:12b'}));return()=>clearInterval(timer);},[load,loadAdmins]);
   const connect=async()=>{setBusy(true);setError('');try{await localApi('whatsapp/connect',{});await load();}catch(e){setError(localError(e,lang));}finally{setBusy(false);}};
+  const linkAdmin=async(e:React.FormEvent)=>{e.preventDefault();if(!supabase||!user||!person)return;const number=phone.replace(/\D/g,'');if(!/^[1-9][0-9]{7,14}$/.test(number)){setError(choose(lang,'اكتب الرقم مع مفتاح الدولة، أرقام فقط.','Enter the number with country code, digits only.'));return;}setBusy(true);const result=await supabase.from('whatsapp_admin_profiles').upsert({user_id:person,phone_e164:number,created_by:user.id,enabled:true},{onConflict:'user_id'});if(result.error)setError(choose(lang,'تعذر ربط الرقم؛ تأكد أنه غير مرتبط بحساب آخر.','Could not link the number; make sure it is not linked to another account.'));else{setPhone('');await loadAdmins();}setBusy(false);};
+  const configureAdmin=async(link:AdminLink,patch:Partial<Pick<AdminLink,'enabled'|'memory_enabled'|'style_learning_enabled'>>)=>{if(!supabase)return;setBusy(true);const result=await supabase.from('whatsapp_admin_profiles').update(patch).eq('user_id',link.user_id);if(result.error)setError(choose(lang,'تعذر تحديث الإعداد.','Could not update the setting.'));else await loadAdmins();setBusy(false);};
   const connected=status?.connection==='connected';
   return <main className="os-page">
     <div className="os-page-heading"><div><span className="os-eyebrow">REID / CONNECTIONS</span><h1>{choose(lang,'كل أدواتك، متصلة.','All your tools, connected.')}</h1><p>{choose(lang,'اربط رقم الشركة وتابع الخدمات التي تدعم فريقك.','Connect the company number and the services behind your team.')}</p></div></div>
@@ -33,6 +42,11 @@ export function Connections({lang,go}:{lang:Lang;go:(page:Page)=>void}) {
       <div className="os-stack"><section className="os-panel"><div className="os-panel-title"><span className="os-icon"><Bot/></span><div><h2>{choose(lang,'مساعد ريّد','Reid assistant')}</h2><p>ai-lap</p></div><span className={`os-status ${ai?.online?'good':''}`}>{ai===null?choose(lang,'جارٍ الفحص','Checking'):ai.online?choose(lang,'جاهز','Ready'):choose(lang,'غير متاح','Unavailable')}</span></div><p>{choose(lang,'معالجة المحادثات بالذكاء المحلي. تبقى إدارة الشركة والموافقة على الإجراءات داخل حسابك.','Local intelligence for conversations. Company actions and approvals stay inside your account.')}</p><small className="os-muted">{ai?.model}</small></section>
       <section className="os-panel"><Smartphone/><h2>{choose(lang,'أنت تتحكم بالمحادثة','You control the conversation')}</h2><p>{choose(lang,'ابدأ بالرد اليدوي، وفعّل المساعد للمحادثات التي تختارها. الرد اليدوي يوقف المساعد تلقائيًا حتى تعيده أنت.','Start with human replies and enable the assistant per conversation. A manual reply pauses the assistant until you enable it again.')}</p><p className="os-muted">{choose(lang,'ربط الأجهزة غير رسمي؛ قد يحتاج إعادة مسح الكود إذا انتهت الجلسة.','Linked-device automation is unofficial and may require rescanning if the session expires.')}</p></section></div>
     </div>
+    <section className="os-panel os-spaced"><div className="os-section-title"><div><h2>{choose(lang,'الإدارة عبر واتساب','WhatsApp administration')}</h2><p>{choose(lang,'اربط كل إداري برقمه. تبقى محادثاته وذاكرته وأسلوبه منفصلة عن الآخرين.','Link each administrator to their number. Conversations, memory and speaking style stay isolated.')}</p></div></div>
+      <form className="os-quick-add" onSubmit={e=>void linkAdmin(e)}><select aria-label={choose(lang,'حساب الإداري','Administrator account')} value={person} onChange={e=>setPerson(e.target.value)}>{people.map(item=><option value={item.id} key={`${item.id}:${item.role}`}>{item.full_name||item.email} · {item.role}</option>)}</select><input dir="ltr" inputMode="tel" aria-label={choose(lang,'رقم واتساب مع مفتاح الدولة','WhatsApp number with country code')} placeholder="968XXXXXXXX" value={phone} onChange={e=>setPhone(e.target.value)} required/><button className="os-primary" disabled={busy||!person||!phone.trim()}>{choose(lang,'ربط الرقم','Link number')}</button></form>
+      <div className="os-admin-links">{links.map(link=>{const linked=people.find(item=>item.id===link.user_id);const style=link.style_profile||{};return <article key={link.user_id}><div><b>{linked?.full_name||linked?.email||link.user_id}</b><small dir="ltr">+{link.phone_e164}</small><small>{choose(lang,'عينات الأسلوب','Style samples')}: {link.sample_count} · {String(style.dominant_language||'—')}</small></div><label><input type="checkbox" checked={link.enabled} disabled={busy} onChange={e=>void configureAdmin(link,{enabled:e.target.checked})}/>{choose(lang,'مصرح','Authorized')}</label><label><input type="checkbox" checked={link.memory_enabled} disabled={busy} onChange={e=>void configureAdmin(link,{memory_enabled:e.target.checked})}/>{choose(lang,'ذاكرة دائمة','Durable memory')}</label><label><input type="checkbox" checked={link.style_learning_enabled} disabled={busy} onChange={e=>void configureAdmin(link,{style_learning_enabled:e.target.checked})}/>{choose(lang,'تعلّم الأسلوب','Learn style')}</label></article>;})}</div>
+      <p className="os-muted">{choose(lang,'يحذف ريّد رموز التحقق وكلمات المرور ومفاتيح الوصول قبل إدخال النص في الذاكرة أو السياق.','Reid redacts verification codes, passwords and access keys before text enters memory or context.')}</p>
+    </section>
   </main>;
 }
 

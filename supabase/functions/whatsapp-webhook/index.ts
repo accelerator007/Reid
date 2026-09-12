@@ -132,27 +132,30 @@ async function gateway(body: Record<string,unknown>) {
   return payload;
 }
 
-function ownerEmailFor(phone:string) {
-  const configured=Deno.env.get('WHATSAPP_OWNER_EMAIL_MAP') || '96896709444=alialajmi524@gmail.com,96892797586=sheikhaalmamari4@gmail.com';
+function configuredEmailFor(phone:string) {
+  const configured=Deno.env.get('WHATSAPP_ADMIN_EMAIL_MAP') || Deno.env.get('WHATSAPP_OWNER_EMAIL_MAP') || '96896709444=alialajmi524@gmail.com,96892797586=sheikhaalmamari4@gmail.com';
   return configured.split(',').map(value=>value.split('=').map(part=>part.trim())).find(([number])=>number?.replace(/\D/g,'')===phone.replace(/\D/g,''))?.[1] || null;
 }
 
-async function ownerIdentity(admin:any, phone:string) {
-  const email=ownerEmailFor(phone);
-  if(email) {
-    const profile=await admin.from('profiles').select('id,full_name,email').eq('email',email).maybeSingle();
-    if(profile.data) {
-      const [role,control]=await Promise.all([admin.from('user_roles').select('role').eq('user_id',profile.data.id).eq('role','owner').maybeSingle(),admin.from('account_controls').select('status').eq('user_id',profile.data.id).maybeSingle()]);
-      if(role.error||control.error||!role.data||control.data?.status!=='active') throw new Error('owner_not_active');
-      return profile.data as {id:string;full_name:string;email:string};
-    }
+type AdminIdentity={id:string;full_name:string;email:string;roles:string[];memory_enabled:boolean;style_learning_enabled:boolean;style_profile:Record<string,unknown>;phone_e164:string};
+
+async function adminIdentity(admin:any, phone:string):Promise<AdminIdentity> {
+  const normalized=phone.replace(/\D/g,'');
+  const mapped=await admin.from('whatsapp_admin_profiles').select('user_id,phone_e164,enabled,memory_enabled,style_learning_enabled,style_profile').eq('phone_e164',normalized).eq('enabled',true).maybeSingle();
+  let profile:any=null, preferences=mapped.data;
+  if(mapped.error) throw mapped.error;
+  if(preferences) profile=(await admin.from('profiles').select('id,full_name,email').eq('id',preferences.user_id).maybeSingle()).data;
+  const email=configuredEmailFor(normalized);
+  if(!profile&&email) profile=(await admin.from('profiles').select('id,full_name,email').eq('email',email).maybeSingle()).data;
+  if(!profile) throw new Error('explicit_admin_mapping_required');
+  const [roleRows,control]=await Promise.all([admin.from('user_roles').select('role').eq('user_id',profile.id),admin.from('account_controls').select('status').eq('user_id',profile.id).maybeSingle()]);
+  const roles=(roleRows.data||[]).map((row:any)=>String(row.role));
+  if(roleRows.error||control.error||control.data?.status!=='active'||!roles.some((role:string)=>['owner','super_admin','admin'].includes(role))) throw new Error('admin_not_active');
+  if(!preferences) {
+    const created=await admin.from('whatsapp_admin_profiles').upsert({user_id:profile.id,phone_e164:normalized,created_by:profile.id},{onConflict:'user_id'}).select('memory_enabled,style_learning_enabled,style_profile,phone_e164').single();
+    if(created.error) throw created.error; preferences=created.data;
   }
-  if(Deno.env.get('REID_WHATSAPP_TRANSPORT')==='qr') throw new Error('explicit_owner_mapping_required');
-  const id=Deno.env.get('WHATSAPP_OWNER_USER_ID') || '';
-  if(!id) throw new Error('whatsapp_owner_not_configured');
-  const profile=await admin.from('profiles').select('id,full_name,email').eq('id',id).single();
-  if(profile.error) throw profile.error;
-  return profile.data as {id:string;full_name:string;email:string};
+  return {...profile,roles,memory_enabled:preferences.memory_enabled,style_learning_enabled:preferences.style_learning_enabled,style_profile:preferences.style_profile||{},phone_e164:preferences.phone_e164};
 }
 
 const redactSecrets=(value:string)=>value
@@ -160,20 +163,18 @@ const redactSecrets=(value:string)=>value
   .replace(/(password|كلمة المرور|secret|api[_ -]?key)\s*[:=]?\s*\S+/gi,'$1 [محذوف]')
   .slice(0,1200);
 
-async function personalizedInput(admin:any, conversationId:string, identity:{full_name:string}, current:string) {
+async function personalizedInput(admin:any, conversationId:string, identity:AdminIdentity, current:string) {
   const history=await admin.from('whatsapp_messages').select('direction,body,created_at').eq('conversation_id',conversationId).not('body','is',null).order('created_at',{ascending:false}).limit(12);
   const lines=(history.data || []).reverse().map((item:any)=>`${item.direction==='inbound'?'المسؤول':'ريّد'}: ${redactSecrets(String(item.body))}`);
-  return `أنت مساعد ${identity.full_name} الشخصي ورئيس مكتبه الرقمي، وفي الوقت نفسه مختص معتمد في نظام شركة ريّد. تحدث معه طبيعيًا وذكيًا وبنفس لغته ولهجته، وأجب مباشرة عن التحية والأسئلة العامة وأسئلة قدراتك من دون طلب موافقة. ساعده في الصياغة والتخطيط وترتيب الأولويات والتذكيرات والمواعيد. عند ارتباط الطلب بالشركة استخدم سياق ريّد والوكيل والأدوات المصرح بها، وميّز بوضوح بين إجابة أو اقتراح وبين فعل حقيقي. الموافقة مطلوبة فقط عند استدعاء أداة تنفيذية بمستوى L2-L4، وليست مطلوبة للمحادثة أو التحليل. اجعل الحوار متكيفًا: إذا كان الطلب واضحًا فأجب مباشرة؛ إذا نقصته معلومة فاسأل سؤالًا واحدًا محددًا؛ وإذا كان الاختيار سيسهّل القرار فاختم بسطر وحيد بصيغة "خيارات: خيار قصير | خيار قصير | خيار قصير" مع خيارين أو ثلاثة فقط، ولا تستخدم هذا السطر عندما لا يفيد. كل خيار يجب ألا يتجاوز 20 حرفًا. تعرّف على أسلوبه من ذاكرة المستخدم والسياق الحديث وطابقه باحترام وباختصار. لا تنفذ إجراءً أو تدّعي إنشاء تذكير أو مهمة إلا بعد نتيجة أداة فعلية. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
+  return `أنت مساعد ${identity.full_name} الشخصي ورئيس مكتبه الرقمي، وفي الوقت نفسه مختص معتمد في نظام شركة ريّد. صلاحيات الحساب: ${identity.roles.join(', ')}. تحدث معه طبيعيًا وذكيًا وبنفس لغته ولهجته، وأجب مباشرة عن التحية والأسئلة العامة وأسئلة قدراتك من دون طلب موافقة. ساعده في الصياغة والتخطيط وترتيب الأولويات والتذكيرات والمواعيد. عند ارتباط الطلب بالشركة استخدم سياق ريّد والوكيل والأدوات المصرح بها، وميّز بوضوح بين إجابة أو اقتراح وبين فعل حقيقي. الموافقة مطلوبة فقط عند استدعاء أداة تنفيذية بمستوى L2-L4، وليست مطلوبة للمحادثة أو التحليل. اجعل الحوار متكيفًا: إذا كان الطلب واضحًا فأجب مباشرة؛ إذا نقصته معلومة فاسأل سؤالًا واحدًا محددًا؛ وإذا كان الاختيار سيسهّل القرار فاختم بسطر وحيد بصيغة "خيارات: خيار قصير | خيار قصير | خيار قصير" مع خيارين أو ثلاثة فقط، ولا تستخدم هذا السطر عندما لا يفيد. كل خيار يجب ألا يتجاوز 20 حرفًا. طابق ملف أسلوبه المجمع باحترام من غير تقليد مبالغ أو ادعاء معرفة شخصية. ملف الأسلوب: ${JSON.stringify(identity.style_profile)}. لا تنفذ إجراءً أو تدّعي إنشاء تذكير أو مهمة إلا بعد نتيجة أداة فعلية. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
 }
 
-async function rememberOwnerMessage(admin:any, identity:{id:string}, messageId:string, text:string) {
+async function learnAdminMessage(admin:any, identity:AdminIdentity, text:string) {
   const safe=redactSecrets(text).trim();
-  if(safe.length < 4 || /^(مساعدة|help|menu|القائمة)$/i.test(safe)) return;
-  const stored=await admin.from('memories').insert({
-    scope:'user',scope_id:identity.id,content:safe,title:`WhatsApp ${messageId.slice(-12)}`,
-    classification:'internal',created_by:identity.id,memory_kind:'temporary',expires_at:new Date(Date.now()+7*24*60*60_000).toISOString(),
-  });
-  if(stored.error) console.error('owner_memory_failed',stored.error.code || 'unknown');
+  if(!identity.style_learning_enabled||safe.length<4||/^(مساعدة|help|menu|القائمة)$/i.test(safe))return;
+  const letters=safe.match(/[\p{L}]/gu)?.length||0,arabic=safe.match(/[\u0600-\u06ff]/g)?.length||0;
+  const result=await admin.rpc('learn_whatsapp_admin_style',{target_user:identity.id,target_phone:identity.phone_e164,sample_language:letters&&arabic/letters>=0.2?'ar':'en',sample_length:safe.length,sample_has_emoji:/\p{Extended_Pictographic}/u.test(safe),sample_is_direct:safe.length<120||/^(?:سوي|سو|أرسل|ارسل|اعرض|لخص|رتب|حلل|create|send|show|summarize)/i.test(safe)});
+  if(result.error)console.error('admin_style_learning_failed',result.error.code||'unknown');
 }
 
 function parseReminder(text:string, now=new Date()) {
@@ -273,7 +274,6 @@ async function handleRequest(request: Request) {
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-  const allowed = new Set((Deno.env.get('WHATSAPP_OWNER_NUMBERS') || '').split(',').map(value => value.replace(/\D/g, '')).filter(Boolean));
   const isQR = Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr';
   let payload: any;
   if (isQR) {
@@ -285,8 +285,7 @@ async function handleRequest(request: Request) {
     const chat:any=job.data.qr_conversations;
     if(chat.bot_mode!=='active') return json({handled:true,paused:true});
     const phone=String(chat.jid).replace(/@s\.whatsapp\.net$/,'');
-    if(!allowed.has(phone)||!ownerEmailFor(phone)) return json({handled:false});
-    await ownerIdentity(admin,phone);
+    try { await adminIdentity(admin,phone); } catch { return json({handled:false}); }
     payload={entry:[{changes:[{value:{messages:[{id:'qr:'+job.data.message_id,from:phone,type:'text',text:{body:job.data.input}}],contacts:[{wa_id:phone,profile:{name:chat.display_name}}]}}]}]};
   } else {
     const raw=await request.text();
@@ -310,7 +309,8 @@ async function handleRequest(request: Request) {
     if (inserted.error?.code === '23505') continue;
     if (inserted.error) throw inserted.error;
 
-    if (!allowed.has(String(message.from).replace(/\D/g, ''))) {
+    let identity:AdminIdentity;
+    try { identity=await adminIdentity(admin,String(message.from)); } catch {
       await sendText(message.from, 'هذا الرقم غير مصرح له بإدارة وكلاء ريّد. تواصل مع مالك النظام لإضافتك.');
       continue;
     }
@@ -325,8 +325,7 @@ async function handleRequest(request: Request) {
     await admin.from('whatsapp_messages').insert({ conversation_id:conversationId, meta_message_id:message.id, direction:'inbound', message_type:message.type||'unknown', body:incomingText, delivery_status:'received' });
     try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
     if(!isQR && conversationResult.data.bot_mode!=='active') continue;
-    const identity=await ownerIdentity(admin,message.from);
-    if(incomingText) await rememberOwnerMessage(admin,identity,message.id,incomingText);
+    if(incomingText) await learnAdminMessage(admin,identity,incomingText);
     const buttonId = message?.interactive?.button_reply?.id || message?.button?.payload || '';
     if (/^(approve|reject):[0-9a-f-]{36}$/i.test(buttonId)) {
       const [decision,runId]=buttonId.split(':');
@@ -365,6 +364,7 @@ async function handleRequest(request: Request) {
     if(/^(?:احفظ|تذكر|تذكّر)\s+(?:هذا|ان|أن)?\s*/i.test(text)) {
       const content=redactSecrets(text.replace(/^(?:احفظ|تذكر|تذكّر)\s+(?:هذا|ان|أن)?\s*/i,'')).trim();
       if(!content) { const replyBody='وش المعلومة أو التفضيل اللي تريدني أحفظه؟'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue; }
+      if(!identity.memory_enabled) { const replyBody='الذاكرة الدائمة مقفلة لحسابك. يقدر المالك يفعّلها من إعدادات واتساب.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue; }
       await admin.from('memories').insert({scope:'user',scope_id:identity.id,content,title:'تفضيل محفوظ من واتساب',classification:'internal',created_by:identity.id,memory_kind:'preference'});
       const replyBody=`حفظته لك كتفضيل دائم: ${content}`; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
     }

@@ -67,7 +67,7 @@ describe('agent gateway policy', () => {
   it('shows security blocks separately from pause and approval states', () => {
     expect(operationalState(agent({ enabled: false }), gemini, [])).toBe('blocked');
     expect(operationalState(agent({ id: 'marketing', classification: 'public', status: 'paused' }), gemini, [])).toBe('paused');
-    expect(operationalState(agent({ id: 'marketing', classification: 'public' }), gemini, [{ id: 'r', agent_id: 'marketing', provider_id: 'gemini', classification: 'public', run_state: 'pending_approval', approval_level: 2, approval_state: 'pending', latency_ms: null, token_usage: null, output_preview: null, error: null, created_at: '' }])).toBe('approval');
+    expect(operationalState(agent({ id: 'marketing', classification: 'public' }), gemini, [{ id: 'r', agent_id: 'marketing', provider_id: 'gemini', classification: 'public', run_state: 'pending_approval', approval_level: 2, approval_state: 'pending', latency_ms: null, token_usage: null, quality_score: null, quality_flags: [], revision_count: 0, output_preview: null, error: null, created_at: '' }])).toBe('approval');
   });
 });
 

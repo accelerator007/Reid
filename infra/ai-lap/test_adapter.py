@@ -17,7 +17,7 @@ class AdapterContract(unittest.TestCase):
         self.assertEqual(adapter.EMBED_MODEL, "nomic-embed-text:latest")
 
     def test_bounded_body(self):
-        self.assertLessEqual(adapter.MAX_BODY, 64 * 1024)
+        self.assertEqual(adapter.MAX_BODY, 24 * 1024 * 1024)
 
 
 if __name__ == "__main__":
