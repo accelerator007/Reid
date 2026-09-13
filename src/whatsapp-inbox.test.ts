@@ -10,6 +10,7 @@ const reminderDispatch = readFileSync(new URL("../supabase/functions/reminder-di
 const adminMemoryMigration = readFileSync(new URL("../supabase/migrations/202609120002_whatsapp_admin_memory.sql", import.meta.url), "utf8");
 const ownerGroupMigration = readFileSync(new URL("../supabase/migrations/202609120003_owner_whatsapp_group.sql", import.meta.url), "utf8");
 const ownerGroupPinned = readFileSync(new URL("../supabase/migrations/202609120004_owner_group_always_active.sql", import.meta.url), "utf8");
+const adminOutboundMigration = readFileSync(new URL("../supabase/migrations/202609130001_whatsapp_admin_outbound.sql", import.meta.url), "utf8");
 const qrPolicy = readFileSync(new URL("../server/policy.mjs", import.meta.url), "utf8");
 const qrService = readFileSync(new URL("../server/index.mjs", import.meta.url), "utf8");
 const qrTransport = readFileSync(new URL("../supabase/functions/_shared/qr-transport.ts", import.meta.url), "utf8");
@@ -152,6 +153,21 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("toolName:'tasks.create'");
     expect(webhook).toContain("تم إنشاء المهمة");
     expect(webhook).toContain("https://reidpro.com/projects/");
+  });
+
+  it("sends confirmed messages between Ali and Sheikha instead of pretending", () => {
+    expect(webhook).toContain("configuredRecipient");
+    expect(webhook).toContain("alialajmi524@gmail.com");
+    expect(webhook).toContain("sheikhaalmamari4@gmail.com");
+    expect(webhook).toContain("requestedAdminSend");
+    expect(webhook).toContain("confirmsAdminSend");
+    expect(webhook).toContain("queueQrText(admin,pending.data.target_phone");
+    expect(webhook).toContain("جاري الإرسال");
+    expect(adminOutboundMigration).toContain("whatsapp_pending_sends");
+    expect(adminOutboundMigration).toContain("whatsapp_pending_sends_owner_read");
+    expect(qrService).toContain("row.dedupe_key.startsWith('admin-send:')");
+    expect(qrService).toContain("تم إرسال الرسالة إلى");
+    expect(qrService).toContain("status:'uncertain'");
   });
 
   it("creates real isolated reminders and dispatches them through an authenticated scheduler", () => {
