@@ -9,7 +9,7 @@ const reminderMigration = readFileSync(new URL("../supabase/migrations/202609070
 const reminderDispatch = readFileSync(new URL("../supabase/functions/reminder-dispatch/index.ts", import.meta.url), "utf8");
 const adminMemoryMigration = readFileSync(new URL("../supabase/migrations/202609120002_whatsapp_admin_memory.sql", import.meta.url), "utf8");
 const ownerGroupMigration = readFileSync(new URL("../supabase/migrations/202609120003_owner_whatsapp_group.sql", import.meta.url), "utf8");
-const ownerGroupAlwaysActive = readFileSync(new URL("../supabase/migrations/202609120004_owner_group_always_active.sql", import.meta.url), "utf8");
+const ownerGroupPinned = readFileSync(new URL("../supabase/migrations/202609120004_owner_group_always_active.sql", import.meta.url), "utf8");
 const qrPolicy = readFileSync(new URL("../server/policy.mjs", import.meta.url), "utf8");
 const qrService = readFileSync(new URL("../server/index.mjs", import.meta.url), "utf8");
 const qrTransport = readFileSync(new URL("../supabase/functions/_shared/qr-transport.ts", import.meta.url), "utf8");
@@ -47,6 +47,12 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("notifyOwners");
     expect(webhook).toContain("ADMIN_NOTIFICATION_EMAILS");
     expect(webhook).toContain("owner_notification_failed");
+    expect(webhook).toContain("humanHandoff");
+    expect(webhook).toContain("'handoff'");
+    expect(webhook).toContain("عميل واتساب يطلب موظفًا");
+    expect(qrService).toContain("if(result.handoff)");
+    expect(qrService).toContain("bot_mode:'human'");
+    expect(qrService).toContain("إذا تريد تتكلم مع شخص من فريق ريّد اكتب: موظف");
   });
 
   it("maps each WhatsApp Owner to separate context and redacts obvious secrets", () => {
@@ -74,7 +80,7 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).not.toContain("WHATSAPP_OWNER_USER_ID");
   });
 
-  it("keeps only the exact Owner group always active for mapped Owners", () => {
+  it("keeps the exact Owner group invocation-only for mapped Owners", () => {
     expect(ownerGroupMigration).toContain("whatsapp_qr_groups");
     expect(qrService).toContain("REID_QR_BOOTSTRAP_GROUP_NAME");
     expect(qrService).toContain("authorizedGroupOwner");
@@ -88,9 +94,17 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("including 🖕🏻");
     expect(webhook).toContain("لا تبدأ بالإهانة");
     expect(webhook).toContain("لا تهدد");
-    expect(ownerGroupAlwaysActive).toContain("120363412585944970@g.us");
-    expect(qrPolicy).toContain("addressed=mentioned||reidName.test(text)");
+    expect(ownerGroupPinned).toContain("120363412585944970@g.us");
+    expect(qrPolicy).toContain("repliedToBot");
+    expect(qrPolicy).toContain("addressed=mentioned||reidName.test(text)||repliedToBot");
     expect(qrService).toContain("if(!item.addressed)");
+    expect(qrService).toContain("async function persistInbound");
+    expect(qrService).toContain("setTimeout(resolve,300)");
+    expect(qrService).toContain("authorizedGroupOwner(item.senderPhone)");
+    expect(qrService).toContain(".replace(/[\\u0000-\\u001f\\u007f]/g");
+    expect(qrService).toContain("startsWith('Closing session:')");
+    expect(qrService).toContain("conversation_insert");
+    expect(qrService).not.toContain("stage='conversation_upsert'");
   });
 
   it("accepts typed Arabic approval and rejection for the latest pending command", () => {
@@ -103,6 +117,12 @@ describe("WhatsApp Owner inbox contract", () => {
     const gateway = readFileSync(new URL("../supabase/functions/llm-gateway/index.ts", import.meta.url), "utf8");
     expect(webhook).toContain("أجب مباشرة عن التحية");
     expect(webhook).not.toContain("`رد الوكيل:\\n${result.output}`");
+    expect(webhook).not.toContain("تم توجيه الأمر للوكيل وسيصلك الرد عند اكتماله");
+    expect(webhook).toContain("هلا وغلا 👋🏻 حاضر");
+    expect(webhook).toContain("(?:reid|ري[ّ]?د)");
+    const localRunner = readFileSync(new URL("../supabase/functions/ai-lap-runner/index.ts", import.meta.url), "utf8");
+    expect(localRunner).not.toContain("`رد الوكيل:\\n${output}`");
+    expect(localRunner).toContain("local_runner_retry");
     expect(gateway).toContain("let effectiveApproval = 0");
     expect(gateway).toContain("effectiveApproval = tool.approval_level");
   });

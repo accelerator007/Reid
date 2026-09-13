@@ -243,20 +243,22 @@ function deliveryStatuses(payload:any) {
 }
 
 const escapeHtml = (value:string) => value.replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]!));
+const humanHandoff=/(?:موظف|موظفة|أحد من الفريق|احد من الفريق|شخص من الفريق|إنسان|انسان|أكلم\s+(?:أحد|احد|شخص)|اكلم\s+(?:أحد|احد|شخص)|أتحدث\s+(?:مع\s+)?(?:أحد|احد|شخص)|اتحدث\s+(?:مع\s+)?(?:أحد|احد|شخص)|human|representative|speak\s+to\s+(?:a\s+)?(?:human|person|agent))/iu;
 
-async function notifyOwners(sender:string, name:string|null, message:string|null) {
+async function notifyOwners(sender:string, name:string|null, message:string|null, kind:'message'|'handoff'='message') {
   const key=Deno.env.get('RESEND_API_KEY');
   if(!key) return;
   const recipients=(Deno.env.get('ADMIN_NOTIFICATION_EMAILS') || 'alialajmi524@gmail.com,sheikhaalmamari4@gmail.com').split(',').map(value=>value.trim()).filter(Boolean);
   if(!recipients.length) return;
   const safeName=escapeHtml(name || `+${sender}`);
   const safeText=escapeHtml((message || 'رسالة غير نصية').slice(0,500));
+  const isHandoff=kind==='handoff';
   const response=await fetch('https://api.resend.com/emails',{
     method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},
     body:JSON.stringify({
       from:Deno.env.get('REPORT_FROM_EMAIL') || 'Reid <reports@reidpro.com>',to:recipients,
-      subject:`رسالة واتساب جديدة من ${name || `+${sender}`}`,
-      html:`<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><h2>وصلت رسالة جديدة إلى ريّد</h2><p><strong>المرسل:</strong> ${safeName}<br><strong>الرقم:</strong> +${escapeHtml(sender)}</p><blockquote style="border-right:4px solid #6842ae;padding:8px 14px;margin:16px 0">${safeText}</blockquote><p><a href="https://reidpro.com/dashboard">فتح صندوق محادثات المالك</a></p></div>`,
+      subject:isHandoff?`عميل واتساب يطلب موظفًا: ${name || `+${sender}`}`:`رسالة واتساب جديدة من ${name || `+${sender}`}`,
+      html:`<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><h2>${isHandoff?'طلب تحويل المحادثة إلى موظف':'وصلت رسالة جديدة إلى ريّد'}</h2><p><strong>المرسل:</strong> ${safeName}<br><strong>الرقم:</strong> +${escapeHtml(sender)}</p><blockquote style="border-right:4px solid #6842ae;padding:8px 14px;margin:16px 0">${safeText}</blockquote><p><a href="https://reidpro.com/inbox">فتح صندوق محادثات واتساب</a></p></div>`,
     }),
   });
   if(!response.ok) throw new Error(`owner_email_${response.status}`);
@@ -287,7 +289,21 @@ async function handleRequest(request: Request) {
     if(chat.bot_mode!=='active') return json({handled:true,paused:true});
     targetQrConversation(chat.id);
     const phone=String(job.data.sender_phone||chat.jid).replace(/@s\.whatsapp\.net$/,'');
-    try { await adminIdentity(admin,phone); } catch { return json({handled:false}); }
+    try { await adminIdentity(admin,phone); } catch {
+      const input=String(job.data.input||'').trim();
+      if(humanHandoff.test(input)){
+        const receipt=await admin.from('whatsapp_events').insert({
+          event_id:`qr-handoff:${job.data.message_id}`,sender_phone:phone,message_type:'text',
+          payload:{transport:'qr',handoff:true,conversation_id:chat.id},
+        });
+        if(!receipt.error){
+          try { await notifyOwners(phone,chat.display_name,input,'handoff'); }
+          catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
+        }else if(receipt.error.code!=='23505') console.error('handoff_receipt_failed',receipt.error.code||'unknown');
+        return json({handled:false,customer:true,handoff:true});
+      }
+      return json({handled:false,customer:true});
+    }
     payload={entry:[{changes:[{value:{messages:[{id:'qr:'+job.data.message_id,from:phone,type:'text',text:{body:job.data.input},qr_group:String(chat.jid).endsWith('@g.us')}],contacts:[{wa_id:phone,profile:{name:chat.display_name}}]}}]}]};
   } else {
     const raw=await request.text();
@@ -325,7 +341,7 @@ async function handleRequest(request: Request) {
     const conversationId=conversationResult.data.id;
     const incomingText=message?.text?.body?.trim() || message?.interactive?.button_reply?.title || null;
     await admin.from('whatsapp_messages').insert({ conversation_id:conversationId, meta_message_id:message.id, direction:'inbound', message_type:message.type||'unknown', body:incomingText, delivery_status:'received' });
-    if(!message.qr_group)try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
+    if(!isQR&&!message.qr_group)try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
     if(!isQR && conversationResult.data.bot_mode!=='active') continue;
     if(incomingText) await learnAdminMessage(admin,identity,incomingText);
     const buttonId = message?.interactive?.button_reply?.id || message?.button?.payload || '';
@@ -342,6 +358,11 @@ async function handleRequest(request: Request) {
     const text = message?.text?.body?.trim();
     if (!text) {
       const replyBody='أرسل أمرًا نصيًا. الأوامر الحساسة ستنتظر موافقة بشرية داخل لوحة ريّد.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(/^(?:(?:هلا(?:\s+والله)?|مرحبا|السلام\s+عليكم|صباح\s+الخير|مساء\s+الخير)(?:\s+(?:يا\s+)?(?:reid|ري[ّ]?د))?|(?:reid|ري[ّ]?د))(?:[\s!؟?.,،]*)$/iu.test(text)) {
+      const replyBody='هلا وغلا 👋🏻 حاضر، وش تريدني أساعدك فيه؟';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       continue;
     }
     const plainDecision=/^(موافقة|وافق|approve|approved|رفض|ارفض|reject)$/i.exec(text)?.[1];
@@ -436,7 +457,6 @@ async function handleRequest(request: Request) {
         const replyBody=`هذا الأمر يحتاج موافقة L${result.approvalLevel}. هل تريد تنفيذه؟`; await recordOutbound(admin,conversationId,replyBody,await sendApproval(message.from,runId,result.approvalLevel));
       } else if(result.status==='queued') {
         await admin.from('whatsapp_commands').update({status:'queued',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
-        const replyBody='تم توجيه الأمر للوكيل وسيصلك الرد عند اكتماله.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       } else {
         await admin.from('whatsapp_commands').update({status:'completed',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
         const parsed=assistantReply(result.output || 'تمت معالجة طلبك.');

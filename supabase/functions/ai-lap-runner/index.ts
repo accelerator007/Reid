@@ -295,12 +295,27 @@ Deno.serve(async request => {
       if (updated.error) throw updated.error;
       if (output) await admin.from('memories').insert({scope:'agent',scope_id:run.data.agent_id,title:`Run ${run.data.id}`,content:output.slice(0,4000),embedding,classification:run.data.classification,created_by:run.data.requested_by,source_run_id:run.data.id});
       await admin.from('agent_run_payloads').delete().eq('run_id',run.data.id);
-      await notifyWhatsApp(admin,run.data.id,output?`رد الوكيل:\n${output}`:'اكتمل تنفيذ الأمر.', 'completed');
+      await notifyWhatsApp(admin,run.data.id,output||'اكتمل تنفيذ الأمر.', 'completed');
       return json({ ok:true });
     }
 
     if (body.action === 'fail') {
       const localError=String(body.error||'local_runner_failed').slice(0,500);
+      const retryable=/^(?:RuntimeError|TimeoutError|URLError|ConnectionError)$/i.test(localError);
+      if(retryable){
+        const current=await admin.from('agent_runs').select('id,logs').eq('id',body.runId).eq('provider_id','ollama').eq('run_state','running').single();
+        if(!current.error){
+          const logs=Array.isArray(current.data.logs)?current.data.logs:[];
+          const retries=logs.filter((entry:any)=>entry?.event==='local_runner_retry').length;
+          if(retries<1){
+            const requeued=await admin.from('agent_runs').update({
+              run_state:'queued',status:'queued',started_at:null,
+              logs:[...logs,{at:new Date().toISOString(),event:'local_runner_retry',reason:localError}],
+            }).eq('id',current.data.id).eq('run_state','running');
+            if(!requeued.error)return json({ok:true,retry:'queued'});
+          }
+        }
+      }
       try {
         await completeWithGeminiFallback(admin,String(body.runId),localError);
         return json({ok:true,fallback:'gemini'});
