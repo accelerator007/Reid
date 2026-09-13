@@ -27,6 +27,14 @@ test('protects the dashboard for anonymous visitors', async ({ page }) => {
   await expect(page.getByText('Pending Approvals')).toHaveCount(0);
 });
 
+test('shows the bilingual public workshop catalogue without exposing management', async ({ page }) => {
+  await page.goto('/workshops');
+  await expect(page.getByRole('heading', { level: 1, name: 'ورش ريّد' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'ورشة جديدة' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'EN' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Reid workshops' })).toBeVisible();
+});
+
 test('protects Owner administration for anonymous visitors', async ({ page }) => {
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();

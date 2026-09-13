@@ -25,7 +25,8 @@ import { Connections, QrInbox } from "./qr-workspace";
 import { PublicHome } from "./public-home";
 import { ResearchWorkspace } from "./research";
 import { CrmWorkspace } from "./crm";
-import { Building2, Crown, FolderKanban, FlaskConical, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X, CalendarDays, Wallet, Settings2, BriefcaseBusiness, Search, ShieldCheck, Workflow } from "lucide-react";
+import { Workshops } from "./workshops";
+import { Building2, Crown, FolderKanban, FlaskConical, GraduationCap, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X, CalendarDays, Wallet, Settings2, BriefcaseBusiness, Search, ShieldCheck, Workflow } from "lucide-react";
 // Imported rather than written as a literal URL. The assets directory sits
 // outside Vite's public directory, so a hard-coded path is never emitted to
 // dist and the header mark 404s in production while still resolving in dev.
@@ -1322,6 +1323,7 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
     case "finance": return lang === "ar" ? "المالية" : "Finance";
     case "business": return lang === "ar" ? "دورة العمل" : "Business flow";
     case "operations": return lang === "ar" ? "إدارة الأعمال" : "Operations";
+    case "workshops": return lang === "ar" ? "الورشات" : "Workshops";
     case "assistant": return lang === "ar" ? "مساعد ريّد" : "Reid assistant";
     case "admin": return lang === "ar" ? "إدارة النظام" : "Administration";
     case "owner": return lang === "ar" ? "موجز المالك" : "Owner brief";
@@ -1350,6 +1352,7 @@ const workspaceIcons: Partial<Record<Page, React.ReactNode>> = {
   today: <CalendarDays />, inbox: <MessageCircle />, connections: <Settings2 />,
   finance: <Wallet />, operations: <BriefcaseBusiness />, assistant: <Sparkles />,
   business: <Workflow />,
+  workshops: <GraduationCap />,
   admin: <ShieldCheck />,
   owner: <Crown />,
   dashboard: <LayoutDashboard />, workspace: <UsersRound />, projects: <FolderKanban />,
@@ -1360,7 +1363,7 @@ function WorkspaceSidebar({ lang, page, navigation, open, go, signout }: { lang:
   const t = tr[lang];
   const groups:{ar:string;en:string;pages:Page[]}[] = [
     {ar:"نظرة سريعة",en:"Overview",pages:["owner","today","inbox"]},
-    {ar:"تشغيل الشركة",en:"Company operations",pages:["business","projects","crm","workspace","operations","finance","research"]},
+    {ar:"تشغيل الشركة",en:"Company operations",pages:["business","projects","crm","workshops","workspace","operations","finance","research"]},
     {ar:"الذكاء",en:"Intelligence",pages:["assistant","dashboard"]},
     {ar:"الإدارة",en:"Administration",pages:["admin","connections","profile"]},
   ];
@@ -1404,7 +1407,7 @@ function Chrome({ session }: { session: Session | null }) {
   );
   const navigation = useNavigation();
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const internalPage = session && ["owner", "today", "inbox", "connections", "business", "finance", "operations", "assistant", "admin", "dashboard", "workspace", "projects", "research", "crm", "profile"].includes(page);
+  const internalPage = session && ["owner", "today", "inbox", "connections", "business", "finance", "operations", "assistant", "admin", "dashboard", "workspace", "projects", "research", "workshops", "crm", "profile"].includes(page);
   React.useEffect(() => {
     const client = supabase;
     if (!session || !client) return;
@@ -1427,7 +1430,7 @@ function Chrome({ session }: { session: Session | null }) {
           {/* Derived from src/routes.ts, so the navigation can never offer a
               destination the gate would then refuse. */}
           {navigation
-            .filter(({ page: target }) => ["home", "apply", "today"].includes(target))
+            .filter(({ page: target }) => ["home", "workshops", "apply", "today"].includes(target))
             .map(({ page: target }) => (
               <button
                 key={target}
@@ -1455,6 +1458,7 @@ function Chrome({ session }: { session: Session | null }) {
       </header>
       {internalPage && <WorkspaceSidebar lang={lang} page={page} navigation={navigation} open={menuOpen} go={(target) => { setMenuOpen(false); go(target); }} signout={async () => { await supabase?.auth.signOut(); go("home"); }} />}
       {page === "home" && <><PublicHome lang={lang} go={go} /><Chat lang={lang} /></>}
+      {page === "workshops" && <Workshops lang={lang} go={go} />}
       {(["owner", "today", "inbox", "connections", "business", "finance", "operations", "assistant", "admin"] as Page[]).includes(page) && (
         <Guarded page={page} lang={lang} renderSignIn={() => <Login lang={lang} done={() => go(page)} apply={() => go("apply")} />} onProfile={() => go("profile")}>
           {page === "today" && <Today lang={lang} go={go} />}

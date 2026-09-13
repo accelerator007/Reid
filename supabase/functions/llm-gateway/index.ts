@@ -205,6 +205,16 @@ async function buildAgentContext(admin: ReturnType<typeof createClient>, agentId
     context.announcements = await rows(admin, 'announcements', 'id,title_ar,title_en,body_ar,body_en,published_at,expires_at');
     context.publicProjects = (await rows(admin, 'projects', 'id,name,type,status,visibility,start_date,target_date', 'updated_at')).filter((project: Record<string, unknown>) => project.visibility === 'public');
   }
+  if (['ceo', 'operations', 'sales', 'support', 'knowledge'].includes(agentId)) {
+    context.workshops = await rows(admin, 'workshops', 'id,title_ar,title_en,description_ar,description_en,status,visibility,format,venue_ar,venue_en,facilitator_name,registration_url,start_at,end_at,registration_deadline,capacity,price_omr', 'start_at');
+  }
+  if (['marketing', 'content'].includes(agentId)) {
+    const { data, error } = await admin.from('workshops')
+      .select('id,title_ar,title_en,description_ar,description_en,format,venue_ar,venue_en,facilitator_name,registration_url,start_at,end_at,registration_deadline,capacity,price_omr')
+      .eq('status', 'published').eq('visibility', 'public').order('start_at').limit(30);
+    if (error) throw new Error('agent_public_workshops_failed');
+    context.workshops = data || [];
+  }
   if (agentId === 'knowledge') {
     context.projectDocuments = await rows(admin, 'project_files', 'id,project_id,title,category,restricted,created_at');
     context.researchDocuments = await rows(admin, 'research_documents', 'id,research_id,title,category,restricted,created_at');
@@ -242,6 +252,16 @@ async function executeTool(admin: ReturnType<typeof createClient>, tool: AgentTo
       publicProjects: (await rows(admin, 'projects', 'id,name,type,status,visibility,start_date,target_date', 'updated_at'))
         .filter((project: Record<string, unknown>) => project.visibility === 'public'),
     };
+    case 'workshops.list': {
+      const workshops = await rows(admin, 'workshops', 'id,title_ar,title_en,description_ar,description_en,status,visibility,format,venue_ar,venue_en,facilitator_name,registration_url,start_at,end_at,registration_deadline,capacity,price_omr', 'start_at');
+      const counts = await admin.from('workshop_registration_counts').select('workshop_id,registration_count,waitlist_count').limit(30);
+      if (counts.error) throw new Error('tool_workshop_counts_failed');
+      return workshops.map((workshop: Record<string, unknown>) => ({
+        ...workshop,
+        registration_count: counts.data?.find(count => count.workshop_id === workshop.id)?.registration_count || 0,
+        waitlist_count: counts.data?.find(count => count.workshop_id === workshop.id)?.waitlist_count || 0,
+      }));
+    }
     case 'knowledge.search': {
       const query = text(args.query, 120)?.toLowerCase() || '';
       const [projectDocuments, researchDocuments, memory] = await Promise.all([
