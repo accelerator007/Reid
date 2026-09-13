@@ -117,6 +117,12 @@ describe("WhatsApp Owner inbox contract", () => {
     const gateway = readFileSync(new URL("../supabase/functions/llm-gateway/index.ts", import.meta.url), "utf8");
     expect(webhook).toContain("أجب مباشرة عن التحية");
     expect(webhook).not.toContain("`رد الوكيل:\\n${result.output}`");
+    expect(webhook).not.toContain("تم توجيه الأمر للوكيل وسيصلك الرد عند اكتماله");
+    expect(webhook).toContain("هلا وغلا 👋🏻 حاضر");
+    expect(webhook).toContain("(?:reid|ري[ّ]?د)");
+    const localRunner = readFileSync(new URL("../supabase/functions/ai-lap-runner/index.ts", import.meta.url), "utf8");
+    expect(localRunner).not.toContain("`رد الوكيل:\\n${output}`");
+    expect(localRunner).toContain("local_runner_retry");
     expect(gateway).toContain("let effectiveApproval = 0");
     expect(gateway).toContain("effectiveApproval = tool.approval_level");
   });

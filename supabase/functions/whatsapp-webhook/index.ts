@@ -360,6 +360,11 @@ async function handleRequest(request: Request) {
       const replyBody='أرسل أمرًا نصيًا. الأوامر الحساسة ستنتظر موافقة بشرية داخل لوحة ريّد.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       continue;
     }
+    if(/^(?:(?:هلا(?:\s+والله)?|مرحبا|السلام\s+عليكم|صباح\s+الخير|مساء\s+الخير)(?:\s+(?:يا\s+)?(?:reid|ري[ّ]?د))?|(?:reid|ري[ّ]?د))(?:[\s!؟?.,،]*)$/iu.test(text)) {
+      const replyBody='هلا وغلا 👋🏻 حاضر، وش تريدني أساعدك فيه؟';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
     const plainDecision=/^(موافقة|وافق|approve|approved|رفض|ارفض|reject)$/i.exec(text)?.[1];
     if(plainDecision && isQR) {
       await sendText(message.from,'راجع تفاصيل الأمر والموافقة داخل حسابك في https://reidpro.com/dashboard'); continue;
@@ -452,7 +457,6 @@ async function handleRequest(request: Request) {
         const replyBody=`هذا الأمر يحتاج موافقة L${result.approvalLevel}. هل تريد تنفيذه؟`; await recordOutbound(admin,conversationId,replyBody,await sendApproval(message.from,runId,result.approvalLevel));
       } else if(result.status==='queued') {
         await admin.from('whatsapp_commands').update({status:'queued',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
-        const replyBody='تم توجيه الأمر للوكيل وسيصلك الرد عند اكتماله.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       } else {
         await admin.from('whatsapp_commands').update({status:'completed',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
         const parsed=assistantReply(result.output || 'تمت معالجة طلبك.');
