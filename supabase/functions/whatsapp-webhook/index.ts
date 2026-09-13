@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { queueQrText, targetQrConversation, withQrDispatch } from '../_shared/qr-transport.ts';
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
@@ -20,6 +21,7 @@ async function validSignature(request: Request, raw: string) {
 }
 
 async function sendText(to: string, body: string) {
+  if (Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr') return queueQrText(createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!),to,body);
   const token = Deno.env.get('META_WHATSAPP_ACCESS_TOKEN');
   const phoneId = Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
   if (!token || !phoneId) throw new Error('whatsapp_delivery_not_configured');
@@ -34,6 +36,7 @@ async function sendText(to: string, body: string) {
 }
 
 async function sendApproval(to: string, runId: string, level: number) {
+  if (Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr') return sendText(to,`هذا الأمر يحتاج موافقة L${level}. راجع الأمر والموافقة في https://reidpro.com/dashboard`);
   const token = Deno.env.get('META_WHATSAPP_ACCESS_TOKEN');
   const phoneId = Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
   if (!token || !phoneId) throw new Error('whatsapp_delivery_not_configured');
@@ -52,6 +55,7 @@ async function sendApproval(to: string, runId: string, level: number) {
 }
 
 async function sendChoices(to: string, body: string, choices: string[]) {
+  if (Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr') return sendText(to,body+'\n'+choices.map((v,i)=>`${i+1}. ${v}`).join('\n'));
   const token = Deno.env.get('META_WHATSAPP_ACCESS_TOKEN');
   const phoneId = Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
   if (!token || !phoneId) throw new Error('whatsapp_delivery_not_configured');
@@ -70,6 +74,7 @@ async function sendChoices(to: string, body: string, choices: string[]) {
 }
 
 async function sendList(to: string, body: string, choices: string[]) {
+  if (Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr') return sendText(to,body+'\n'+choices.map((v,i)=>`${i+1}. ${v}`).join('\n'));
   const token = Deno.env.get('META_WHATSAPP_ACCESS_TOKEN');
   const phoneId = Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
   if (!token || !phoneId) throw new Error('whatsapp_delivery_not_configured');
@@ -99,7 +104,7 @@ function assistantReply(value: string) {
 }
 
 async function recordOutbound(admin: any, conversationId: string, body: string, metaMessageId?: string) {
-  await admin.from('whatsapp_messages').insert({ conversation_id: conversationId, meta_message_id: metaMessageId || null, direction: 'outbound', message_type: 'text', body, delivery_status: 'sent' });
+  await admin.from('whatsapp_messages').insert({ conversation_id: conversationId, meta_message_id: metaMessageId || null, direction: 'outbound', message_type: 'text', body, delivery_status: metaMessageId?.startsWith('queued:') ? 'queued' : 'sent' });
   await admin.from('whatsapp_conversations').update({ last_outbound_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', conversationId);
 }
 
@@ -127,22 +132,76 @@ async function gateway(body: Record<string,unknown>) {
   return payload;
 }
 
-function ownerEmailFor(phone:string) {
-  const configured=Deno.env.get('WHATSAPP_OWNER_EMAIL_MAP') || '96896709444=alialajmi524@gmail.com,96892797586=sheikhaalmamari4@gmail.com';
+function configuredEmailFor(phone:string) {
+  const configured=Deno.env.get('WHATSAPP_ADMIN_EMAIL_MAP') || Deno.env.get('WHATSAPP_OWNER_EMAIL_MAP') || '96896709444=alialajmi524@gmail.com,96892797586=sheikhaalmamari4@gmail.com';
   return configured.split(',').map(value=>value.split('=').map(part=>part.trim())).find(([number])=>number?.replace(/\D/g,'')===phone.replace(/\D/g,''))?.[1] || null;
 }
 
-async function ownerIdentity(admin:any, phone:string) {
-  const email=ownerEmailFor(phone);
-  if(email) {
-    const profile=await admin.from('profiles').select('id,full_name,email').eq('email',email).maybeSingle();
-    if(profile.data) return profile.data as {id:string;full_name:string;email:string};
+function configuredAdmins() {
+  const configured=Deno.env.get('WHATSAPP_ADMIN_EMAIL_MAP') || Deno.env.get('WHATSAPP_OWNER_EMAIL_MAP') || '96896709444=alialajmi524@gmail.com,96892797586=sheikhaalmamari4@gmail.com';
+  return configured.split(',').map(value=>value.split('=').map(part=>part.trim())).filter(([phone,email])=>/^[1-9][0-9]{7,14}$/.test(phone?.replace(/\D/g,''))&&email?.includes('@')).map(([phone,email])=>({phone:phone.replace(/\D/g,''),email:email.toLowerCase()}));
+}
+
+function configuredRecipient(alias:string) {
+  const wanted=alias.trim().toLowerCase().replace(/^ال/,'');
+  const email=wanted==='شيخة'||wanted==='شيخه'||wanted==='sheikha'
+    ? 'sheikhaalmamari4@gmail.com'
+    : wanted==='علي'||wanted==='ali' ? 'alialajmi524@gmail.com' : null;
+  if(!email)return null;
+  const entry=configuredAdmins().find(item=>item.email===email);
+  return entry?{...entry,name:email.startsWith('sheikha')?'شيخة':'علي'}:null;
+}
+
+function requestedAdminSend(text:string) {
+  const end=/^(?:ارسل|أرسل)\s+([\s\S]{1,4000}?)\s+(?:ل|لي|إلى|الى|حال)\s*(شيخة|شيخه|sheikha|علي|ali)\s*[.!؟?،,]*$/iu.exec(text);
+  if(end)return {body:end[1].trim(),target:configuredRecipient(end[2])};
+  const start=/^(?:ارسل|أرسل)\s+(?:ل|لي|إلى|الى|حال)\s*(شيخة|شيخه|sheikha|علي|ali)\s+([\s\S]{1,4000}?)\s*[.!؟?،,]*$/iu.exec(text);
+  return start?{body:start[2].trim(),target:configuredRecipient(start[1])}:null;
+}
+
+const confirmsAdminSend=(text:string)=>/^(?:ارسلها|أرسلها|ارسله|أرسله|نفذ\s+الإرسال|نفّذ\s+الإرسال|send\s+it)\s*[.!؟?،,]*$/iu.test(text);
+const cancelsAdminSend=(text:string)=>/^(?:الغ(?:ي)?\s+الإرسال|ألغي\s+الإرسال|لا\s+ترسلها|cancel\s+(?:it|send))\s*[.!؟?،,]*$/iu.test(text);
+
+async function ensureQrDirectConversation(admin:any,phone:string,name:string) {
+  const jid=`${phone}@s.whatsapp.net`;
+  const existing=await admin.from('qr_conversations').select('id,bot_mode').eq('jid',jid).maybeSingle();
+  if(existing.error)throw existing.error;
+  if(existing.data) {
+    if(existing.data.bot_mode!=='active') {
+      const activated=await admin.from('qr_conversations').update({bot_mode:'active',display_name:name,updated_at:new Date().toISOString()}).eq('id',existing.data.id).select('id').single();
+      if(activated.error)throw activated.error;
+    }
+    return existing.data.id;
   }
-  const id=Deno.env.get('WHATSAPP_OWNER_USER_ID') || '';
-  if(!id) throw new Error('whatsapp_owner_not_configured');
-  const profile=await admin.from('profiles').select('id,full_name,email').eq('id',id).single();
-  if(profile.error) throw profile.error;
-  return profile.data as {id:string;full_name:string;email:string};
+  const created=await admin.from('qr_conversations').insert({jid,display_name:name,bot_mode:'active'}).select('id').single();
+  if(created.error?.code==='23505') {
+    const raced=await admin.from('qr_conversations').select('id').eq('jid',jid).single();
+    if(raced.error)throw raced.error;
+    return raced.data.id;
+  }
+  if(created.error)throw created.error;
+  return created.data.id;
+}
+
+type AdminIdentity={id:string;full_name:string;email:string;roles:string[];memory_enabled:boolean;style_learning_enabled:boolean;style_profile:Record<string,unknown>;phone_e164:string};
+
+async function adminIdentity(admin:any, phone:string):Promise<AdminIdentity> {
+  const normalized=phone.replace(/\D/g,'');
+  const mapped=await admin.from('whatsapp_admin_profiles').select('user_id,phone_e164,enabled,memory_enabled,style_learning_enabled,style_profile').eq('phone_e164',normalized).eq('enabled',true).maybeSingle();
+  let profile:any=null, preferences=mapped.data;
+  if(mapped.error) throw mapped.error;
+  if(preferences) profile=(await admin.from('profiles').select('id,full_name,email').eq('id',preferences.user_id).maybeSingle()).data;
+  const email=configuredEmailFor(normalized);
+  if(!profile&&email) profile=(await admin.from('profiles').select('id,full_name,email').eq('email',email).maybeSingle()).data;
+  if(!profile) throw new Error('explicit_admin_mapping_required');
+  const [roleRows,control]=await Promise.all([admin.from('user_roles').select('role').eq('user_id',profile.id),admin.from('account_controls').select('status').eq('user_id',profile.id).maybeSingle()]);
+  const roles=(roleRows.data||[]).map((row:any)=>String(row.role));
+  if(roleRows.error||control.error||control.data?.status!=='active'||!roles.some((role:string)=>['owner','super_admin','admin'].includes(role))) throw new Error('admin_not_active');
+  if(!preferences) {
+    const created=await admin.from('whatsapp_admin_profiles').upsert({user_id:profile.id,phone_e164:normalized,created_by:profile.id},{onConflict:'user_id'}).select('memory_enabled,style_learning_enabled,style_profile,phone_e164').single();
+    if(created.error) throw created.error; preferences=created.data;
+  }
+  return {...profile,roles,memory_enabled:preferences.memory_enabled,style_learning_enabled:preferences.style_learning_enabled,style_profile:preferences.style_profile||{},phone_e164:preferences.phone_e164};
 }
 
 const redactSecrets=(value:string)=>value
@@ -150,20 +209,25 @@ const redactSecrets=(value:string)=>value
   .replace(/(password|كلمة المرور|secret|api[_ -]?key)\s*[:=]?\s*\S+/gi,'$1 [محذوف]')
   .slice(0,1200);
 
-async function personalizedInput(admin:any, conversationId:string, identity:{full_name:string}, current:string) {
+async function personalizedInput(admin:any, conversationId:string, identity:AdminIdentity, current:string, ownerGroup=false) {
   const history=await admin.from('whatsapp_messages').select('direction,body,created_at').eq('conversation_id',conversationId).not('body','is',null).order('created_at',{ascending:false}).limit(12);
-  const lines=(history.data || []).reverse().map((item:any)=>`${item.direction==='inbound'?'المسؤول':'ريّد'}: ${redactSecrets(String(item.body))}`);
-  return `أنت مساعد ${identity.full_name} الشخصي ورئيس مكتبه الرقمي، وفي الوقت نفسه مختص معتمد في نظام شركة ريّد. تحدث معه طبيعيًا وذكيًا وبنفس لغته ولهجته، وأجب مباشرة عن التحية والأسئلة العامة وأسئلة قدراتك من دون طلب موافقة. ساعده في الصياغة والتخطيط وترتيب الأولويات والتذكيرات والمواعيد. عند ارتباط الطلب بالشركة استخدم سياق ريّد والوكيل والأدوات المصرح بها، وميّز بوضوح بين إجابة أو اقتراح وبين فعل حقيقي. الموافقة مطلوبة فقط عند استدعاء أداة تنفيذية بمستوى L2-L4، وليست مطلوبة للمحادثة أو التحليل. اجعل الحوار متكيفًا: إذا كان الطلب واضحًا فأجب مباشرة؛ إذا نقصته معلومة فاسأل سؤالًا واحدًا محددًا؛ وإذا كان الاختيار سيسهّل القرار فاختم بسطر وحيد بصيغة "خيارات: خيار قصير | خيار قصير | خيار قصير" مع خيارين أو ثلاثة فقط، ولا تستخدم هذا السطر عندما لا يفيد. كل خيار يجب ألا يتجاوز 20 حرفًا. تعرّف على أسلوبه من ذاكرة المستخدم والسياق الحديث وطابقه باحترام وباختصار. لا تنفذ إجراءً أو تدّعي إنشاء تذكير أو مهمة إلا بعد نتيجة أداة فعلية. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
+  let skippedCurrent=false;
+  const turns=(history.data||[]).filter((item:any)=>{
+    if(!skippedCurrent&&item.direction==='inbound'&&String(item.body).trim()===current.trim()){skippedCurrent=true;return false;}
+    return true;
+  }).slice(0,8).reverse().map((item:any)=>({role:item.direction==='inbound'?'user':'assistant',content:redactSecrets(String(item.body))}));
+  const groupPersonality=ownerGroup
+    ? 'الأسلوب: خليجي عُماني طبيعي ودافئ. داخل مجموعة المالك الخاصة فقط يجوز مزح متبادل خفيف وإيموجي مناسب—including 🖕🏻—إذا بدأ المالك المزح بوضوح. لا تبدأ بالإهانة، لا تهدد، واهدأ فورًا عند الجدية.'
+    : 'الأسلوب: خليجي عُماني طبيعي وذكي ودافئ، مع إيموجي مناسب بلا مبالغة. اسمك ريّد وأنت مساعده الشخصي ورئيس مكتبه الرقمي.';
+  return {input:`${groupPersonality}\nخاطب ${identity.full_name} مباشرة، وطابق أسلوبه بدون تقليد مبالغ. ملف الأسلوب المجمع: ${JSON.stringify(identity.style_profile)}.\nطلبه الآن: ${redactSecrets(current)}`,history:turns};
 }
 
-async function rememberOwnerMessage(admin:any, identity:{id:string}, messageId:string, text:string) {
+async function learnAdminMessage(admin:any, identity:AdminIdentity, text:string) {
   const safe=redactSecrets(text).trim();
-  if(safe.length < 4 || /^(مساعدة|help|menu|القائمة)$/i.test(safe)) return;
-  const stored=await admin.from('memories').insert({
-    scope:'user',scope_id:identity.id,content:safe,title:`WhatsApp ${messageId.slice(-12)}`,
-    classification:'internal',created_by:identity.id,memory_kind:'temporary',expires_at:new Date(Date.now()+7*24*60*60_000).toISOString(),
-  });
-  if(stored.error) console.error('owner_memory_failed',stored.error.code || 'unknown');
+  if(!identity.style_learning_enabled||safe.length<4||/^(مساعدة|help|menu|القائمة)$/i.test(safe))return;
+  const letters=safe.match(/[\p{L}]/gu)?.length||0,arabic=safe.match(/[\u0600-\u06ff]/g)?.length||0;
+  const result=await admin.rpc('learn_whatsapp_admin_style',{target_user:identity.id,target_phone:identity.phone_e164,sample_language:letters&&arabic/letters>=0.2?'ar':'en',sample_length:safe.length,sample_has_emoji:/\p{Extended_Pictographic}/u.test(safe),sample_is_direct:safe.length<120||/^(?:سوي|سو|أرسل|ارسل|اعرض|لخص|رتب|حلل|create|send|show|summarize)/i.test(safe)});
+  if(result.error)console.error('admin_style_learning_failed',result.error.code||'unknown');
 }
 
 function parseReminder(text:string, now=new Date()) {
@@ -231,26 +295,28 @@ function deliveryStatuses(payload:any) {
 }
 
 const escapeHtml = (value:string) => value.replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]!));
+const humanHandoff=/(?:موظف|موظفة|أحد من الفريق|احد من الفريق|شخص من الفريق|إنسان|انسان|أكلم\s+(?:أحد|احد|شخص)|اكلم\s+(?:أحد|احد|شخص)|أتحدث\s+(?:مع\s+)?(?:أحد|احد|شخص)|اتحدث\s+(?:مع\s+)?(?:أحد|احد|شخص)|human|representative|speak\s+to\s+(?:a\s+)?(?:human|person|agent))/iu;
 
-async function notifyOwners(sender:string, name:string|null, message:string|null) {
+async function notifyOwners(sender:string, name:string|null, message:string|null, kind:'message'|'handoff'='message') {
   const key=Deno.env.get('RESEND_API_KEY');
   if(!key) return;
   const recipients=(Deno.env.get('ADMIN_NOTIFICATION_EMAILS') || 'alialajmi524@gmail.com,sheikhaalmamari4@gmail.com').split(',').map(value=>value.trim()).filter(Boolean);
   if(!recipients.length) return;
   const safeName=escapeHtml(name || `+${sender}`);
   const safeText=escapeHtml((message || 'رسالة غير نصية').slice(0,500));
+  const isHandoff=kind==='handoff';
   const response=await fetch('https://api.resend.com/emails',{
     method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},
     body:JSON.stringify({
       from:Deno.env.get('REPORT_FROM_EMAIL') || 'Reid <reports@reidpro.com>',to:recipients,
-      subject:`رسالة واتساب جديدة من ${name || `+${sender}`}`,
-      html:`<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><h2>وصلت رسالة جديدة إلى ريّد</h2><p><strong>المرسل:</strong> ${safeName}<br><strong>الرقم:</strong> +${escapeHtml(sender)}</p><blockquote style="border-right:4px solid #6842ae;padding:8px 14px;margin:16px 0">${safeText}</blockquote><p><a href="https://reidpro.com/dashboard">فتح صندوق محادثات المالك</a></p></div>`,
+      subject:isHandoff?`عميل واتساب يطلب موظفًا: ${name || `+${sender}`}`:`رسالة واتساب جديدة من ${name || `+${sender}`}`,
+      html:`<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><h2>${isHandoff?'طلب تحويل المحادثة إلى موظف':'وصلت رسالة جديدة إلى ريّد'}</h2><p><strong>المرسل:</strong> ${safeName}<br><strong>الرقم:</strong> +${escapeHtml(sender)}</p><blockquote style="border-right:4px solid #6842ae;padding:8px 14px;margin:16px 0">${safeText}</blockquote><p><a href="https://reidpro.com/inbox">فتح صندوق محادثات واتساب</a></p></div>`,
     }),
   });
   if(!response.ok) throw new Error(`owner_email_${response.status}`);
 }
 
-Deno.serve(async request => {
+async function handleRequest(request: Request) {
   if (request.method === 'GET') {
     const url = new URL(request.url);
     const mode = url.searchParams.get('hub.mode');
@@ -262,11 +328,40 @@ Deno.serve(async request => {
   }
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
-  const raw = await request.text();
-  if (!(await validSignature(request, raw))) return json({ error: 'invalid_signature' }, 401);
-  const payload = JSON.parse(raw);
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-  const allowed = new Set((Deno.env.get('WHATSAPP_OWNER_NUMBERS') || '').split(',').map(value => value.replace(/\D/g, '')).filter(Boolean));
+  const isQR = Deno.env.get('REID_WHATSAPP_TRANSPORT') === 'qr';
+  let payload: any;
+  if (isQR) {
+    const expected=Deno.env.get('REID_QR_BRIDGE_TOKEN')||'';
+    if(!expected||!secureEqual(expected,request.headers.get('x-reid-qr-token')||'')) return json({received:true,transport:'qr',ignored:true});
+    const body=await request.json();
+    const job=await admin.from('qr_jobs').select('message_id,input,sender_phone,state,expires_at,qr_conversations(id,jid,display_name,bot_mode)').eq('message_id',body.messageId).single();
+    if(job.error||job.data.state!=='running'||Date.parse(job.data.expires_at)<Date.now()) return json({error:'qr_job_unavailable'},409);
+    const chat:any=job.data.qr_conversations;
+    if(chat.bot_mode!=='active') return json({handled:true,paused:true});
+    targetQrConversation(chat.id);
+    const phone=String(job.data.sender_phone||chat.jid).replace(/@s\.whatsapp\.net$/,'');
+    try { await adminIdentity(admin,phone); } catch {
+      const input=String(job.data.input||'').trim();
+      if(humanHandoff.test(input)){
+        const receipt=await admin.from('whatsapp_events').insert({
+          event_id:`qr-handoff:${job.data.message_id}`,sender_phone:phone,message_type:'text',
+          payload:{transport:'qr',handoff:true,conversation_id:chat.id},
+        });
+        if(!receipt.error){
+          try { await notifyOwners(phone,chat.display_name,input,'handoff'); }
+          catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
+        }else if(receipt.error.code!=='23505') console.error('handoff_receipt_failed',receipt.error.code||'unknown');
+        return json({handled:false,customer:true,handoff:true});
+      }
+      return json({handled:false,customer:true});
+    }
+    payload={entry:[{changes:[{value:{messages:[{id:'qr:'+job.data.message_id,from:phone,type:'text',text:{body:job.data.input},qr_group:String(chat.jid).endsWith('@g.us')}],contacts:[{wa_id:phone,profile:{name:chat.display_name}}]}}]}]};
+  } else {
+    const raw=await request.text();
+    if(!(await validSignature(request,raw))) return json({error:'invalid_signature'},401);
+    payload=JSON.parse(raw);
+  }
 
   for (const status of deliveryStatuses(payload)) {
     if (!status?.id || !['sent','delivered','read','failed'].includes(status.status)) continue;
@@ -284,7 +379,8 @@ Deno.serve(async request => {
     if (inserted.error?.code === '23505') continue;
     if (inserted.error) throw inserted.error;
 
-    if (!allowed.has(String(message.from).replace(/\D/g, ''))) {
+    let identity:AdminIdentity;
+    try { identity=await adminIdentity(admin,String(message.from)); } catch {
       await sendText(message.from, 'هذا الرقم غير مصرح له بإدارة وكلاء ريّد. تواصل مع مالك النظام لإضافتك.');
       continue;
     }
@@ -297,10 +393,9 @@ Deno.serve(async request => {
     const conversationId=conversationResult.data.id;
     const incomingText=message?.text?.body?.trim() || message?.interactive?.button_reply?.title || null;
     await admin.from('whatsapp_messages').insert({ conversation_id:conversationId, meta_message_id:message.id, direction:'inbound', message_type:message.type||'unknown', body:incomingText, delivery_status:'received' });
-    try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
-    if(conversationResult.data.bot_mode!=='active') continue;
-    const identity=await ownerIdentity(admin,message.from);
-    if(incomingText) await rememberOwnerMessage(admin,identity,message.id,incomingText);
+    if(!isQR&&!message.qr_group)try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
+    if(!isQR && conversationResult.data.bot_mode!=='active') continue;
+    if(incomingText) await learnAdminMessage(admin,identity,incomingText);
     const buttonId = message?.interactive?.button_reply?.id || message?.button?.payload || '';
     if (/^(approve|reject):[0-9a-f-]{36}$/i.test(buttonId)) {
       const [decision,runId]=buttonId.split(':');
@@ -317,7 +412,62 @@ Deno.serve(async request => {
       const replyBody='أرسل أمرًا نصيًا. الأوامر الحساسة ستنتظر موافقة بشرية داخل لوحة ريّد.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       continue;
     }
+    if(cancelsAdminSend(text)) {
+      await admin.from('whatsapp_pending_sends').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('requester_id',identity.id).eq('status','pending');
+      const replyBody='تم إلغاء الرسالة، وما انرسل شيء.';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(confirmsAdminSend(text)) {
+      const pending=await admin.from('whatsapp_pending_sends').select('id,target_phone,target_name,body,expires_at').eq('requester_id',identity.id).eq('requester_phone',message.from).eq('status','pending').gt('expires_at',new Date().toISOString()).order('created_at',{ascending:false}).limit(1).maybeSingle();
+      if(pending.error)throw pending.error;
+      if(!pending.data) {
+        const replyBody='ما عندي رسالة معلّقة للإرسال. اكتب مثلًا: «ارسل هلا لي شيخة».';
+        await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+        continue;
+      }
+      await adminIdentity(admin,pending.data.target_phone);
+      const targetConversationId=await ensureQrDirectConversation(admin,pending.data.target_phone,pending.data.target_name);
+      await queueQrText(admin,pending.data.target_phone,pending.data.body,`admin-send:${pending.data.id}`,targetConversationId);
+      await admin.from('whatsapp_pending_sends').update({status:'sending',updated_at:new Date().toISOString()}).eq('id',pending.data.id).eq('status','pending');
+      const replyBody=`تم استلام تأكيدك، جاري الإرسال إلى ${pending.data.target_name}…`;
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    const sendRequest=requestedAdminSend(text);
+    if(sendRequest?.target) {
+      if(sendRequest.target.phone===message.from) {
+        const replyBody='هذا رقمك أنت 😄 حدّد علي أو شيخة كمستلم.';
+        await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+        continue;
+      }
+      await adminIdentity(admin,sendRequest.target.phone);
+      await admin.from('whatsapp_pending_sends').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('requester_id',identity.id).eq('status','pending');
+      const pending=await admin.from('whatsapp_pending_sends').insert({requester_id:identity.id,requester_phone:message.from,target_phone:sendRequest.target.phone,target_name:sendRequest.target.name,body:sendRequest.body}).select('id').single();
+      if(pending.error)throw pending.error;
+      const replyBody=`جاهزة ل${sendRequest.target.name}:\n\n“${sendRequest.body}”\n\nاكتب «أرسلها» للتأكيد أو «لا ترسلها» للإلغاء.`;
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(/^(?:(?:هلا(?:\s+والله)?|مرحبا|السلام\s+عليكم|صباح\s+الخير|مساء\s+الخير)(?:\s+(?:يا\s+)?(?:reid|ري[ّ]?د))?|(?:reid|ري[ّ]?د))(?:[\s!؟?.,،]*)$/iu.test(text)) {
+      const replyBody='هلا وغلا 👋🏻 حاضر، وش تريدني أساعدك فيه؟';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(/^(?:من|وش|ويش|ايش|إيش|ما)\s+(?:هو\s+)?اسمك(?:[\s!؟?.,،]*)$|^(?:who are you|what(?:'s| is) your name)(?:[\s!?.,]*)$/iu.test(text)) {
+      const replyBody='أنا ريّد 👋🏻 مساعدك الشخصي الذكي، موجود عشان أساعدك في شغلك وأمور ريّد.';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(/^(?:كيفك|شلونك|شخبارك|كيف الحال|how are you)(?:[\s!؟?.,،]*)$/iu.test(text)) {
+      const replyBody='بخير دامك بخير 😄 وش عندك اليوم؟';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
     const plainDecision=/^(موافقة|وافق|approve|approved|رفض|ارفض|reject)$/i.exec(text)?.[1];
+    if(plainDecision && isQR) {
+      await sendText(message.from,'راجع تفاصيل الأمر والموافقة داخل حسابك في https://reidpro.com/dashboard'); continue;
+    }
     if(plainDecision) {
       const pending=await admin.from('whatsapp_commands').select('id,agent_run_id,command_text,status').eq('sender_phone',message.from).eq('status','pending_approval').order('created_at',{ascending:false}).limit(1).maybeSingle();
       if(!pending.data?.agent_run_id) {
@@ -336,6 +486,7 @@ Deno.serve(async request => {
     if(/^(?:احفظ|تذكر|تذكّر)\s+(?:هذا|ان|أن)?\s*/i.test(text)) {
       const content=redactSecrets(text.replace(/^(?:احفظ|تذكر|تذكّر)\s+(?:هذا|ان|أن)?\s*/i,'')).trim();
       if(!content) { const replyBody='وش المعلومة أو التفضيل اللي تريدني أحفظه؟'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue; }
+      if(!identity.memory_enabled) { const replyBody='الذاكرة الدائمة مقفلة لحسابك. يقدر المالك يفعّلها من إعدادات واتساب.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue; }
       await admin.from('memories').insert({scope:'user',scope_id:identity.id,content,title:'تفضيل محفوظ من واتساب',classification:'internal',created_by:identity.id,memory_kind:'preference'});
       const replyBody=`حفظته لك كتفضيل دائم: ${content}`; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody)); continue;
     }
@@ -397,15 +548,14 @@ Deno.serve(async request => {
     const command=await admin.from('whatsapp_commands').insert({ sender_phone:message.from,message_id:message.id,command_text:text,status:'received' }).select('id').single();
     if(command.error) throw command.error;
     try {
-      const input=await personalizedInput(admin,conversationId,identity,text);
-      const result=await gateway({action:'run',agentId:agentFor(text),input,requesterId:identity.id});
+      const conversation=await personalizedInput(admin,conversationId,identity,text,Boolean(message.qr_group));
+      const result=await gateway({action:'run',agentId:agentFor(text),input:conversation.input,history:conversation.history,requesterId:identity.id});
       const runId=result.run?.id || result.runId;
       if(result.status==='pending_approval') {
         await admin.from('whatsapp_commands').update({status:'pending_approval',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
         const replyBody=`هذا الأمر يحتاج موافقة L${result.approvalLevel}. هل تريد تنفيذه؟`; await recordOutbound(admin,conversationId,replyBody,await sendApproval(message.from,runId,result.approvalLevel));
       } else if(result.status==='queued') {
         await admin.from('whatsapp_commands').update({status:'queued',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
-        const replyBody='تم توجيه الأمر للوكيل وسيصلك الرد عند اكتماله.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       } else {
         await admin.from('whatsapp_commands').update({status:'completed',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
         const parsed=assistantReply(result.output || 'تمت معالجة طلبك.');
@@ -417,5 +567,6 @@ Deno.serve(async request => {
       const replyBody='تعذر تنفيذ الأمر الآن. تم تسجيل الخطأ للمراجعة من لوحة المالك.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
     }
   }
-  return json({ received: true });
-});
+  return json({ received: true, handled: true });
+}
+Deno.serve(request => withQrDispatch(request.headers.get('x-reid-qr-message') || crypto.randomUUID(), () => handleRequest(request).catch(() => json({error:'dispatch_failed'},503))));

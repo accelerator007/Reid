@@ -6,8 +6,9 @@
 // Provider credentials live only in Edge Function secrets:
 //   supabase secrets set GEMINI_API_KEY=...
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { assessAgentResponse, buildGovernedPrompt, normalizeHistory, qualitySubject } from '../_shared/agent-quality.ts';
 
-const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, apikey, content-type' };
+const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
 const PREVIEW_LIMIT = 280;
 
 type Provider = {
@@ -176,7 +177,7 @@ async function scopedMemories(admin: ReturnType<typeof createClient>, agentId: s
 }
 
 async function buildAgentContext(admin: ReturnType<typeof createClient>, agentId: string, requesterId: string, args: Record<string, unknown> = {}) {
-  const context: Record<string, unknown> = {};
+  const context: Record<string, unknown> = { meta: { generated_at: new Date().toISOString(), timezone: 'Asia/Muscat', company: 'Reid' } };
   if (['ceo', 'operations', 'analytics'].includes(agentId)) {
     context.projects = await rows(admin, 'projects', 'id,name,type,status,budget,currency,start_date,target_date,manager_id', 'updated_at');
     context.tasks = await rows(admin, 'tasks', 'id,title,status,priority,due_at,project_id,research_id,assignee_id');
@@ -186,6 +187,9 @@ async function buildAgentContext(admin: ReturnType<typeof createClient>, agentId
     context.deals = await rows(admin, 'crm_deals', 'id,title,stage,value,currency,expected_close_date,owner_id', 'updated_at');
     context.followUps = await rows(admin, 'crm_activities', 'id,activity_type,subject,due_at,completed_at,owner_id');
   }
+  if (['ceo', 'operations', 'analytics'].includes(agentId)) {
+    context.businessCases = await rows(admin, 'business_cases', 'id,title,stage,value,currency,owner_id,project_id,invoice_id,updated_at', 'updated_at');
+  }
   if (agentId === 'hr') {
     context.people = await rows(admin, 'profiles', 'id,full_name,email,department,position,employment_status,hire_date', 'updated_at');
     context.applications = await rows(admin, 'applications', 'id,full_name,email,organization,title,account_type,join_reason,cover_letter,status,cv_path');
@@ -194,17 +198,29 @@ async function buildAgentContext(admin: ReturnType<typeof createClient>, agentId
   if (agentId === 'finance') {
     context.budgets = await rows(admin, 'projects', 'id,name,type,status,budget,currency,client_name,start_date,target_date', 'updated_at');
     context.pipeline = await rows(admin, 'crm_deals', 'id,title,stage,value,currency,expected_close_date', 'updated_at');
+    context.documents = await rows(admin, 'finance_documents', 'id,number,kind,title,counterparty,amount,paid_amount,currency,status,due_date,business_case_id,project_id,issued_at,paid_at', 'updated_at');
+    context.businessCases = await rows(admin, 'business_cases', 'id,title,stage,value,currency,project_id,invoice_id,updated_at', 'updated_at');
   }
   if (['marketing', 'content', 'competitor'].includes(agentId)) {
     context.announcements = await rows(admin, 'announcements', 'id,title_ar,title_en,body_ar,body_en,published_at,expires_at');
     context.publicProjects = (await rows(admin, 'projects', 'id,name,type,status,visibility,start_date,target_date', 'updated_at')).filter((project: Record<string, unknown>) => project.visibility === 'public');
+  }
+  if (['ceo', 'operations', 'sales', 'support', 'knowledge'].includes(agentId)) {
+    context.workshops = await rows(admin, 'workshops', 'id,title_ar,title_en,description_ar,description_en,status,visibility,format,venue_ar,venue_en,facilitator_name,registration_url,start_at,end_at,registration_deadline,capacity,price_omr', 'start_at');
+  }
+  if (['marketing', 'content'].includes(agentId)) {
+    const { data, error } = await admin.from('workshops')
+      .select('id,title_ar,title_en,description_ar,description_en,format,venue_ar,venue_en,facilitator_name,registration_url,start_at,end_at,registration_deadline,capacity,price_omr')
+      .eq('status', 'published').eq('visibility', 'public').order('start_at').limit(30);
+    if (error) throw new Error('agent_public_workshops_failed');
+    context.workshops = data || [];
   }
   if (agentId === 'knowledge') {
     context.projectDocuments = await rows(admin, 'project_files', 'id,project_id,title,category,restricted,created_at');
     context.researchDocuments = await rows(admin, 'research_documents', 'id,research_id,title,category,restricted,created_at');
   }
   context.memory = await scopedMemories(admin, agentId, requesterId, args);
-  return JSON.stringify(context).slice(0, 50000);
+  return context;
 }
 
 function requireArguments(tool: AgentTool, args: Record<string, unknown>) {
@@ -236,6 +252,16 @@ async function executeTool(admin: ReturnType<typeof createClient>, tool: AgentTo
       publicProjects: (await rows(admin, 'projects', 'id,name,type,status,visibility,start_date,target_date', 'updated_at'))
         .filter((project: Record<string, unknown>) => project.visibility === 'public'),
     };
+    case 'workshops.list': {
+      const workshops = await rows(admin, 'workshops', 'id,title_ar,title_en,description_ar,description_en,status,visibility,format,venue_ar,venue_en,facilitator_name,registration_url,start_at,end_at,registration_deadline,capacity,price_omr', 'start_at');
+      const counts = await admin.from('workshop_registration_counts').select('workshop_id,registration_count,waitlist_count').limit(30);
+      if (counts.error) throw new Error('tool_workshop_counts_failed');
+      return workshops.map((workshop: Record<string, unknown>) => ({
+        ...workshop,
+        registration_count: counts.data?.find(count => count.workshop_id === workshop.id)?.registration_count || 0,
+        waitlist_count: counts.data?.find(count => count.workshop_id === workshop.id)?.waitlist_count || 0,
+      }));
+    }
     case 'knowledge.search': {
       const query = text(args.query, 120)?.toLowerCase() || '';
       const [projectDocuments, researchDocuments, memory] = await Promise.all([
@@ -321,28 +347,30 @@ async function executeRun(admin: ReturnType<typeof createClient>, run: Run, agen
     return { runId: run.id, tool: tool.id, result };
   }
 
-  const companyContext = await buildAgentContext(admin, agent.id, run.requested_by);
-  const governedInput = `USER REQUEST:\n${input}\n\nAUTHORIZED COMPANY CONTEXT (read-only, bounded for this agent):\n${companyContext}\n\nUse only this context. Never claim an external action was completed. Clearly label recommendations and any action that still needs approval.`;
   const groundedAgent = ['marketing', 'content', 'competitor', 'knowledge'].includes(agent.id);
   const result = provider.kind === 'local'
-    ? await callOllama(provider, agent.system_prompt, governedInput)
-    : await callGemini(provider, agent.system_prompt, governedInput, groundedAgent);
+    ? await callOllama(provider, agent.system_prompt, input)
+    : await callGemini(provider, agent.system_prompt, input, groundedAgent);
   const latency = Date.now() - startedAt;
+  const subject = qualitySubject(input);
+  const quality = assessAgentResponse({ ...subject, output: result.text });
   await admin.from('agent_runs').update({
     run_state: 'succeeded', status: 'succeeded', latency_ms: latency,
     token_usage: result.tokens, output_preview: result.text.slice(0, PREVIEW_LIMIT),
+    quality_score: quality.score, quality_flags: quality.flags, quality_version: quality.version,
     finished_at: new Date().toISOString(),
   }).eq('id', run.id);
   // Agent memory is durable and scoped. A memory failure must not turn a
   // completed model run into a false failure, so it is recorded best-effort.
   try {
+    if (!quality.passed) throw new Error('response_quality_below_memory_threshold');
     const vector = await embed(provider, result.text.slice(0, 4000));
     await admin.from('memories').insert({
       scope: 'agent', scope_id: agent.id, content: result.text.slice(0, 4000), title: `Run ${run.id}`,
       embedding: vector, classification: run.classification, created_by: run.requested_by, source_run_id: run.id,
     });
   } catch (_) { /* run output remains authoritative */ }
-  return { runId: run.id, output: result.text, latencyMs: latency, tokenUsage: result.tokens, provider: provider.id };
+  return { runId: run.id, output: result.text, latencyMs: latency, tokenUsage: result.tokens, provider: provider.id, quality };
 }
 
 Deno.serve(async (request) => {
@@ -357,12 +385,15 @@ Deno.serve(async (request) => {
       ? secureEqual(internalExpected, internalSupplied) : false;
     const authorization = request.headers.get('Authorization');
     let requesterId = '';
+    let requesterRoles: string[] = [];
     let caller: ReturnType<typeof createClient> | null = null;
     if (internal) {
       requesterId = typeof body.requesterId === 'string' ? body.requesterId : (Deno.env.get('WHATSAPP_OWNER_USER_ID') || '');
       if (!requesterId) throw new Error('whatsapp_owner_not_configured');
-      const ownerRole = await admin.from('user_roles').select('role').eq('user_id', requesterId).eq('role', 'owner').maybeSingle();
-      if (!ownerRole.data) throw new Error('whatsapp_owner_invalid');
+      const roleRows = await admin.from('user_roles').select('role').eq('user_id', requesterId);
+      if (roleRows.error) throw new Error('whatsapp_authorization_unavailable');
+      requesterRoles = (roleRows.data || []).map(row => row.role);
+      if (!requesterRoles.some(role => ['owner','super_admin','admin'].includes(role))) throw new Error('whatsapp_admin_invalid');
     } else {
       if (!authorization) throw new Error('missing_authorization');
       caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
@@ -375,9 +406,23 @@ Deno.serve(async (request) => {
 
     // A suspended account keeps its JWT until expiry, so re-check the control row.
     const control = await admin.from('account_controls').select('status').eq('user_id', requesterId).maybeSingle();
+    if (control.error) throw new Error('authorization_unavailable');
     if (control.data?.status && control.data.status !== 'active') throw new Error('account_not_active');
 
     const action: string = body.action || 'run';
+    if (action === 'result') {
+      // A result belongs to its requester, even if an administrator can inspect
+      // aggregate execution metadata elsewhere. Never return another user's memory.
+      const result=await admin.from('agent_runs').select('id,run_state,output_preview,quality_score,quality_flags,revision_count').eq('id',body.runId).eq('requested_by',requesterId).single();
+      if(result.error) throw new Error('run_not_found');
+      let output=result.data.output_preview||'';
+      if(result.data.run_state==='succeeded') {
+        const memory=await admin.from('memories').select('content').eq('source_run_id',result.data.id).eq('created_by',requesterId).order('created_at',{ascending:false}).limit(1).maybeSingle();
+        if(memory.error)throw new Error('result_unavailable');
+        output=memory.data?.content||output;
+      }
+      return Response.json({status:result.data.run_state,output,qualityScore:result.data.quality_score,qualityFlags:result.data.quality_flags,revisionCount:result.data.revision_count},{headers:cors});
+    }
     const input: string = action === 'tool'
       ? JSON.stringify({ toolName: body.toolName || '', arguments: body.arguments || {} })
       : (body.input || '').toString();
@@ -435,6 +480,12 @@ Deno.serve(async (request) => {
     if (agentError) throw agentError;
     if (!agentRow) throw new Error('agent_not_found_or_forbidden');
     const agent = agentRow as Agent;
+    if (internal && !requesterRoles.some(role => ['owner','super_admin'].includes(role))) {
+      const allowed = new Set(['ceo','operations','marketing','content','sales','analytics','knowledge','support','competitor']);
+      if (requesterRoles.includes('hr')) allowed.add('hr');
+      if (requesterRoles.includes('finance')) allowed.add('finance');
+      if (!allowed.has(agent.id)) throw new Error('agent_not_allowed_for_admin');
+    }
     if (!agent.enabled) throw new Error('agent_disabled');
     if (agent.status === 'paused') throw new Error('agent_paused');
 
@@ -457,6 +508,7 @@ Deno.serve(async (request) => {
       const fresh = !heartbeat.error && heartbeat.data?.status === 'online'
         && Date.now() - new Date(heartbeat.data.last_seen_at).getTime() < 90_000;
       if (!fresh) {
+        if(Deno.env.get('REID_LOCAL_AI_ONLY')==='1') throw new Error('local_provider_offline');
         const fallback = await admin.from('llm_providers')
           .select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day')
           .eq('id','gemini').eq('enabled',true).maybeSingle();
@@ -471,6 +523,22 @@ Deno.serve(async (request) => {
     const classification = rank[requested] > rank[agent.classification] ? requested : agent.classification;
     if (rank[classification] > rank[provider.max_classification]) {
       throw new Error(`provider_not_cleared: ${provider.id} may not handle ${classification}`);
+    }
+
+    // The local queue used to receive only the raw question, so it could not
+    // actually ground an answer in Reid data. Build one bounded, injection-
+    // resistant prompt before either synchronous or queued execution. Recent
+    // conversation turns improve continuity but remain transient.
+    let executionInput = input;
+    if (action === 'run') {
+      const context = await buildAgentContext(admin, agent.id, requesterId);
+      executionInput = buildGovernedPrompt({
+        agentId: agent.id,
+        request: input,
+        context,
+        history: normalizeHistory(body.history),
+      });
+      if (executionInput.length > 60000) throw new Error('grounded_context_too_large');
     }
 
     // Database tools do not call the model provider and must not consume or be
@@ -505,7 +573,7 @@ Deno.serve(async (request) => {
       if (assignment.error || !tool?.enabled) throw new Error('tool_not_assigned_or_disabled');
       effectiveApproval = tool.approval_level;
     }
-    const promptHash = await hash(`${agent.id}:${input}`);
+    const promptHash = await hash(`${agent.id}:${input}:${JSON.stringify(normalizeHistory(body.history))}`);
     const needsApproval = effectiveApproval >= 2;
     const { data: created, error: createError } = await admin
       .from('agent_runs')
@@ -531,19 +599,19 @@ Deno.serve(async (request) => {
 
     // L2+ work stops here until a human approves it through approve_agent_run.
     if (needsApproval) {
-      const payload = await admin.from('agent_run_payloads').insert({ run_id: created.id, action, input });
+      const payload = await admin.from('agent_run_payloads').insert({ run_id: created.id, action, input: executionInput });
       if (payload.error) throw payload.error;
       return Response.json({ run: created, status: 'pending_approval', approvalLevel: effectiveApproval }, { headers: cors });
     }
 
     if (provider.kind === 'local' && action !== 'tool') {
       await admin.from('agent_runs').update({run_state:'queued',status:'queued',started_at:null}).eq('id',created.id);
-      const payload = await admin.from('agent_run_payloads').insert({run_id:created.id,action,input});
+      const payload = await admin.from('agent_run_payloads').insert({run_id:created.id,action,input:executionInput});
       if (payload.error) throw payload.error;
       return Response.json({runId:created.id,status:'queued',provider:provider.id},{headers:cors});
     }
 
-    const result = await executeRun(admin, created as Run, agent, provider, action, input);
+    const result = await executeRun(admin, created as Run, agent, provider, action, executionInput);
     return Response.json(result, { headers: cors });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown_error';

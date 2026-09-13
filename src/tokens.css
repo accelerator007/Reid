@@ -28,11 +28,13 @@
   --purple: var(--brand-500);
 
   /* ---- surfaces and text ---------------------------------------------- */
-  --bg: #f6f4f8;
-  --card: #ffffffbd;
-  --ink: #241c30;
-  --muted: #71677e;
-  --line: #55418b20;
+  --bg: #f7f8fa;
+  --card: #ffffff;
+  --ink: #22232b;
+  --muted: #727583;
+  --line: #e9eaf0;
+  --art-bg: #f0edf7;
+  --shadow-os: 0 2px 5px #24213804;
   --line-strong: #55418b40;
   /* A brand-tinted wash for selected rows and highlighted panels. */
   --brand-fill: #55418b14;
@@ -73,6 +75,36 @@
   --glow: #e1d6f2;
   --header-bg: #f7f4f6bd;
 
+  /* ---- the 3D agent world ---------------------------------------------
+   * src/agent-world-scene.ts reads these at runtime instead of naming a colour in
+   * the renderer, so the desert outpost flips with the theme like every other
+   * surface: midday sand in light, moonlit sand in dark. The six district
+   * hues separate the operating domains without competing with the brand. */
+  --world-sky-top: #3f7cc4;
+  --world-sky-bottom: #ddb884;
+  --world-sun: #fff3d2;
+  --world-haze: #ddc39c;
+  --world-sand: #d9b678;
+  --world-sand-shade: #a8834f;
+  --world-rock: #8d7355;
+  /* The robots are painted machines, not chrome: a warm white shell over dark
+     charcoal joints, with polished metal and rubber kept for the parts that
+     would really be polished metal and rubber. */
+  --world-shell: #eceaf2;
+  --world-shell-shade: #b9b4c6;
+  --world-joint: #3c3847;
+  --world-rubber: #232029;
+  --world-metal: #cfcad9;
+  --world-metal-dark: #6d6681;
+  --world-desk: #ded8e4;
+  --world-glass: #0e0c16;
+  --world-district-executive: #6f56b8;
+  --world-district-delivery: #2f79ad;
+  --world-district-growth: #c2703a;
+  --world-district-revenue: #2c8663;
+  --world-district-governance: #98548a;
+  --world-district-knowledge: #3a7f96;
+
   /* ---- radii: twelve values collapsed onto six ------------------------ */
   --radius-xs: 10px;
   --radius-sm: 12px;
@@ -87,7 +119,9 @@
  * mechanism, not two, so the toggle and the OS can never disagree. */
 .dark {
   --bg: #110d19;
-  --card: #20192bd9;
+  --card: #1c1924;
+  --art-bg: #211c30;
+  --shadow-os: 0 2px 5px #00000020;
   --ink: #f5f0fb;
   --muted: #b9afc4;
   --line: #bba7ef24;
@@ -115,6 +149,30 @@
 
   --glow: #2c2046;
   --header-bg: #110d19c9;
+
+  /* The same outpost after sunset: the sand keeps its form, the sky and the
+     district hues lift so they stay readable against it. */
+  --world-sky-top: #0a0c26;
+  --world-sky-bottom: #241b3a;
+  --world-sun: #d8e2ff;
+  --world-haze: #15102b;
+  --world-sand: #4f4258;
+  --world-sand-shade: #362d3f;
+  --world-rock: #332b3d;
+  --world-shell: #b6b1c6;
+  --world-shell-shade: #7d7790;
+  --world-joint: #2a2735;
+  --world-rubber: #17151d;
+  --world-metal: #9a94ac;
+  --world-metal-dark: #4a4360;
+  --world-desk: #6d6780;
+  --world-glass: #08070d;
+  --world-district-executive: #a48ede;
+  --world-district-delivery: #6bb0e0;
+  --world-district-growth: #e2955f;
+  --world-district-revenue: #57c2a0;
+  --world-district-governance: #d089c0;
+  --world-district-knowledge: #6fb9d1;
 
   --shadow-sm: 0 15px 35px #00000066;
   --shadow-md: 0 25px 80px #00000073;

@@ -5,12 +5,50 @@ on:
 permissions: {contents: read}
 jobs:
   backup:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_PASSWORD: postgres}
+        ports: ['55433:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
-      - run: mkdir -p backup && supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql && supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --data-only --use-copy
+      - name: Require backup credentials
+        run: test -n "$SUPABASE_DB_URL" && test -n "$BACKUP_ENCRYPTION_KEY"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+      - name: Dump schema and data
+        run: |
+          mkdir -p backup
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --data-only --use-copy
+          test -s backup/schema.sql
+          test -s backup/data.sql
         env: {SUPABASE_DB_URL: "${{ secrets.SUPABASE_DB_URL }}"}
+      - name: Prove the backup restores
+        run: |
+          export PGPASSWORD=postgres
+          psql -h 127.0.0.1 -p 55433 -U postgres -v ON_ERROR_STOP=1 -f backup/schema.sql
+          psql -h 127.0.0.1 -p 55433 -U postgres -v ON_ERROR_STOP=1 -f backup/data.sql
+          psql -h 127.0.0.1 -p 55433 -U postgres -v ON_ERROR_STOP=1 -c "select count(*) as restored_public_tables from pg_tables where schemaname='public';"
+      - name: Encrypt the verified backup
+        run: |
+          tar -C backup -czf backup.tar.gz schema.sql data.sql
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in backup.tar.gz -out reid-backup.tar.gz.enc -pass env:BACKUP_ENCRYPTION_KEY
+          sha256sum reid-backup.tar.gz.enc > reid-backup.sha256
+          rm -rf backup backup.tar.gz
+        env: {BACKUP_ENCRYPTION_KEY: "${{ secrets.BACKUP_ENCRYPTION_KEY }}"}
       - uses: actions/upload-artifact@v4
-        with: {name: "reid-db-backup-${{ github.run_id }}", path: backup, retention-days: 30}
+        with:
+          name: reid-db-backup-${{ github.run_id }}
+          path: |
+            reid-backup.tar.gz.enc
+            reid-backup.sha256
+          retention-days: 30
+          if-no-files-found: error

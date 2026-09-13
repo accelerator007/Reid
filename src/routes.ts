@@ -13,12 +13,22 @@ import type { Role } from "./policy";
 
 export type Page =
   | "home"
+  | "today"
+  | "inbox"
+  | "connections"
+  | "finance"
+  | "business"
+  | "operations"
+  | "assistant"
+  | "admin"
+  | "owner"
   | "login"
   | "apply"
   | "profile"
   | "workspace"
   | "projects"
   | "research"
+  | "workshops"
   | "crm"
   | "dashboard"
   | "privacy"
@@ -63,6 +73,16 @@ export const routes: readonly Route[] = [
   { page: "home", path: "/" },
   { page: "login", path: "/login" },
   { page: "apply", path: "/apply" },
+  { page: "workshops", path: "/workshops" },
+  { page: "today", path: "/today", authenticated: true, allow: staff },
+  { page: "inbox", path: "/inbox", authenticated: true, allow: ["owner"] },
+  { page: "connections", path: "/connections", authenticated: true, allow: ["owner"] },
+  { page: "finance", path: "/finance", authenticated: true, allow: ["owner", "super_admin"] },
+  { page: "business", path: "/business", authenticated: true, allow: ["owner", "super_admin", "admin", "sales"] },
+  { page: "operations", path: "/operations", authenticated: true, allow: staff },
+  { page: "assistant", path: "/assistant", authenticated: true, allow: ["owner", "super_admin", "admin"] },
+  { page: "admin", path: "/admin", authenticated: true, allow: ["owner", "super_admin", "admin"] },
+  { page: "owner", path: "/owner", authenticated: true, allow: ["owner", "super_admin"] },
   { page: "privacy", path: "/privacy" },
   { page: "terms", path: "/terms" },
   { page: "data-deletion", path: "/data-deletion" },

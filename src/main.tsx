@@ -17,10 +17,16 @@ import type { Page } from "./routes";
 import { EmployeeWorkspace } from "./employee";
 import { ProjectWorkspace } from "./projects";
 import { AgentCommand } from "./agent-command";
-import { WhatsAppInbox } from "./whatsapp-inbox";
+import { AdminWorkspace } from "./admin-workspace";
+import { BusinessFlow } from "./business-flow";
+import { OwnerOverview } from "./owner-overview";
+import { Today, Operations, Finance, AssistantWorkspace } from "./os-workspace";
+import { Connections, QrInbox } from "./qr-workspace";
+import { PublicHome } from "./public-home";
 import { ResearchWorkspace } from "./research";
 import { CrmWorkspace } from "./crm";
-import { Building2, FolderKanban, FlaskConical, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X } from "lucide-react";
+import { Workshops } from "./workshops";
+import { Building2, Crown, FolderKanban, FlaskConical, GraduationCap, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X, CalendarDays, Wallet, Settings2, BriefcaseBusiness, Search, ShieldCheck, Workflow } from "lucide-react";
 // Imported rather than written as a literal URL. The assets directory sits
 // outside Vite's public directory, so a hard-coded path is never emitted to
 // dist and the header mark 404s in production while still resolving in dev.
@@ -32,9 +38,11 @@ import "./auth.css";
 import "./profile.css";
 import "./workflow.css";
 import "./agents.css";
+import "./agent-world.css";
 import "./crm.css";
 import "./workspace-shell.css";
 import "./whatsapp-inbox.css";
+import "./reid-os.css";
 
 type Lang = "ar" | "en";
 type ProfileData = {
@@ -1191,7 +1199,6 @@ function Dashboard({
         </div>
       )}
       <AgentCommand lang={lang} />
-      <WhatsAppInbox lang={lang} />
     </main>
   );
 }
@@ -1225,11 +1232,9 @@ function Chat({ lang }: { lang: Lang }) {
     }
     setBusy(true);
     try {
-      if (!supabase) throw new Error("assistant_unavailable");
-      const { data, error } = await supabase.functions.invoke("public-assistant", {
-        body: { message: q, lang, history: msgs.slice(-6) },
-      });
-      if (error || !data?.reply) throw error || new Error("assistant_unavailable");
+      const response = await fetch('/api/public/chat', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:q,lang,history:msgs.slice(-6)}),signal:AbortSignal.timeout(100000)});
+      const data=await response.json();
+      if (!response.ok || !data?.reply) throw new Error("assistant_unavailable");
       setMsgs([...next, { role: "model", text: data.reply }]);
       setHandoff(Boolean(data.handoff));
     } catch {
@@ -1312,12 +1317,22 @@ function Chat({ lang }: { lang: Lang }) {
 
 function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
   switch (page) {
+    case "today": return lang === "ar" ? "يومي" : "My day";
+    case "inbox": return lang === "ar" ? "المحادثات" : "Inbox";
+    case "connections": return lang === "ar" ? "الاتصالات" : "Connections";
+    case "finance": return lang === "ar" ? "المالية" : "Finance";
+    case "business": return lang === "ar" ? "دورة العمل" : "Business flow";
+    case "operations": return lang === "ar" ? "إدارة الأعمال" : "Operations";
+    case "workshops": return lang === "ar" ? "الورشات" : "Workshops";
+    case "assistant": return lang === "ar" ? "مساعد ريّد" : "Reid assistant";
+    case "admin": return lang === "ar" ? "إدارة النظام" : "Administration";
+    case "owner": return lang === "ar" ? "موجز المالك" : "Owner brief";
     case "home":
       return t.home;
     case "apply":
       return t.join;
     case "workspace":
-      return t.workspace;
+      return lang === "ar" ? "الفريق والعمل" : "People & work";
     case "projects":
       return t.projects;
     case "research":
@@ -1325,7 +1340,7 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
     case "crm":
       return t.crm;
     case "dashboard":
-      return t.system;
+      return lang === "ar" ? "مركز الإدارة" : "Command center";
     case "profile":
       return t.account;
     default:
@@ -1334,16 +1349,27 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
 }
 
 const workspaceIcons: Partial<Record<Page, React.ReactNode>> = {
+  today: <CalendarDays />, inbox: <MessageCircle />, connections: <Settings2 />,
+  finance: <Wallet />, operations: <BriefcaseBusiness />, assistant: <Sparkles />,
+  business: <Workflow />,
+  workshops: <GraduationCap />,
+  admin: <ShieldCheck />,
+  owner: <Crown />,
   dashboard: <LayoutDashboard />, workspace: <UsersRound />, projects: <FolderKanban />,
   research: <FlaskConical />, crm: <Handshake />, profile: <UserRound />,
 };
 
 function WorkspaceSidebar({ lang, page, navigation, open, go, signout }: { lang: Lang; page: Page; navigation: ReturnType<typeof useNavigation>; open: boolean; go: (page: Page) => void; signout: () => void }) {
   const t = tr[lang];
-  const destinations = navigation.filter(route => ["dashboard", "workspace", "projects", "research", "crm", "profile"].includes(route.page));
+  const groups:{ar:string;en:string;pages:Page[]}[] = [
+    {ar:"نظرة سريعة",en:"Overview",pages:["owner","today","inbox"]},
+    {ar:"تشغيل الشركة",en:"Company operations",pages:["business","projects","crm","workshops","workspace","operations","finance","research"]},
+    {ar:"الذكاء",en:"Intelligence",pages:["assistant","dashboard"]},
+    {ar:"الإدارة",en:"Administration",pages:["admin","connections","profile"]},
+  ];
   return <aside className="workspace-sidebar" data-open={open} aria-label={lang === "ar" ? "تنقل نظام الشركة" : "Company system navigation"}>
     <div className="workspace-sidebar-heading"><small>REID OS</small><b>{lang === "ar" ? "مساحة الشركة" : "Company workspace"}</b></div>
-    <nav>{destinations.map(route => <button key={route.page} type="button" aria-current={page === route.page ? "page" : undefined} onClick={() => go(route.page)}>{workspaceIcons[route.page]}<span>{navLabel(route.page, lang, t)}</span></button>)}</nav>
+    <nav>{groups.map(group=>{const destinations=group.pages.flatMap(target=>navigation.filter(route=>route.page===target));return destinations.length?<React.Fragment key={group.en}><small className="os-nav-group">{lang==='ar'?group.ar:group.en}</small>{destinations.map(route => <button key={route.page} type="button" aria-current={page === route.page ? "page" : undefined} onClick={() => go(route.page)}>{workspaceIcons[route.page]}<span>{navLabel(route.page, lang, t)}</span></button>)}</React.Fragment>:null;})}</nav>
     <footer><button type="button" onClick={signout}><LogOut /><span>{lang === "ar" ? "تسجيل الخروج" : "Sign out"}</span></button></footer>
   </aside>;
 }
@@ -1381,7 +1407,7 @@ function Chrome({ session }: { session: Session | null }) {
   );
   const navigation = useNavigation();
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const internalPage = session && ["dashboard", "workspace", "projects", "research", "crm", "profile"].includes(page);
+  const internalPage = session && ["owner", "today", "inbox", "connections", "business", "finance", "operations", "assistant", "admin", "dashboard", "workspace", "projects", "research", "workshops", "crm", "profile"].includes(page);
   React.useEffect(() => {
     const client = supabase;
     if (!session || !client) return;
@@ -1404,7 +1430,7 @@ function Chrome({ session }: { session: Session | null }) {
           {/* Derived from src/routes.ts, so the navigation can never offer a
               destination the gate would then refuse. */}
           {navigation
-            .filter(({ page: target }) => target !== "privacy" && target !== "login")
+            .filter(({ page: target }) => ["home", "workshops", "apply", "today"].includes(target))
             .map(({ page: target }) => (
               <button
                 key={target}
@@ -1421,7 +1447,7 @@ function Chrome({ session }: { session: Session | null }) {
             {session ? t.account : t.login}
           </button>
         </nav>}
-        {internalPage && <div className="workspace-topbar-context"><Building2 /><span>{lang === "ar" ? "نظام شركة ريّد" : "Reid Company System"}</span></div>}
+        {internalPage && <div className="workspace-topbar-context"><Building2 /><span>{lang === "ar" ? "مساحة ريّد" : "Reid workspace"} / {navLabel(page,lang,t)}</span></div>}
         <aside>
           {internalPage && <button className="mobile-menu" aria-label="Menu" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>}
           <button onClick={() => setDark(!dark)}>{dark ? "☀" : "☾"}</button>
@@ -1431,58 +1457,25 @@ function Chrome({ session }: { session: Session | null }) {
         </aside>
       </header>
       {internalPage && <WorkspaceSidebar lang={lang} page={page} navigation={navigation} open={menuOpen} go={(target) => { setMenuOpen(false); go(target); }} signout={async () => { await supabase?.auth.signOut(); go("home"); }} />}
-      {page === "home" && (
-        <main>
-          <section className="hero">
-            <span>REID · TECHNOLOGY & AI</span>
-            <h1>{t.hero}</h1>
-            <p>{t.intro}</p>
-            <div>
-              <button className="primary" onClick={() => go("apply")}>
-                {t.start} ←
-              </button>
-              <button onClick={() => go("dashboard")}>{t.discover}</button>
-            </div>
-            <section className="stats public-value">
-              <article>
-                <b>{lang === "ar" ? "حلول مخصصة" : "Tailored"}</b>
-                <small>{lang === "ar" ? "لأهداف كل مؤسسة" : "For each organization"}</small>
-              </article>
-              <article>
-                <b>{lang === "ar" ? "من الفكرة للتشغيل" : "End to end"}</b>
-                <small>{lang === "ar" ? "تصميم وبناء وتشغيل" : "Design, build and operate"}</small>
-              </article>
-              <article>
-                <b>{lang === "ar" ? "بأمان" : "Secure"}</b>
-                <small>{lang === "ar" ? "صلاحيات وموافقات واضحة" : "Clear access and approvals"}</small>
-              </article>
-            </section>
-          </section>
-          <section className="features">
-            <span>REID OS</span>
-            <h2>{t.platform}</h2>
-            <div>
-              <article>
-                <h3>Operations</h3>
-                <p>المشاريع والمهام والتقويم وساعات العمل.</p>
-              </article>
-              <article>
-                <h3>People & Research</h3>
-                <p>الموظفون والأبحاث والموافقات.</p>
-              </article>
-              <article>
-                <h3>Agent Command</h3>
-                <p>الحالة والصلاحيات وسجل التنفيذ.</p>
-              </article>
-            </div>
-          </section>
-          <Chat lang={lang} />
-        </main>
+      {page === "home" && <><PublicHome lang={lang} go={go} /><Chat lang={lang} /></>}
+      {page === "workshops" && <Workshops lang={lang} go={go} />}
+      {(["owner", "today", "inbox", "connections", "business", "finance", "operations", "assistant", "admin"] as Page[]).includes(page) && (
+        <Guarded page={page} lang={lang} renderSignIn={() => <Login lang={lang} done={() => go(page)} apply={() => go("apply")} />} onProfile={() => go("profile")}>
+          {page === "today" && <Today lang={lang} go={go} />}
+          {page === "owner" && <OwnerOverview lang={lang} go={go} />}
+          {page === "inbox" && <QrInbox lang={lang} go={go} />}
+          {page === "connections" && <Connections lang={lang} go={go} />}
+          {page === "finance" && <Finance lang={lang} go={go} />}
+          {page === "business" && <BusinessFlow lang={lang} go={go} />}
+          {page === "operations" && <Operations lang={lang} />}
+          {page === "assistant" && <AssistantWorkspace lang={lang} />}
+          {page === "admin" && <AdminWorkspace lang={lang} go={go} />}
+        </Guarded>
       )}
       {page === "login" && (
         <Login
           lang={lang}
-          done={() => go("workspace")}
+          done={() => go("today")}
           apply={() => go("apply")}
         />
       )}{" "}
