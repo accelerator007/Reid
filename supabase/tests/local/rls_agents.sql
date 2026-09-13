@@ -106,7 +106,7 @@ select t_visible(:'suite', 'an admin reads the whole agent roster',
 select t_visible(:'suite', 'an admin reads the whole run stream',
   'select 1 from public.agent_runs', 5);
 select t_visible(:'suite', 'an admin reads the governed tool catalog',
-  'select 1 from public.agent_tools', 17);
+  'select 1 from public.agent_tools', 18);
 select t_visible(:'suite', 'an admin cannot read transient payloads',
   'select 1 from public.agent_run_payloads', 0);
 select t_visible(:'suite', 'an admin reads runner health',
