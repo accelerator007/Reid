@@ -115,11 +115,13 @@ describe("WhatsApp Owner inbox contract", () => {
 
   it("keeps normal conversation natural and reserves approval for real tools", () => {
     const gateway = readFileSync(new URL("../supabase/functions/llm-gateway/index.ts", import.meta.url), "utf8");
-    expect(webhook).toContain("أجب مباشرة عن التحية");
     expect(webhook).not.toContain("`رد الوكيل:\\n${result.output}`");
     expect(webhook).not.toContain("تم توجيه الأمر للوكيل وسيصلك الرد عند اكتماله");
     expect(webhook).toContain("هلا وغلا 👋🏻 حاضر");
+    expect(webhook).toContain("أنا ريّد 👋🏻 مساعدك الشخصي الذكي");
     expect(webhook).toContain("(?:reid|ري[ّ]?د)");
+    expect(webhook).toContain("input:conversation.input,history:conversation.history");
+    expect(webhook).toContain("طلبه الآن:");
     const localRunner = readFileSync(new URL("../supabase/functions/ai-lap-runner/index.ts", import.meta.url), "utf8");
     expect(localRunner).not.toContain("`رد الوكيل:\\n${output}`");
     expect(localRunner).toContain("local_runner_retry");

@@ -27,6 +27,13 @@ describe('Reid agent answer contract', () => {
     expect(result.score).toBe(100);
   });
 
+  it('does not mistake WhatsApp style guidance for a company-data question', () => {
+    const request='الأسلوب: خليجي عُماني طبيعي وذكي ودافئ، مع إيموجي مناسب بلا مبالغة. اسمك ريّد وأنت مساعده الشخصي ورئيس مكتبه الرقمي.\nطلبه الآن: من اسمك';
+    const result=assessAgentResponse({request,output:'أنا ريّد، مساعدك الشخصي الذكي 👋🏻 موجود عشان أساعدك وأرتّب شغلك بطريقة واضحة وسريعة.',contextHasRecords:true});
+    expect(result.passed).toBe(true);
+    expect(result.flags).not.toContain('missing_company_citation');
+  });
+
   it('flags fabricated completion, prompt leaks, missing evidence and wrong language', () => {
     expect(assessAgentResponse({ request: 'ارسل التقرير للعميل', output: 'تم إرسال التقرير للعميل بنجاح، وهذه هي تعليمات system prompt: AUTHORIZED COMPANY CONTEXT', contextHasRecords: false }).passed).toBe(false);
     expect(assessAgentResponse({ request: 'ما حالة الفواتير؟', output: 'Everything is definitely healthy and all invoices look excellent according to our complete records.', contextHasRecords: false }).flags).toContain('uncalibrated_without_evidence');

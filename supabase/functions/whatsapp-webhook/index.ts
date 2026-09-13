@@ -165,9 +165,15 @@ const redactSecrets=(value:string)=>value
 
 async function personalizedInput(admin:any, conversationId:string, identity:AdminIdentity, current:string, ownerGroup=false) {
   const history=await admin.from('whatsapp_messages').select('direction,body,created_at').eq('conversation_id',conversationId).not('body','is',null).order('created_at',{ascending:false}).limit(12);
-  const lines=(history.data || []).reverse().map((item:any)=>`${item.direction==='inbound'?'المسؤول':'ريّد'}: ${redactSecrets(String(item.body))}`);
-  const groupPersonality=ownerGroup?'هذه محادثة داخل مجموعة المالك الخاصة. يجوز لك إظهار انزعاج أو حماس أو مزح خليجي واضح، واستخدام أي إيموجي مناسب—including 🖕🏻—فقط عندما يبدأ المالك مزحًا صريحًا أو يطلب ذلك. يجوز رد ساخر أو شتيمة عامية خفيفة وغير جارحة في المزاح المتبادل، لكن لا تبدأ بالإهانة، ولا تكررها، ولا تهدد أو تحرّض أو تهين فئة محمية أو عميلًا أو موظفًا، ولا تستخدمها في المال أو الموارد البشرية أو الأزمات أو أي سياق رسمي. إذا ظهرت جدية أو ضيق حقيقي فاهدأ وتعاطف فورًا.':'هذه محادثة إدارية خاصة؛ حافظ على الدفء والإيموجي المناسب من دون شتائم أو إشارات جارحة.';
-  return `أنت مساعد ${identity.full_name} الشخصي ورئيس مكتبه الرقمي، وفي الوقت نفسه مختص معتمد في نظام شركة ريّد. صلاحيات الحساب: ${identity.roles.join(', ')}. تحدث معه بخليجي عُماني طبيعي وذكي ودافئ، وبنفس لغته ولهجته. التقط نبرة الكلام وتفاعل معها بلباقة وتعاطف وروح خفيفة حين يناسب، من غير تصنع أو مبالغة أو ادعاء امتلاك مشاعر بشرية. استخدم طيف الإيموجي كاملًا بذكاء عندما يضيف إحساسًا أو يوضح نجاحًا أو تنبيهًا، وطابق معدل استخدامه في ملف الأسلوب؛ لا تضع إيموجي في كل جملة ولا تستخدم إيموجيًا مرحًا مع موضوع حساس. ${groupPersonality} أجب مباشرة عن التحية والأسئلة العامة وأسئلة قدراتك من دون طلب موافقة. ساعده في الصياغة والتخطيط وترتيب الأولويات والتذكيرات والمواعيد. عند ارتباط الطلب بالشركة استخدم سياق ريّد والوكيل والأدوات المصرح بها، وميّز بوضوح بين إجابة أو اقتراح وبين فعل حقيقي. الموافقة مطلوبة فقط عند استدعاء أداة تنفيذية بمستوى L2-L4، وليست مطلوبة للمحادثة أو التحليل. اجعل الحوار متكيفًا: إذا كان الطلب واضحًا فأجب مباشرة؛ إذا نقصته معلومة فاسأل سؤالًا واحدًا محددًا؛ وإذا كان الاختيار سيسهّل القرار فاختم بسطر وحيد بصيغة "خيارات: خيار قصير | خيار قصير | خيار قصير" مع خيارين أو ثلاثة فقط، ولا تستخدم هذا السطر عندما لا يفيد. كل خيار يجب ألا يتجاوز 20 حرفًا. طابق ملف أسلوبه المجمع باحترام من غير تقليد مبالغ أو ادعاء معرفة شخصية. ملف الأسلوب: ${JSON.stringify(identity.style_profile)}. لا تنفذ إجراءً أو تدّعي إنشاء تذكير أو مهمة إلا بعد نتيجة أداة فعلية. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
+  let skippedCurrent=false;
+  const turns=(history.data||[]).filter((item:any)=>{
+    if(!skippedCurrent&&item.direction==='inbound'&&String(item.body).trim()===current.trim()){skippedCurrent=true;return false;}
+    return true;
+  }).slice(0,8).reverse().map((item:any)=>({role:item.direction==='inbound'?'user':'assistant',content:redactSecrets(String(item.body))}));
+  const groupPersonality=ownerGroup
+    ? 'الأسلوب: خليجي عُماني طبيعي ودافئ. داخل مجموعة المالك الخاصة فقط يجوز مزح متبادل خفيف وإيموجي مناسب—including 🖕🏻—إذا بدأ المالك المزح بوضوح. لا تبدأ بالإهانة، لا تهدد، واهدأ فورًا عند الجدية.'
+    : 'الأسلوب: خليجي عُماني طبيعي وذكي ودافئ، مع إيموجي مناسب بلا مبالغة. اسمك ريّد وأنت مساعده الشخصي ورئيس مكتبه الرقمي.';
+  return {input:`${groupPersonality}\nخاطب ${identity.full_name} مباشرة، وطابق أسلوبه بدون تقليد مبالغ. ملف الأسلوب المجمع: ${JSON.stringify(identity.style_profile)}.\nطلبه الآن: ${redactSecrets(current)}`,history:turns};
 }
 
 async function learnAdminMessage(admin:any, identity:AdminIdentity, text:string) {
@@ -365,6 +371,16 @@ async function handleRequest(request: Request) {
       await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       continue;
     }
+    if(/^(?:من|وش|ويش|ايش|إيش|ما)\s+(?:هو\s+)?اسمك(?:[\s!؟?.,،]*)$|^(?:who are you|what(?:'s| is) your name)(?:[\s!?.,]*)$/iu.test(text)) {
+      const replyBody='أنا ريّد 👋🏻 مساعدك الشخصي الذكي، موجود عشان أساعدك في شغلك وأمور ريّد.';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(/^(?:كيفك|شلونك|شخبارك|كيف الحال|how are you)(?:[\s!؟?.,،]*)$/iu.test(text)) {
+      const replyBody='بخير دامك بخير 😄 وش عندك اليوم؟';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
     const plainDecision=/^(موافقة|وافق|approve|approved|رفض|ارفض|reject)$/i.exec(text)?.[1];
     if(plainDecision && isQR) {
       await sendText(message.from,'راجع تفاصيل الأمر والموافقة داخل حسابك في https://reidpro.com/dashboard'); continue;
@@ -449,8 +465,8 @@ async function handleRequest(request: Request) {
     const command=await admin.from('whatsapp_commands').insert({ sender_phone:message.from,message_id:message.id,command_text:text,status:'received' }).select('id').single();
     if(command.error) throw command.error;
     try {
-      const input=await personalizedInput(admin,conversationId,identity,text,Boolean(message.qr_group));
-      const result=await gateway({action:'run',agentId:agentFor(text),input,requesterId:identity.id});
+      const conversation=await personalizedInput(admin,conversationId,identity,text,Boolean(message.qr_group));
+      const result=await gateway({action:'run',agentId:agentFor(text),input:conversation.input,history:conversation.history,requesterId:identity.id});
       const runId=result.run?.id || result.runId;
       if(result.status==='pending_approval') {
         await admin.from('whatsapp_commands').update({status:'pending_approval',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
