@@ -260,7 +260,25 @@ async function processOutbox() {
       await check(admin.from('qr_messages').upsert({conversation_id:chat.id,message_id:sent.key.id,direction:'outbound',body:row.body,status:'sent'},{onConflict:'message_id',ignoreDuplicates:true}));
       await check(admin.from('qr_outbox').update({status:'sent',wa_message_id:sent.key.id}).eq('id',row.id));
       await check(admin.from('qr_conversations').update({last_message:row.body.slice(0,180),updated_at:new Date().toISOString()}).eq('id',chat.id));
-    }catch{await check(admin.from('qr_outbox').update({status:'uncertain',error:'verify_before_retry'}).eq('id',row.id));}
+      if(row.dedupe_key.startsWith('admin-send:')) {
+        const pendingId=row.dedupe_key.slice('admin-send:'.length);
+        const receipt=await check(admin.from('whatsapp_pending_sends').update({status:'sent',sent_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',pendingId).eq('status','sending').select('requester_phone,target_name').maybeSingle());
+        if(receipt) {
+          const requester=await check(admin.from('qr_conversations').select('id').eq('jid',`${receipt.requester_phone}@s.whatsapp.net`).single());
+          await check(admin.from('qr_outbox').upsert({conversation_id:requester.id,body:`تم إرسال الرسالة إلى ${receipt.target_name} ✅`,origin:'bot',dedupe_key:`admin-send-receipt:${pendingId}`},{onConflict:'dedupe_key',ignoreDuplicates:true}));
+        }
+      }
+    }catch{
+      await check(admin.from('qr_outbox').update({status:'uncertain',error:'verify_before_retry'}).eq('id',row.id));
+      if(row.dedupe_key.startsWith('admin-send:')) {
+        const pendingId=row.dedupe_key.slice('admin-send:'.length);
+        const receipt=await check(admin.from('whatsapp_pending_sends').update({status:'uncertain',updated_at:new Date().toISOString()}).eq('id',pendingId).eq('status','sending').select('requester_phone,target_name').maybeSingle());
+        if(receipt) {
+          const requester=await check(admin.from('qr_conversations').select('id').eq('jid',`${receipt.requester_phone}@s.whatsapp.net`).single());
+          await check(admin.from('qr_outbox').upsert({conversation_id:requester.id,body:`ما قدرت أتأكد من وصول الرسالة إلى ${receipt.target_name}. ما راح أعيدها تلقائيًا حتى ما تتكرر.`,origin:'bot',dedupe_key:`admin-send-uncertain:${pendingId}`},{onConflict:'dedupe_key',ignoreDuplicates:true}));
+        }
+      }
+    }
   }
 }
 // A crash while sending is ambiguous; never retry automatically and risk a

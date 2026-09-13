@@ -137,6 +137,52 @@ function configuredEmailFor(phone:string) {
   return configured.split(',').map(value=>value.split('=').map(part=>part.trim())).find(([number])=>number?.replace(/\D/g,'')===phone.replace(/\D/g,''))?.[1] || null;
 }
 
+function configuredAdmins() {
+  const configured=Deno.env.get('WHATSAPP_ADMIN_EMAIL_MAP') || Deno.env.get('WHATSAPP_OWNER_EMAIL_MAP') || '96896709444=alialajmi524@gmail.com,96892797586=sheikhaalmamari4@gmail.com';
+  return configured.split(',').map(value=>value.split('=').map(part=>part.trim())).filter(([phone,email])=>/^[1-9][0-9]{7,14}$/.test(phone?.replace(/\D/g,''))&&email?.includes('@')).map(([phone,email])=>({phone:phone.replace(/\D/g,''),email:email.toLowerCase()}));
+}
+
+function configuredRecipient(alias:string) {
+  const wanted=alias.trim().toLowerCase().replace(/^ال/,'');
+  const email=wanted==='شيخة'||wanted==='شيخه'||wanted==='sheikha'
+    ? 'sheikhaalmamari4@gmail.com'
+    : wanted==='علي'||wanted==='ali' ? 'alialajmi524@gmail.com' : null;
+  if(!email)return null;
+  const entry=configuredAdmins().find(item=>item.email===email);
+  return entry?{...entry,name:email.startsWith('sheikha')?'شيخة':'علي'}:null;
+}
+
+function requestedAdminSend(text:string) {
+  const end=/^(?:ارسل|أرسل)\s+([\s\S]{1,4000}?)\s+(?:ل|لي|إلى|الى|حال)\s*(شيخة|شيخه|sheikha|علي|ali)\s*[.!؟?،,]*$/iu.exec(text);
+  if(end)return {body:end[1].trim(),target:configuredRecipient(end[2])};
+  const start=/^(?:ارسل|أرسل)\s+(?:ل|لي|إلى|الى|حال)\s*(شيخة|شيخه|sheikha|علي|ali)\s+([\s\S]{1,4000}?)\s*[.!؟?،,]*$/iu.exec(text);
+  return start?{body:start[2].trim(),target:configuredRecipient(start[1])}:null;
+}
+
+const confirmsAdminSend=(text:string)=>/^(?:ارسلها|أرسلها|ارسله|أرسله|نفذ\s+الإرسال|نفّذ\s+الإرسال|send\s+it)\s*[.!؟?،,]*$/iu.test(text);
+const cancelsAdminSend=(text:string)=>/^(?:الغ(?:ي)?\s+الإرسال|ألغي\s+الإرسال|لا\s+ترسلها|cancel\s+(?:it|send))\s*[.!؟?،,]*$/iu.test(text);
+
+async function ensureQrDirectConversation(admin:any,phone:string,name:string) {
+  const jid=`${phone}@s.whatsapp.net`;
+  const existing=await admin.from('qr_conversations').select('id,bot_mode').eq('jid',jid).maybeSingle();
+  if(existing.error)throw existing.error;
+  if(existing.data) {
+    if(existing.data.bot_mode!=='active') {
+      const activated=await admin.from('qr_conversations').update({bot_mode:'active',display_name:name,updated_at:new Date().toISOString()}).eq('id',existing.data.id).select('id').single();
+      if(activated.error)throw activated.error;
+    }
+    return existing.data.id;
+  }
+  const created=await admin.from('qr_conversations').insert({jid,display_name:name,bot_mode:'active'}).select('id').single();
+  if(created.error?.code==='23505') {
+    const raced=await admin.from('qr_conversations').select('id').eq('jid',jid).single();
+    if(raced.error)throw raced.error;
+    return raced.data.id;
+  }
+  if(created.error)throw created.error;
+  return created.data.id;
+}
+
 type AdminIdentity={id:string;full_name:string;email:string;roles:string[];memory_enabled:boolean;style_learning_enabled:boolean;style_profile:Record<string,unknown>;phone_e164:string};
 
 async function adminIdentity(admin:any, phone:string):Promise<AdminIdentity> {
@@ -364,6 +410,43 @@ async function handleRequest(request: Request) {
     const text = message?.text?.body?.trim();
     if (!text) {
       const replyBody='أرسل أمرًا نصيًا. الأوامر الحساسة ستنتظر موافقة بشرية داخل لوحة ريّد.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(cancelsAdminSend(text)) {
+      await admin.from('whatsapp_pending_sends').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('requester_id',identity.id).eq('status','pending');
+      const replyBody='تم إلغاء الرسالة، وما انرسل شيء.';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(confirmsAdminSend(text)) {
+      const pending=await admin.from('whatsapp_pending_sends').select('id,target_phone,target_name,body,expires_at').eq('requester_id',identity.id).eq('requester_phone',message.from).eq('status','pending').gt('expires_at',new Date().toISOString()).order('created_at',{ascending:false}).limit(1).maybeSingle();
+      if(pending.error)throw pending.error;
+      if(!pending.data) {
+        const replyBody='ما عندي رسالة معلّقة للإرسال. اكتب مثلًا: «ارسل هلا لي شيخة».';
+        await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+        continue;
+      }
+      await adminIdentity(admin,pending.data.target_phone);
+      const targetConversationId=await ensureQrDirectConversation(admin,pending.data.target_phone,pending.data.target_name);
+      await queueQrText(admin,pending.data.target_phone,pending.data.body,`admin-send:${pending.data.id}`,targetConversationId);
+      await admin.from('whatsapp_pending_sends').update({status:'sending',updated_at:new Date().toISOString()}).eq('id',pending.data.id).eq('status','pending');
+      const replyBody=`تم استلام تأكيدك، جاري الإرسال إلى ${pending.data.target_name}…`;
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    const sendRequest=requestedAdminSend(text);
+    if(sendRequest?.target) {
+      if(sendRequest.target.phone===message.from) {
+        const replyBody='هذا رقمك أنت 😄 حدّد علي أو شيخة كمستلم.';
+        await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+        continue;
+      }
+      await adminIdentity(admin,sendRequest.target.phone);
+      await admin.from('whatsapp_pending_sends').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('requester_id',identity.id).eq('status','pending');
+      const pending=await admin.from('whatsapp_pending_sends').insert({requester_id:identity.id,requester_phone:message.from,target_phone:sendRequest.target.phone,target_name:sendRequest.target.name,body:sendRequest.body}).select('id').single();
+      if(pending.error)throw pending.error;
+      const replyBody=`جاهزة ل${sendRequest.target.name}:\n\n“${sendRequest.body}”\n\nاكتب «أرسلها» للتأكيد أو «لا ترسلها» للإلغاء.`;
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       continue;
     }
     if(/^(?:(?:هلا(?:\s+والله)?|مرحبا|السلام\s+عليكم|صباح\s+الخير|مساء\s+الخير)(?:\s+(?:يا\s+)?(?:reid|ري[ّ]?د))?|(?:reid|ري[ّ]?د))(?:[\s!؟?.,،]*)$/iu.test(text)) {
