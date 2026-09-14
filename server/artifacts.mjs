@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
+import { drawSeriesChart, parseTableSeries } from './charts.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Bundled with the service on purpose. The deployment image ships no fonts at
@@ -163,7 +164,15 @@ function createPdfWriter(doc, fonts) {
     if (!header) doc.save().moveTo(left, doc.y - 2).lineTo(right, doc.y - 2).lineWidth(0.5).strokeColor('#E1DAEB').stroke().restore();
   }
 
-  return { paragraph, tableRow, left, right };
+  // The chart needs the same right-to-left placement the prose uses, and the
+  // same page discipline, so both are handed over rather than reimplemented.
+  function drawText(value, { right: boxRight = right, left: boxLeft = left, y }) {
+    const saved = doc.y;
+    doc.y = y;
+    drawLine(String(value).trim().split(/\s+/), {}, { left: boxLeft, right: boxRight });
+    doc.y = saved;
+  }
+  return { paragraph, tableRow, drawText, ensureRoom: room, left, right };
 }
 
 async function makePdf(title, body, env) {
@@ -186,15 +195,27 @@ async function makePdf(title, body, env) {
   doc.y = banner + 26;
 
   let pendingHeader = true;
+  let block = [];
+  // A finished table is offered to the chart engine. If it holds one honest
+  // series, the report shows its shape as well as its numbers.
+  const closeTable = () => {
+    if (block.length) {
+      const chart = parseTableSeries(block);
+      if (chart) drawSeriesChart(doc, chart, { left: writer.left, right: writer.right, drawText: writer.drawText, ensureRoom: writer.ensureRoom });
+    }
+    block = [];
+  };
   for (const raw of lines(body)) {
     const item = classifyLine(raw);
     if (item.kind === 'separator') continue;
-    if (item.kind === 'row') { writer.tableRow(item.cells, { header: pendingHeader }); pendingHeader = false; continue; }
+    if (item.kind === 'row') { writer.tableRow(item.cells, { header: pendingHeader }); block.push(item.cells); pendingHeader = false; continue; }
+    closeTable();
     pendingHeader = true;
     if (item.kind === 'heading') writer.paragraph(item.text, { size: item.level === 1 ? 16 : 14, bold: true, color: '#5E3F9E', after: 9 });
     else if (item.kind === 'bullet') writer.paragraph(item.text, { indent: 18, bullet: '•', after: 4 });
     else writer.paragraph(item.text);
   }
+  closeTable();
 
   const range = doc.bufferedPageRange();
   for (let page = range.start; page < range.start + range.count; page += 1) {

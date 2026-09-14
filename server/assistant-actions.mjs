@@ -75,7 +75,7 @@ const webAnswerPrompt=[
 
 export const linkInText=text=>/https?:\/\/[^\s<>"']{4,500}/i.exec(String(text||''))?.[0]?.replace(/[).,،]+$/,'')||null;
 
-export function createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,route=createIntentRouter({aiChat}),webSearch=null,fetchPage=readPage}) {
+export function createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,route=createIntentRouter({aiChat}),webSearch=null,fetchPage=readPage,imageBudget=null}) {
   const hasRole=(identity,set)=>identity.roles.some(role=>set.has(role));
   const isOwner=identity=>hasRole(identity,ownerRoles);
 
@@ -140,10 +140,23 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     if(recipient?.ambiguous)return {handled:true,text:`لقيت أكثر من جهة مطابقة:\n${recipient.ambiguous.map((row,index)=>`${index+1}. ${row.display_name} (+${row.phone_e164})`).join('\n')}\nاكتب الرقم المقصود.`};
     if(recipient?.error)return {handled:true,text:recipient.error==='company_only'?'صلاحيتك تسمح بالإرسال لأرقام موظفي Reid المرتبطين فقط.':'ما قدرت أحدد المستلم. اكتب الرقم مع مفتاح الدولة.'};
     if(request.kind==='image'){
+      // Image generation and chat share one GPU. Without a budget any employee
+      // with file permission could occupy it indefinitely, which is a denial of
+      // service against every conversation on the same machine.
+      const budget=imageBudget?await imageBudget.claim(1):{allowed:true,remaining:null};
+      if(!budget.allowed)return {handled:true,text:'وصلنا حد إنشاء الصور اليومي على الجهاز. جرّب بكرة أو اطلب من المالك رفع الحد.'};
       const created=await createAction(identity,chat,'generate_image',{prompt:request.prompt},`إنشاء صورة: ${request.prompt}`,{level:1});
-      const buffer=await aiImage(request.prompt);
+      let buffer;
+      try{buffer=await aiImage(request.prompt);}
+      catch(error){
+        // A generation that never happened is refunded, exactly like the
+        // content studio does it.
+        if(imageBudget)await imageBudget.release(1).catch(()=>{});
+        await admin.from('whatsapp_actions').update({status:'failed',error_code:String(error?.message||'image_failed').slice(0,120),updated_at:new Date().toISOString()}).eq('id',created.id);
+        return {handled:true,text:'ما قدرت أولّد الصورة الآن. ما انصرف من رصيدك شيء.'};
+      }
       const artifact=await storeArtifact(identity,created.id,'image','صورة من Reid','image/png',buffer,request.prompt,'png');
-      await queueMedia(chat,{artifact,caption:'جهزت الصورة لك ✨',actionId:created.id});
+      await queueMedia(chat,{artifact,caption:budget.remaining===null?'جهزت الصورة لك ✨':`جهزت الصورة لك ✨ • المتبقي اليوم ${budget.remaining}`,actionId:created.id});
       await check(admin.from('whatsapp_actions').update({status:'completed',completed_at:new Date().toISOString(),output_summary:'image_generated',updated_at:new Date().toISOString()}).eq('id',created.id));
       if(recipient){await saveContact(identity,recipient);const action=await createAction(identity,chat,'send_artifact',{artifact_id:artifact.id},`إرسال الصورة إلى ${recipient.name} (+${recipient.phone})`,{recipientPhone:recipient.phone,recipientName:recipient.name});return {handled:true,text:`جهزت الصورة ومعاينتها فوق.\nإرسالها إلى ${recipient.name} (+${recipient.phone}) يحتاج موافقتك. اكتب «أرسلها» أو «إلغاء».`,actionId:action.id};}
       return {handled:true,text:'تم إنشاء الصورة وإرسالها لك هنا ✅'};

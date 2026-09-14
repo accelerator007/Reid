@@ -6,7 +6,7 @@ import { check, createFakeSupabase } from './fake-supabase.mjs';
 const owner = { id: 'owner-1', full_name: 'علي', email: 'owner@reid.test', phone_e164: '96896709444', roles: ['owner'], outbound_scope: 'any', artifacts_enabled: true, workshops_enabled: true, notes_enabled: true, memory_enabled: true, style_learning_enabled: true, sample_count: 40, style_profile: {} };
 const employee = { ...owner, id: 'emp-1', full_name: 'سالم', email: 'emp@reid.test', phone_e164: '96891111111', roles: ['employee'], outbound_scope: 'company' };
 
-function build({ identity = owner, notes = [], workshops = [], contacts = [], route = async () => null, aiChat = async () => 'رد', extras = {} } = {}) {
+function build({ identity = owner, notes = [], workshops = [], contacts = [], route = async () => null, aiChat = async () => 'رد', extras = {}, imageBudget = null, aiImage = async () => Buffer.from('x') } = {}) {
   const admin = createFakeSupabase({
     // The real columns carry these defaults; the stand-in has to as well or the
     // approval state under test would never exist.
@@ -23,8 +23,7 @@ function build({ identity = owner, notes = [], workshops = [], contacts = [], ro
     },
   });
   const handle = createAssistantActions({
-    admin, check, aiChat,
-    aiImage: async () => Buffer.from('x'),
+    admin, check, aiChat, aiImage, imageBudget,
     queueText: async () => {}, queueMedia: async () => {},
     ensureConversation: async () => ({ id: 'target' }),
     verifyNumber: async () => true,
@@ -144,4 +143,39 @@ test('a superseded request is cancelled rather than left executable', async () =
   const pending = actions(admin).filter(action => action.status === 'pending_confirmation');
   assert.equal(pending.length, 1, 'only the newest request may be approved');
   assert.equal(actions(admin).find(action => action.status === 'cancelled').error_code, 'superseded');
+});
+
+test('image generation is refused once the shared daily budget is spent', async () => {
+  let generated = 0;
+  const { admin, handle } = build({
+    imageBudget: { claim: async () => ({ allowed: false, remaining: 0 }), release: async () => {} },
+    aiImage: async () => { generated += 1; return Buffer.from('x'); },
+  });
+  const result = await handle({ identity: owner, chat, text: 'سوّي لي صورة لمكتب حديث' });
+  assert.equal(result.handled, true);
+  assert.match(result.text, /حد إنشاء الصور اليومي/);
+  assert.equal(generated, 0, 'the GPU is never reached once the budget is gone');
+  assert.equal(actions(admin).length, 0, 'a refused generation creates no action');
+});
+
+test('a generation that failed refunds the budget instead of charging for nothing', async () => {
+  const spent = [];
+  const { admin, handle } = build({
+    imageBudget: { claim: async wanted => { spent.push(`claim:${wanted}`); return { allowed: true, remaining: 4 }; }, release: async wanted => { spent.push(`release:${wanted}`); } },
+    aiImage: async () => { throw new Error('image_503'); },
+  });
+  const result = await handle({ identity: owner, chat, text: 'سوّي لي صورة لمكتب حديث' });
+  assert.match(result.text, /ما انصرف من رصيدك شيء/);
+  assert.deepEqual(spent, ['claim:1', 'release:1']);
+  assert.equal(actions(admin)[0].status, 'failed', 'the action records the failure rather than hanging');
+});
+
+test('a successful generation charges exactly once and reports what is left', async () => {
+  const spent = [];
+  const { handle } = build({
+    imageBudget: { claim: async wanted => { spent.push(`claim:${wanted}`); return { allowed: true, remaining: 3 }; }, release: async () => { spent.push('release'); } },
+  });
+  const result = await handle({ identity: owner, chat, text: 'سوّي لي صورة لمكتب حديث' });
+  assert.equal(result.handled, true);
+  assert.deepEqual(spent, ['claim:1'], 'no refund on success');
 });

@@ -233,7 +233,17 @@ const webSearch=createWebSearch({
   consume:async()=>{const {data,error}=await admin.rpc('consume_web_search_quota',{daily_limit:Number(env.REID_WEB_SEARCH_DAILY||60)});return !error&&data===true;},
   release:async()=>{await admin.rpc('release_web_search_quota');},
 });
-const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,webSearch});
+// One shared daily counter with the content studio: both reach the same GPU.
+const imageBudget={
+  async claim(wanted){
+    const {data,error}=await admin.rpc('claim_content_image_budget',{wanted,daily_limit:Number(env.REID_IMAGE_DAILY||12)});
+    if(error)return {allowed:false,remaining:0};
+    const row=Array.isArray(data)?data[0]:data;
+    return {allowed:Boolean(row?.allowed),remaining:Number(row?.remaining??0)};
+  },
+  async release(wanted){await admin.rpc('release_content_image_budget',{wanted});},
+};
+const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,webSearch,imageBudget});
 const runProactive=createProactive({admin,check,queueText,ensureConversation});
 app.get('/healthz',(_req,res)=>res.json({ok:true}));
 // Public chat is a separate, fixed-context capability, never an administrative
