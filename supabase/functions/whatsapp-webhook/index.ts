@@ -449,21 +449,10 @@ async function handleRequest(request: Request) {
       await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       continue;
     }
-    if(/^(?:(?:هلا(?:\s+والله)?|مرحبا|السلام\s+عليكم|صباح\s+الخير|مساء\s+الخير)(?:\s+(?:يا\s+)?(?:reid|ري[ّ]?د))?|(?:reid|ري[ّ]?د))(?:[\s!؟?.,،]*)$/iu.test(text)) {
-      const replyBody='هلا وغلا 👋🏻 حاضر، وش تريدني أساعدك فيه؟';
-      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
-      continue;
-    }
-    if(/^(?:من|وش|ويش|ايش|إيش|ما)\s+(?:هو\s+)?اسمك(?:[\s!؟?.,،]*)$|^(?:who are you|what(?:'s| is) your name)(?:[\s!?.,]*)$/iu.test(text)) {
-      const replyBody='أنا ريّد 👋🏻 مساعدك الشخصي الذكي، موجود عشان أساعدك في شغلك وأمور ريّد.';
-      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
-      continue;
-    }
-    if(/^(?:كيفك|شلونك|شخبارك|كيف الحال|how are you)(?:[\s!؟?.,،]*)$/iu.test(text)) {
-      const replyBody='بخير دامك بخير 😄 وش عندك اليوم؟';
-      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
-      continue;
-    }
+    // Greetings, "what is your name" and "how are you" used to return three
+    // fixed strings before the model ever saw them. They were the first three
+    // sentences the assistant said every day, and the most robotic thing in the
+    // system. They now go through the same reply path as everything else.
     const plainDecision=/^(موافقة|وافق|approve|approved|رفض|ارفض|reject)$/i.exec(text)?.[1];
     if(plainDecision && isQR) {
       await sendText(message.from,'راجع تفاصيل الأمر والموافقة داخل حسابك في https://reidpro.com/dashboard'); continue;
