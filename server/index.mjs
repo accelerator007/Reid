@@ -14,6 +14,7 @@ import { nextMood, nextRapport, openerFingerprint, personaLines, rememberOpener,
 import { createRecall } from './recall.mjs';
 import { assessReply } from './quality.mjs';
 import { readCorrection, readReaction } from './feedback.mjs';
+import { createWebSearch } from './web.mjs';
 
 // libsignal prints full session objects (including private key material) with
 // console.info whenever it rotates a session. Suppress only that unsafe
@@ -220,7 +221,15 @@ async function verifyNumber(phone) {
 }
 
 const memories=createMemory({admin,check,aiChat,semantic:createRecall({admin,embed})});
-const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber});
+// Web access stays off until an Owner supplies a provider key. The daily
+// counter is consumed before the call and released when the call never
+// happened, the same way the image budget works.
+const webSearch=createWebSearch({
+  provider:env.REID_WEB_SEARCH_PROVIDER,apiKey:env.REID_WEB_SEARCH_KEY,
+  consume:async()=>{const {data,error}=await admin.rpc('consume_web_search_quota',{daily_limit:Number(env.REID_WEB_SEARCH_DAILY||60)});return !error&&data===true;},
+  release:async()=>{await admin.rpc('release_web_search_quota');},
+});
+const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,webSearch});
 app.get('/healthz',(_req,res)=>res.json({ok:true}));
 // Public chat is a separate, fixed-context capability, never an administrative
 // gateway. It receives only the explicitly published workshop catalogue: no
