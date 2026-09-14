@@ -32,16 +32,7 @@ jobs:
       # reports cannot silently regress to a Latin-only fallback face.
       - run: docker build -t reid-api-ci server
       - name: Arabic PDF renders inside the deployment image
-        run: |
-          docker run --rm --entrypoint node reid-api-ci --input-type=module -e "
-            const {generateArtifact}=await import('./artifacts.mjs');
-            const pdf=await generateArtifact('pdf','- بند عربي','تقرير');
-            const raw=pdf.buffer.toString('latin1');
-            const faces=[...raw.matchAll(/\/BaseFont\s*\/([A-Za-z0-9+\-,#]+)/g)].map(m=>m[1]);
-            if(!/\/FontFile2/.test(raw)) throw new Error('no embedded font in the image');
-            if(!faces.length||!faces.every(f=>/IBMPlexSansArabic/.test(f))) throw new Error('unexpected face: '+faces);
-            console.log('embedded faces:',faces.join(','));
-          "
+        run: docker run --rm reid-api-ci node verify-pdf.mjs
 
   security:
     runs-on: ubuntu-latest

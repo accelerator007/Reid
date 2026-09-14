@@ -179,6 +179,9 @@ async function react(jid,messageId,participant,emoji) {
 // command engine, the audit ledger, the Owner inbox — works on one shape.
 async function resolveMedia(message,item) {
   if(!item.media)return item;
+  // Transcribing a voice note takes real time. Show the indicator for it too,
+  // otherwise the silence starts before the job does.
+  const stopTyping=signalsEnabled?typingFor(item.jid):()=>{};
   try{
     const buffer=await downloadMediaMessage(message,'buffer',{},{reuploadRequest:socket.updateMediaMessage});
     if(buffer.length>mediaLimits[item.media.kind])throw new Error(`${item.media.kind}_too_large`);
@@ -192,7 +195,7 @@ async function resolveMedia(message,item) {
     console.error(JSON.stringify({event:'inbound_media_failed',kind:item.media.kind,reason:String(error?.message||'unknown').slice(0,60)}));
     const excuse=item.media.kind==='audio'?'ما قدرت أفرّغ التسجيل الصوتي. اكتبه لي نصًا أو أعد إرساله.':'ما قدرت أفتح الصورة. أعد إرسالها أو اكتب لي وش فيها.';
     return {...item,text:item.text?`${item.text}\n\n(${excuse})`:excuse,mediaFailed:true};
-  }
+  }finally{stopTyping();}
 }
 
 // Feedback is stored against the reply it judges. It shapes what the assistant
@@ -439,11 +442,14 @@ async function processJob() {
     }
     if(!quality.passed)console.error(JSON.stringify({event:'assistant_reply_below_contract',score:quality.score,flags:quality.flags}));
     await check(admin.from('qr_jobs').update({state:'done'}).eq('id',job.id).eq('state','running'));
+    // The answer is already queued. Nothing below may fail the job or the
+    // reply; remembering is a bonus, never a precondition for having replied.
     if(identity){
-      await check(admin.from('qr_conversations').update({mood,rapport:nextRapport(chat.rapport,{handled:Boolean(decision)}),recent_openers:rememberOpener(chat.recent_openers,body)}).eq('id',chat.id));
-      // Learning never blocks a delivered answer.
-      await memories.learn(identity,chat,turns).catch(()=>console.error('assistant_memory_learn_failed'));
-      await memories.observeStyle(identity,job.input).catch(()=>{});
+      try{
+        await check(admin.from('qr_conversations').update({mood,rapport:nextRapport(chat.rapport,{handled:Boolean(decision)}),recent_openers:rememberOpener(chat.recent_openers,body)}).eq('id',chat.id));
+        await memories.learn(identity,chat,turns);
+        await memories.observeStyle(identity,job.input);
+      }catch{console.error('assistant_memory_update_failed');}
     }
   }catch{await check(admin.from('qr_jobs').update({state:'failed',error:'ai_unavailable'}).eq('id',job.id).eq('state','running'));}
   finally{stopTyping();}
