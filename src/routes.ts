@@ -28,6 +28,7 @@ export type Page =
   | "workspace"
   | "projects"
   | "research"
+  | "workshops"
   | "crm"
   | "dashboard"
   | "privacy"
@@ -72,6 +73,7 @@ export const routes: readonly Route[] = [
   { page: "home", path: "/" },
   { page: "login", path: "/login" },
   { page: "apply", path: "/apply" },
+  { page: "workshops", path: "/workshops" },
   { page: "today", path: "/today", authenticated: true, allow: staff },
   { page: "inbox", path: "/inbox", authenticated: true, allow: ["owner"] },
   { page: "connections", path: "/connections", authenticated: true, allow: ["owner"] },

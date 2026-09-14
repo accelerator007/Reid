@@ -137,6 +137,52 @@ function configuredEmailFor(phone:string) {
   return configured.split(',').map(value=>value.split('=').map(part=>part.trim())).find(([number])=>number?.replace(/\D/g,'')===phone.replace(/\D/g,''))?.[1] || null;
 }
 
+function configuredAdmins() {
+  const configured=Deno.env.get('WHATSAPP_ADMIN_EMAIL_MAP') || Deno.env.get('WHATSAPP_OWNER_EMAIL_MAP') || '96896709444=alialajmi524@gmail.com,96892797586=sheikhaalmamari4@gmail.com';
+  return configured.split(',').map(value=>value.split('=').map(part=>part.trim())).filter(([phone,email])=>/^[1-9][0-9]{7,14}$/.test(phone?.replace(/\D/g,''))&&email?.includes('@')).map(([phone,email])=>({phone:phone.replace(/\D/g,''),email:email.toLowerCase()}));
+}
+
+function configuredRecipient(alias:string) {
+  const wanted=alias.trim().toLowerCase().replace(/^ال/,'');
+  const email=wanted==='شيخة'||wanted==='شيخه'||wanted==='sheikha'
+    ? 'sheikhaalmamari4@gmail.com'
+    : wanted==='علي'||wanted==='ali' ? 'alialajmi524@gmail.com' : null;
+  if(!email)return null;
+  const entry=configuredAdmins().find(item=>item.email===email);
+  return entry?{...entry,name:email.startsWith('sheikha')?'شيخة':'علي'}:null;
+}
+
+function requestedAdminSend(text:string) {
+  const end=/^(?:ارسل|أرسل)\s+([\s\S]{1,4000}?)\s+(?:ل|لي|إلى|الى|حال)\s*(شيخة|شيخه|sheikha|علي|ali)\s*[.!؟?،,]*$/iu.exec(text);
+  if(end)return {body:end[1].trim(),target:configuredRecipient(end[2])};
+  const start=/^(?:ارسل|أرسل)\s+(?:ل|لي|إلى|الى|حال)\s*(شيخة|شيخه|sheikha|علي|ali)\s+([\s\S]{1,4000}?)\s*[.!؟?،,]*$/iu.exec(text);
+  return start?{body:start[2].trim(),target:configuredRecipient(start[1])}:null;
+}
+
+const confirmsAdminSend=(text:string)=>/^(?:ارسلها|أرسلها|ارسله|أرسله|نفذ\s+الإرسال|نفّذ\s+الإرسال|send\s+it)\s*[.!؟?،,]*$/iu.test(text);
+const cancelsAdminSend=(text:string)=>/^(?:الغ(?:ي)?\s+الإرسال|ألغي\s+الإرسال|لا\s+ترسلها|cancel\s+(?:it|send))\s*[.!؟?،,]*$/iu.test(text);
+
+async function ensureQrDirectConversation(admin:any,phone:string,name:string) {
+  const jid=`${phone}@s.whatsapp.net`;
+  const existing=await admin.from('qr_conversations').select('id,bot_mode').eq('jid',jid).maybeSingle();
+  if(existing.error)throw existing.error;
+  if(existing.data) {
+    if(existing.data.bot_mode!=='active') {
+      const activated=await admin.from('qr_conversations').update({bot_mode:'active',display_name:name,updated_at:new Date().toISOString()}).eq('id',existing.data.id).select('id').single();
+      if(activated.error)throw activated.error;
+    }
+    return existing.data.id;
+  }
+  const created=await admin.from('qr_conversations').insert({jid,display_name:name,bot_mode:'active'}).select('id').single();
+  if(created.error?.code==='23505') {
+    const raced=await admin.from('qr_conversations').select('id').eq('jid',jid).single();
+    if(raced.error)throw raced.error;
+    return raced.data.id;
+  }
+  if(created.error)throw created.error;
+  return created.data.id;
+}
+
 type AdminIdentity={id:string;full_name:string;email:string;roles:string[];memory_enabled:boolean;style_learning_enabled:boolean;style_profile:Record<string,unknown>;phone_e164:string};
 
 async function adminIdentity(admin:any, phone:string):Promise<AdminIdentity> {
@@ -150,7 +196,7 @@ async function adminIdentity(admin:any, phone:string):Promise<AdminIdentity> {
   if(!profile) throw new Error('explicit_admin_mapping_required');
   const [roleRows,control]=await Promise.all([admin.from('user_roles').select('role').eq('user_id',profile.id),admin.from('account_controls').select('status').eq('user_id',profile.id).maybeSingle()]);
   const roles=(roleRows.data||[]).map((row:any)=>String(row.role));
-  if(roleRows.error||control.error||control.data?.status!=='active'||!roles.some((role:string)=>['owner','super_admin','admin'].includes(role))) throw new Error('admin_not_active');
+  if(roleRows.error||control.error||control.data?.status!=='active'||!roles.some((role:string)=>role!=='guest')) throw new Error('assistant_account_not_active');
   if(!preferences) {
     const created=await admin.from('whatsapp_admin_profiles').upsert({user_id:profile.id,phone_e164:normalized,created_by:profile.id},{onConflict:'user_id'}).select('memory_enabled,style_learning_enabled,style_profile,phone_e164').single();
     if(created.error) throw created.error; preferences=created.data;
@@ -165,9 +211,15 @@ const redactSecrets=(value:string)=>value
 
 async function personalizedInput(admin:any, conversationId:string, identity:AdminIdentity, current:string, ownerGroup=false) {
   const history=await admin.from('whatsapp_messages').select('direction,body,created_at').eq('conversation_id',conversationId).not('body','is',null).order('created_at',{ascending:false}).limit(12);
-  const lines=(history.data || []).reverse().map((item:any)=>`${item.direction==='inbound'?'المسؤول':'ريّد'}: ${redactSecrets(String(item.body))}`);
-  const groupPersonality=ownerGroup?'هذه محادثة داخل مجموعة المالك الخاصة. يجوز لك إظهار انزعاج أو حماس أو مزح خليجي واضح، واستخدام أي إيموجي مناسب—including 🖕🏻—فقط عندما يبدأ المالك مزحًا صريحًا أو يطلب ذلك. يجوز رد ساخر أو شتيمة عامية خفيفة وغير جارحة في المزاح المتبادل، لكن لا تبدأ بالإهانة، ولا تكررها، ولا تهدد أو تحرّض أو تهين فئة محمية أو عميلًا أو موظفًا، ولا تستخدمها في المال أو الموارد البشرية أو الأزمات أو أي سياق رسمي. إذا ظهرت جدية أو ضيق حقيقي فاهدأ وتعاطف فورًا.':'هذه محادثة إدارية خاصة؛ حافظ على الدفء والإيموجي المناسب من دون شتائم أو إشارات جارحة.';
-  return `أنت مساعد ${identity.full_name} الشخصي ورئيس مكتبه الرقمي، وفي الوقت نفسه مختص معتمد في نظام شركة ريّد. صلاحيات الحساب: ${identity.roles.join(', ')}. تحدث معه بخليجي عُماني طبيعي وذكي ودافئ، وبنفس لغته ولهجته. التقط نبرة الكلام وتفاعل معها بلباقة وتعاطف وروح خفيفة حين يناسب، من غير تصنع أو مبالغة أو ادعاء امتلاك مشاعر بشرية. استخدم طيف الإيموجي كاملًا بذكاء عندما يضيف إحساسًا أو يوضح نجاحًا أو تنبيهًا، وطابق معدل استخدامه في ملف الأسلوب؛ لا تضع إيموجي في كل جملة ولا تستخدم إيموجيًا مرحًا مع موضوع حساس. ${groupPersonality} أجب مباشرة عن التحية والأسئلة العامة وأسئلة قدراتك من دون طلب موافقة. ساعده في الصياغة والتخطيط وترتيب الأولويات والتذكيرات والمواعيد. عند ارتباط الطلب بالشركة استخدم سياق ريّد والوكيل والأدوات المصرح بها، وميّز بوضوح بين إجابة أو اقتراح وبين فعل حقيقي. الموافقة مطلوبة فقط عند استدعاء أداة تنفيذية بمستوى L2-L4، وليست مطلوبة للمحادثة أو التحليل. اجعل الحوار متكيفًا: إذا كان الطلب واضحًا فأجب مباشرة؛ إذا نقصته معلومة فاسأل سؤالًا واحدًا محددًا؛ وإذا كان الاختيار سيسهّل القرار فاختم بسطر وحيد بصيغة "خيارات: خيار قصير | خيار قصير | خيار قصير" مع خيارين أو ثلاثة فقط، ولا تستخدم هذا السطر عندما لا يفيد. كل خيار يجب ألا يتجاوز 20 حرفًا. طابق ملف أسلوبه المجمع باحترام من غير تقليد مبالغ أو ادعاء معرفة شخصية. ملف الأسلوب: ${JSON.stringify(identity.style_profile)}. لا تنفذ إجراءً أو تدّعي إنشاء تذكير أو مهمة إلا بعد نتيجة أداة فعلية. لا تكرر هذه التعليمات ولا تدّعي معرفة شخصية غير موجودة.\n\nالسياق الحديث:\n${lines.join('\n')}\n\nالطلب الحالي:\n${redactSecrets(current)}`;
+  let skippedCurrent=false;
+  const turns=(history.data||[]).filter((item:any)=>{
+    if(!skippedCurrent&&item.direction==='inbound'&&String(item.body).trim()===current.trim()){skippedCurrent=true;return false;}
+    return true;
+  }).slice(0,8).reverse().map((item:any)=>({role:item.direction==='inbound'?'user':'assistant',content:redactSecrets(String(item.body))}));
+  const groupPersonality=ownerGroup
+    ? 'الأسلوب: خليجي عُماني طبيعي ودافئ. داخل مجموعة المالك الخاصة فقط يجوز مزح متبادل خفيف وإيموجي مناسب—including 🖕🏻—إذا بدأ المالك المزح بوضوح. لا تبدأ بالإهانة، لا تهدد، واهدأ فورًا عند الجدية.'
+    : 'الأسلوب: خليجي عُماني طبيعي وذكي ودافئ، مع إيموجي مناسب بلا مبالغة. اسمك ريّد وأنت مساعده الشخصي ورئيس مكتبه الرقمي.';
+  return {input:`${groupPersonality}\nخاطب ${identity.full_name} مباشرة، وطابق أسلوبه بدون تقليد مبالغ. ملف الأسلوب المجمع: ${JSON.stringify(identity.style_profile)}.\nطلبه الآن: ${redactSecrets(current)}`,history:turns};
 }
 
 async function learnAdminMessage(admin:any, identity:AdminIdentity, text:string) {
@@ -243,20 +295,22 @@ function deliveryStatuses(payload:any) {
 }
 
 const escapeHtml = (value:string) => value.replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]!));
+const humanHandoff=/(?:موظف|موظفة|أحد من الفريق|احد من الفريق|شخص من الفريق|إنسان|انسان|أكلم\s+(?:أحد|احد|شخص)|اكلم\s+(?:أحد|احد|شخص)|أتحدث\s+(?:مع\s+)?(?:أحد|احد|شخص)|اتحدث\s+(?:مع\s+)?(?:أحد|احد|شخص)|human|representative|speak\s+to\s+(?:a\s+)?(?:human|person|agent))/iu;
 
-async function notifyOwners(sender:string, name:string|null, message:string|null) {
+async function notifyOwners(sender:string, name:string|null, message:string|null, kind:'message'|'handoff'='message') {
   const key=Deno.env.get('RESEND_API_KEY');
   if(!key) return;
   const recipients=(Deno.env.get('ADMIN_NOTIFICATION_EMAILS') || 'alialajmi524@gmail.com,sheikhaalmamari4@gmail.com').split(',').map(value=>value.trim()).filter(Boolean);
   if(!recipients.length) return;
   const safeName=escapeHtml(name || `+${sender}`);
   const safeText=escapeHtml((message || 'رسالة غير نصية').slice(0,500));
+  const isHandoff=kind==='handoff';
   const response=await fetch('https://api.resend.com/emails',{
     method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},
     body:JSON.stringify({
       from:Deno.env.get('REPORT_FROM_EMAIL') || 'Reid <reports@reidpro.com>',to:recipients,
-      subject:`رسالة واتساب جديدة من ${name || `+${sender}`}`,
-      html:`<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><h2>وصلت رسالة جديدة إلى ريّد</h2><p><strong>المرسل:</strong> ${safeName}<br><strong>الرقم:</strong> +${escapeHtml(sender)}</p><blockquote style="border-right:4px solid #6842ae;padding:8px 14px;margin:16px 0">${safeText}</blockquote><p><a href="https://reidpro.com/dashboard">فتح صندوق محادثات المالك</a></p></div>`,
+      subject:isHandoff?`عميل واتساب يطلب موظفًا: ${name || `+${sender}`}`:`رسالة واتساب جديدة من ${name || `+${sender}`}`,
+      html:`<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><h2>${isHandoff?'طلب تحويل المحادثة إلى موظف':'وصلت رسالة جديدة إلى ريّد'}</h2><p><strong>المرسل:</strong> ${safeName}<br><strong>الرقم:</strong> +${escapeHtml(sender)}</p><blockquote style="border-right:4px solid #6842ae;padding:8px 14px;margin:16px 0">${safeText}</blockquote><p><a href="https://reidpro.com/inbox">فتح صندوق محادثات واتساب</a></p></div>`,
     }),
   });
   if(!response.ok) throw new Error(`owner_email_${response.status}`);
@@ -287,7 +341,21 @@ async function handleRequest(request: Request) {
     if(chat.bot_mode!=='active') return json({handled:true,paused:true});
     targetQrConversation(chat.id);
     const phone=String(job.data.sender_phone||chat.jid).replace(/@s\.whatsapp\.net$/,'');
-    try { await adminIdentity(admin,phone); } catch { return json({handled:false}); }
+    try { await adminIdentity(admin,phone); } catch {
+      const input=String(job.data.input||'').trim();
+      if(humanHandoff.test(input)){
+        const receipt=await admin.from('whatsapp_events').insert({
+          event_id:`qr-handoff:${job.data.message_id}`,sender_phone:phone,message_type:'text',
+          payload:{transport:'qr',handoff:true,conversation_id:chat.id},
+        });
+        if(!receipt.error){
+          try { await notifyOwners(phone,chat.display_name,input,'handoff'); }
+          catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
+        }else if(receipt.error.code!=='23505') console.error('handoff_receipt_failed',receipt.error.code||'unknown');
+        return json({handled:false,customer:true,handoff:true});
+      }
+      return json({handled:false,customer:true});
+    }
     payload={entry:[{changes:[{value:{messages:[{id:'qr:'+job.data.message_id,from:phone,type:'text',text:{body:job.data.input},qr_group:String(chat.jid).endsWith('@g.us')}],contacts:[{wa_id:phone,profile:{name:chat.display_name}}]}}]}]};
   } else {
     const raw=await request.text();
@@ -325,7 +393,7 @@ async function handleRequest(request: Request) {
     const conversationId=conversationResult.data.id;
     const incomingText=message?.text?.body?.trim() || message?.interactive?.button_reply?.title || null;
     await admin.from('whatsapp_messages').insert({ conversation_id:conversationId, meta_message_id:message.id, direction:'inbound', message_type:message.type||'unknown', body:incomingText, delivery_status:'received' });
-    if(!message.qr_group)try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
+    if(!isQR&&!message.qr_group)try { await notifyOwners(message.from,contactName(payload,message.from),incomingText); } catch(error) { console.error('owner_notification_failed',error instanceof Error?error.message:'unknown'); }
     if(!isQR && conversationResult.data.bot_mode!=='active') continue;
     if(incomingText) await learnAdminMessage(admin,identity,incomingText);
     const buttonId = message?.interactive?.button_reply?.id || message?.button?.payload || '';
@@ -342,6 +410,58 @@ async function handleRequest(request: Request) {
     const text = message?.text?.body?.trim();
     if (!text) {
       const replyBody='أرسل أمرًا نصيًا. الأوامر الحساسة ستنتظر موافقة بشرية داخل لوحة ريّد.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(cancelsAdminSend(text)) {
+      await admin.from('whatsapp_pending_sends').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('requester_id',identity.id).eq('status','pending');
+      const replyBody='تم إلغاء الرسالة، وما انرسل شيء.';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(confirmsAdminSend(text)) {
+      const pending=await admin.from('whatsapp_pending_sends').select('id,target_phone,target_name,body,expires_at').eq('requester_id',identity.id).eq('requester_phone',message.from).eq('status','pending').gt('expires_at',new Date().toISOString()).order('created_at',{ascending:false}).limit(1).maybeSingle();
+      if(pending.error)throw pending.error;
+      if(!pending.data) {
+        const replyBody='ما عندي رسالة معلّقة للإرسال. اكتب مثلًا: «ارسل هلا لي شيخة».';
+        await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+        continue;
+      }
+      await adminIdentity(admin,pending.data.target_phone);
+      const targetConversationId=await ensureQrDirectConversation(admin,pending.data.target_phone,pending.data.target_name);
+      await queueQrText(admin,pending.data.target_phone,pending.data.body,`admin-send:${pending.data.id}`,targetConversationId);
+      await admin.from('whatsapp_pending_sends').update({status:'sending',updated_at:new Date().toISOString()}).eq('id',pending.data.id).eq('status','pending');
+      const replyBody=`تم استلام تأكيدك، جاري الإرسال إلى ${pending.data.target_name}…`;
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    const sendRequest=requestedAdminSend(text);
+    if(sendRequest?.target) {
+      if(sendRequest.target.phone===message.from) {
+        const replyBody='هذا رقمك أنت 😄 حدّد علي أو شيخة كمستلم.';
+        await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+        continue;
+      }
+      await adminIdentity(admin,sendRequest.target.phone);
+      await admin.from('whatsapp_pending_sends').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('requester_id',identity.id).eq('status','pending');
+      const pending=await admin.from('whatsapp_pending_sends').insert({requester_id:identity.id,requester_phone:message.from,target_phone:sendRequest.target.phone,target_name:sendRequest.target.name,body:sendRequest.body}).select('id').single();
+      if(pending.error)throw pending.error;
+      const replyBody=`جاهزة ل${sendRequest.target.name}:\n\n“${sendRequest.body}”\n\nاكتب «أرسلها» للتأكيد أو «لا ترسلها» للإلغاء.`;
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(/^(?:(?:هلا(?:\s+والله)?|مرحبا|السلام\s+عليكم|صباح\s+الخير|مساء\s+الخير)(?:\s+(?:يا\s+)?(?:reid|ري[ّ]?د))?|(?:reid|ري[ّ]?د))(?:[\s!؟?.,،]*)$/iu.test(text)) {
+      const replyBody='هلا وغلا 👋🏻 حاضر، وش تريدني أساعدك فيه؟';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(/^(?:من|وش|ويش|ايش|إيش|ما)\s+(?:هو\s+)?اسمك(?:[\s!؟?.,،]*)$|^(?:who are you|what(?:'s| is) your name)(?:[\s!?.,]*)$/iu.test(text)) {
+      const replyBody='أنا ريّد 👋🏻 مساعدك الشخصي الذكي، موجود عشان أساعدك في شغلك وأمور ريّد.';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
+      continue;
+    }
+    if(/^(?:كيفك|شلونك|شخبارك|كيف الحال|how are you)(?:[\s!؟?.,،]*)$/iu.test(text)) {
+      const replyBody='بخير دامك بخير 😄 وش عندك اليوم؟';
+      await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       continue;
     }
     const plainDecision=/^(موافقة|وافق|approve|approved|رفض|ارفض|reject)$/i.exec(text)?.[1];
@@ -428,15 +548,14 @@ async function handleRequest(request: Request) {
     const command=await admin.from('whatsapp_commands').insert({ sender_phone:message.from,message_id:message.id,command_text:text,status:'received' }).select('id').single();
     if(command.error) throw command.error;
     try {
-      const input=await personalizedInput(admin,conversationId,identity,text,Boolean(message.qr_group));
-      const result=await gateway({action:'run',agentId:agentFor(text),input,requesterId:identity.id});
+      const conversation=await personalizedInput(admin,conversationId,identity,text,Boolean(message.qr_group));
+      const result=await gateway({action:'run',agentId:agentFor(text),input:conversation.input,history:conversation.history,requesterId:identity.id});
       const runId=result.run?.id || result.runId;
       if(result.status==='pending_approval') {
         await admin.from('whatsapp_commands').update({status:'pending_approval',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
         const replyBody=`هذا الأمر يحتاج موافقة L${result.approvalLevel}. هل تريد تنفيذه؟`; await recordOutbound(admin,conversationId,replyBody,await sendApproval(message.from,runId,result.approvalLevel));
       } else if(result.status==='queued') {
         await admin.from('whatsapp_commands').update({status:'queued',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
-        const replyBody='تم توجيه الأمر للوكيل وسيصلك الرد عند اكتماله.'; await recordOutbound(admin,conversationId,replyBody,await sendText(message.from,replyBody));
       } else {
         await admin.from('whatsapp_commands').update({status:'completed',agent_run_id:runId,updated_at:new Date().toISOString()}).eq('id',command.data.id);
         const parsed=assistantReply(result.output || 'تمت معالجة طلبك.');
