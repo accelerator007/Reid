@@ -10,7 +10,10 @@ import { createAssistantActions } from './assistant-actions.mjs';
 import { createImageCache, mediaLimits, mediaPlaceholder, transcribeAudio, transcriptBody } from './media.mjs';
 import { createTyping, pacingDelay, reactions, splitReply } from './signals.mjs';
 import { createMemory, describeStyle } from './memory.mjs';
-import { nextMood, nextRapport, personaLines, rememberOpener, repeatsOpener } from './affect.mjs';
+import { nextMood, nextRapport, openerFingerprint, personaLines, rememberOpener, repeatsOpener } from './affect.mjs';
+import { createRecall } from './recall.mjs';
+import { assessReply } from './quality.mjs';
+import { readCorrection, readReaction } from './feedback.mjs';
 
 // libsignal prints full session objects (including private key material) with
 // console.info whenever it rotates a session. Suppress only that unsafe
@@ -142,6 +145,12 @@ async function aiChat(system,input,{profile='report',json=false,timeoutMs=120000
   return content;
 }
 
+async function embed(input) {
+  const response=await fetch(`${env.AI_URL}/api/embeddings`,{method:'POST',headers:{'Content-Type':'application/json','x-reid-origin-token':env.AI_TOKEN},body:JSON.stringify({prompt:String(input).slice(0,4000)}),signal:AbortSignal.timeout(30000)});
+  if(!response.ok)throw new Error(`embed_${response.status}`);
+  return (await response.json())?.embedding||null;
+}
+
 async function aiImage(prompt) {
   const enhanced=await aiChat('Translate this image request into concise English while preserving the exact subject, setting and style. Output only the prompt.',prompt,{profile:'intent'});
   const response=await fetch(`${env.AI_URL}/api/images`,{method:'POST',headers:{'Content-Type':'application/json','x-reid-origin-token':env.AI_TOKEN},body:JSON.stringify({prompt:`PRIMARY SUBJECT AND ACTION: ${enhanced}. Create one coherent high-quality image, not a collage. Never add a logo, labels, watermark or text unless explicitly requested.`,aspect_ratio:'1:1'}),signal:AbortSignal.timeout(180000)});
@@ -184,13 +193,33 @@ async function resolveMedia(message,item) {
   }
 }
 
+// Feedback is stored against the reply it judges. It shapes what the assistant
+// recalls and how it is measured — it never rewrites the assistant's own
+// instructions, which is the shortest path from a thumbs-down to an injection.
+async function recordFeedback({jid,targetId,signal,senderPhone,detail=null}) {
+  const chat=await check(admin.from('qr_conversations').select('id').eq('jid',jid).maybeSingle());
+  if(!chat)return false;
+  await check(admin.from('assistant_feedback').upsert({conversation_id:chat.id,message_id:targetId,sender_phone:senderPhone,signal,detail},{onConflict:'message_id,sender_phone'}));
+  return true;
+}
+
+// "لا، قصدي…" is the clearest signal a person ever gives, and it is aimed at
+// the reply immediately before it.
+async function noteCorrection(item,correction) {
+  const chat=await check(admin.from('qr_conversations').select('id').eq('jid',item.jid).maybeSingle());
+  if(!chat)return false;
+  const previous=await check(admin.from('qr_messages').select('message_id').eq('conversation_id',chat.id).eq('direction','outbound').order('created_at',{ascending:false}).limit(1).maybeSingle());
+  if(!previous)return false;
+  return recordFeedback({jid:item.jid,targetId:previous.message_id,signal:'correction',senderPhone:item.senderPhone,detail:correction.detail});
+}
+
 async function verifyNumber(phone) {
   if(!socket||connection!=='connected')return false;
   const result=await socket.onWhatsApp(phone);
   return Boolean(result?.[0]?.exists);
 }
 
-const memories=createMemory({admin,check,aiChat});
+const memories=createMemory({admin,check,aiChat,semantic:createRecall({admin,embed})});
 const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber});
 app.get('/healthz',(_req,res)=>res.json({ok:true}));
 // Public chat is a separate, fixed-context capability, never an administrative
@@ -291,9 +320,13 @@ async function connect() {
   socket.ev.on('messages.upsert',async event=>{
     if(event.type!=='notify')return;
     for(const message of event.messages) {
+      const reaction=readReaction(message);
+      if(reaction){await recordFeedback(reaction).catch(()=>console.error('assistant_feedback_failed'));continue;}
       const raw=inboundText(message,[socket.user?.id,socket.user?.lid]);if(!raw)continue;
       await acknowledge(message);
       const item=await resolveMedia(message,raw);
+      const correction=readCorrection(item.text);
+      if(correction&&!item.isGroup)await noteCorrection(item,correction).catch(()=>console.error('assistant_feedback_failed'));
       try {
         await persistInbound(message,item);
       }catch(error){
@@ -355,7 +388,7 @@ async function processJob() {
       check(admin.from('tasks').select('title,status,priority,due_at').eq('assignee_id',identity.id).order('due_at').limit(30)),
       check(admin.from('workshops').select('title_ar,title_en,start_at,end_at,format,venue_ar').eq('status','published').order('start_at').limit(20)),
     ]):null;
-    const remembered=identity?await memories.recall(identity,chat):{summary:'',facts:[]};
+    const remembered=identity?await memories.recall(identity,chat,job.input):{summary:'',facts:[]};
     const mood=identity?nextMood(chat.mood,decision?.sentiment,decision?.urgency):'محايد';
     const persona=identity?personaLines({mood,urgency:decision?.urgency,rapport:chat.rapport,recent:chat.recent_openers,style:describeStyle(identity.style_profile,identity.sample_count),summary:remembered.summary,facts:remembered.facts}):'';
     const system=identity
@@ -388,10 +421,12 @@ async function processJob() {
     if(fresh.state!=='running')return;
     // A long answer is sent the way a person sends one: a couple of messages,
     // the first quoting what it answers, instead of a single wall of text.
+    const quality=assessReply(body,{request:job.input,recentOpeners:chat.recent_openers,openerFingerprint});
     const chunks=splitReply(body);
     for(const [index,chunk] of chunks.entries()){
-      await check(admin.from('qr_outbox').upsert({conversation_id:chat.id,body:chunk,origin:'bot',dedupe_key:index?`bot:${job.id}:${index}`:`bot:${job.id}`,expires_at:job.expires_at,reply_to_message_id:index?null:job.message_id},{onConflict:'dedupe_key',ignoreDuplicates:true}));
+      await check(admin.from('qr_outbox').upsert({conversation_id:chat.id,body:chunk,origin:'bot',dedupe_key:index?`bot:${job.id}:${index}`:`bot:${job.id}`,expires_at:job.expires_at,reply_to_message_id:index?null:job.message_id,...(index?{}:{quality_score:quality.score,quality_flags:quality.flags})},{onConflict:'dedupe_key',ignoreDuplicates:true}));
     }
+    if(!quality.passed)console.error(JSON.stringify({event:'assistant_reply_below_contract',score:quality.score,flags:quality.flags}));
     await check(admin.from('qr_jobs').update({state:'done'}).eq('id',job.id).eq('state','running'));
     if(identity){
       await check(admin.from('qr_conversations').update({mood,rapport:nextRapport(chat.rapport,{handled:Boolean(decision)}),recent_openers:rememberOpener(chat.recent_openers,body)}).eq('id',chat.id));
@@ -444,7 +479,7 @@ async function processOutbox() {
       const quoted=await quotedFor(chat,row.reply_to_message_id);
       const sent=await socket.sendMessage(chat.jid,content,quoted?{quoted}:undefined);
       previous={conversation:row.conversation_id,jid:chat.jid,body:row.body};
-      await check(admin.from('qr_messages').upsert({conversation_id:chat.id,message_id:sent.key.id,direction:'outbound',body:row.body,status:'sent'},{onConflict:'message_id',ignoreDuplicates:true}));
+      await check(admin.from('qr_messages').upsert({conversation_id:chat.id,message_id:sent.key.id,direction:'outbound',body:row.body,status:'sent',quality_score:row.quality_score??null,quality_flags:row.quality_flags||[]},{onConflict:'message_id',ignoreDuplicates:true}));
       await check(admin.from('qr_outbox').update({status:'sent',wa_message_id:sent.key.id}).eq('id',row.id));
       await check(admin.from('qr_conversations').update({last_message:row.body.slice(0,180),updated_at:new Date().toISOString()}).eq('id',chat.id));
       if(row.action_id){
