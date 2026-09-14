@@ -15,6 +15,7 @@ import { createRecall } from './recall.mjs';
 import { assessReply } from './quality.mjs';
 import { readCorrection, readReaction } from './feedback.mjs';
 import { createWebSearch } from './web.mjs';
+import { createProactive } from './proactive.mjs';
 
 // libsignal prints full session objects (including private key material) with
 // console.info whenever it rotates a session. Suppress only that unsafe
@@ -35,7 +36,7 @@ app.use(express.json({limit:'32kb'}));
 app.use((req,res,next)=>{res.set('Cache-Control','no-store');next();});
 let socket, auth, qr=null, connection='disconnected', lastError=null, reconnectTimer, stopped=false;
 let reconnects=0, workerBusy=false;
-let publicBusy=false, remindersAt=0;
+let publicBusy=false, remindersAt=0, proactiveAt=0;
 const inboundImages=createImageCache();
 const signalsEnabled=env.REID_ASSISTANT_SIGNALS!=='0';
 let typingFor=()=>()=>{};
@@ -230,6 +231,7 @@ const webSearch=createWebSearch({
   release:async()=>{await admin.rpc('release_web_search_quota');},
 });
 const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,webSearch});
+const runProactive=createProactive({admin,check,queueText,ensureConversation});
 app.get('/healthz',(_req,res)=>res.json({ok:true}));
 // Public chat is a separate, fixed-context capability, never an administrative
 // gateway. It receives only the explicitly published workshop catalogue: no
@@ -533,6 +535,9 @@ setInterval(async()=>{
   if(workerBusy||stopped)return;workerBusy=true;
   try{
     if(Date.now()-remindersAt>15000){await processReminders(admin,check,connection==='connected');remindersAt=Date.now();}
+    // Initiative is checked rarely on purpose: the daily unique key does the
+    // real work, and a quarter hour of latency on a morning brief costs nothing.
+    if(connection==='connected'&&Date.now()-proactiveAt>900000){proactiveAt=Date.now();await runProactive().catch(()=>console.error('proactive_unavailable'));}
     await processOutbox();await processJob();
   }catch{console.error('worker_unavailable');}finally{workerBusy=false;}
 },1500);

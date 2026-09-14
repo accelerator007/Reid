@@ -1,5 +1,5 @@
 import { generateArtifact, requestedArtifactType } from './artifacts.mjs';
-import { createIntentRouter } from './intent.mjs';
+import { createIntentRouter, recipientInText } from './intent.mjs';
 import { readPage, sourcesLine, wrapUntrusted } from './web.mjs';
 
 const ownerRoles=new Set(['owner','super_admin']);
@@ -300,6 +300,12 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
   // one could not.
   async function applyIntent(identity,chat,decision) {
     const {intent,args}=decision;
+    const asked=clean(decision.userText||'');
+    // Defence in depth. The router already refuses a recipient or link the
+    // person never wrote, but the executor is the last gate before an external
+    // action exists, so it checks again rather than trusting its caller.
+    if(args.recipient&&!recipientInText(asked,args.recipient))return null;
+    if(args.url&&!asked.includes(String(args.url).replace(/\/$/,'')))return null;
     if(intent==='confirm')return executePending(identity,chat);
     if(intent==='cancel')return cancelPending(identity,chat);
     if(intent==='action_status')return statusReport(identity);

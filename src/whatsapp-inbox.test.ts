@@ -69,7 +69,9 @@ describe("WhatsApp Owner inbox contract", () => {
   it("binds each authorized administrator phone to an active account", () => {
     expect(webhook).toContain("WHATSAPP_ADMIN_EMAIL_MAP");
     expect(webhook).toContain("adminIdentity");
-    expect(webhook).toContain("['owner','super_admin','admin']");
+    expect(webhook).toContain("account_controls");
+    expect(webhook).toContain("control.data?.status!=='active'");
+    expect(webhook).toContain("role!=='guest'");
     expect(adminMemoryMigration).toContain("whatsapp_admin_profiles_owner_manage");
     expect(webhook).not.toContain("WHATSAPP_OWNER_USER_ID");
   });
@@ -104,7 +106,12 @@ describe("WhatsApp Owner inbox contract", () => {
 
   it("keeps normal conversation natural and reserves approval for real tools", () => {
     const gateway = readFileSync(new URL("../supabase/functions/llm-gateway/index.ts", import.meta.url), "utf8");
-    expect(webhook).toContain("أجب مباشرة عن التحية");
+    // Greetings, "what is your name" and "how are you" used to be answered
+    // from three fixed strings before the model ever saw them. Conversation is
+    // natural only while no reply is hardcoded here.
+    expect(webhook).not.toContain("هلا وغلا");
+    expect(webhook).not.toContain("بخير دامك بخير");
+    expect(webhook).not.toContain("مساعدك الشخصي الذكي، موجود عشان");
     expect(webhook).not.toContain("`رد الوكيل:\\n${result.output}`");
     expect(gateway).toContain("let effectiveApproval = 0");
     expect(gateway).toContain("effectiveApproval = tool.approval_level");

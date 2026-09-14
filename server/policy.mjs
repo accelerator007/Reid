@@ -28,9 +28,9 @@ export function inboundText(message, botJids=[]) {
   const media = mediaNode(message.message);
   const written = message.message?.conversation || message.message?.extendedTextMessage?.text;
   const caption = media ? String(media.node?.caption||'') : '';
-  const text = typeof written === 'string' && written.trim() ? written : caption;
-  if(!media && (typeof text !== 'string'||!text.trim()))return null;
-  const body = String(text||'').trim().slice(0, 8000);
+  const supplied = typeof written === 'string' && written.trim() ? written : caption;
+  if(!media && (typeof supplied !== 'string'||!supplied.trim()))return null;
+  const text = String(supplied||'').trim().slice(0, 8000);
   const carried = media ? { media: { kind: media.kind, mimetype: String(media.node?.mimetype||'').split(';')[0] || null } } : {};
   if(isGroup){
     const senderPhone=jidPhone(message.key.participantPn||message.key.participantAlt||message.key.participant);
@@ -39,11 +39,11 @@ export function inboundText(message, botJids=[]) {
     const botPhones=new Set((Array.isArray(botJids)?botJids:[botJids]).map(jidPhone).filter(Boolean));
     const mentioned=(context.mentionedJid||[]).some(value=>botPhones.has(jidPhone(value)));
     const repliedToBot=Boolean(context.stanzaId)&&botPhones.has(jidPhone(context.participantPn||context.participant));
-    const addressed=mentioned||reidName.test(body)||repliedToBot;
+    const addressed=mentioned||reidName.test(text)||repliedToBot;
     if(!addressed)return null;
-    return {jid,text:body,id:message.key.id,senderPhone,isGroup:true,addressed:true,repliedToBot,...carried};
+    return {jid,text,id:message.key.id,senderPhone,isGroup:true,addressed:true,repliedToBot,...carried};
   }
-  return { jid, text: body, id: message.key.id, senderPhone:jidPhone(jid),isGroup:false,addressed:true,...carried };
+  return { jid, text, id: message.key.id, senderPhone:jidPhone(jid),isGroup:false,addressed:true,...carried };
 }
 
 export function cleanReply(value) {
