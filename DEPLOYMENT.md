@@ -4,6 +4,8 @@ Production is hosted on the saved `Reid` Ubuntu host. Docker Compose runs the un
 
 Runtime/build credentials live under `/home/reid/.config/reid-os/` with mode `0600`, outside the repository. `scripts/provision-local.mjs` refreshes browser-safe/service configuration without printing credentials and preserves the QR session/bridge keys. Do not copy those files into Git or the Docker build context.
 
+As of 2026-09-26 15:18 UTC, Production runs the phase-1 API from `release/whatsapp-phase1-20260926` and the organising-only website. The working branch contains the full assistant and requires migrations `202609140001`–`202609140005` plus `202609260001` before promotion. Keep `reid-services:candidate` separate from the live `reid-services:local` tag until Supabase login, migrations and Edge Function deployment are complete; rebuilding the live API from this working branch before those steps will break it.
+
 Deploy from an authenticated operator machine by syncing the working tree without `.git`, dependencies, build output or env files; then build `web` and `api` and start the Compose project with `/home/reid/.config/reid-os/build.env`. Confirm every container is healthy, `/healthz` is 200, public HTTPS carries `X-Reid-Origin: local-reid`, an unauthenticated private API call is 401, and the private AI health check succeeds.
 
 QR operations:
@@ -22,5 +24,17 @@ Assistant service configuration (`server/`): `AI_URL` and `AI_TOKEN` reach the a
 
 The Arabic report font ships inside the repository at `server/assets/fonts/` because the deployment image contains no system fonts at all. Do not rely on an apt-installed font; the CI `server` job builds the image and generates a real Arabic PDF inside it to prove the bundled face is present.
 
-Apply migrations `202609140001` through `202609140005` before deploying this build: they add media and reply-quality columns, conversation memory and mood, semantic recall, the web-search quota and the initiative log. `scripts/rls-local.sh` applies every migration to a throwaway database and runs the allow/deny suites; run it before promoting.
+The image copies source as `node:node` because locally created modules can have mode `0600`. Verify the built image as its default user, not root. Production images omit `test/`; mount the suite when testing so `npm test` cannot silently pass with zero tests:
 
+```bash
+docker run --rm --network none --read-only --tmpfs /tmp \
+  --mount "type=bind,source=$PWD/server/test,target=/service/test,readonly" \
+  --entrypoint npm reid-services:candidate test
+docker run --rm --network none --read-only --tmpfs /tmp \
+  --entrypoint node reid-services:candidate verify-pdf.mjs
+docker run --rm --network none \
+  --mount "type=bind,source=$PWD,target=/workspace,readonly" \
+  --workdir /workspace --entrypoint bash postgres:16 scripts/rls-local.sh
+```
+
+Apply migrations `202609140001` through `202609140005` before deploying this build: they add media and reply-quality columns, conversation memory and mood, semantic recall, the web-search quota and the initiative log. `scripts/rls-local.sh` applies every migration to a throwaway database and runs the allow/deny suites; run it before promoting.

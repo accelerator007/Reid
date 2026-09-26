@@ -31,6 +31,8 @@ jobs:
       # generating a real Arabic PDF inside it is the only check that proves
       # reports cannot silently regress to a Latin-only fallback face.
       - run: docker build -t reid-api-ci server
+      - name: Server suite runs as the deployment user inside the built image
+        run: docker run --rm --network none --read-only --tmpfs /tmp --mount "type=bind,source=$PWD/server/test,target=/service/test,readonly" --entrypoint npm reid-api-ci test
       - name: Arabic PDF renders inside the deployment image
         run: docker run --rm reid-api-ci node verify-pdf.mjs
 
