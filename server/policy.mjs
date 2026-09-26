@@ -51,6 +51,25 @@ export function cleanReply(value) {
   return value.trim().slice(0, 4000);
 }
 
+// Grounded answers carry [Reid:collection:id] markers so the quality gate can
+// verify them. They are evidence for the gate, not something a person should
+// read on a phone, so they are removed at the last step before WhatsApp, and
+// Markdown is rewritten into the formatting WhatsApp actually renders.
+export function whatsappText(value) {
+  const original = String(value || '').trim();
+  const text = original
+    .replace(/[ \t]*\[Reid:[^\]\n]{1,160}\]/g, '')
+    .replace(/[ \t]+([.،,؛:!؟?])/g, '$1')
+    .replace(/^#{1,6}[ \t]+(.+?)[ \t]*#*$/gm, '*$1*')
+    .replace(/\*\*([^*\n]+)\*\*/g, '*$1*')
+    .replace(/__([^_\n]+)__/g, '_$1_')
+    .replace(/\[([^\]\n]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, '$1: $2')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return text || original;
+}
+
 export function maySend(row, conversation, connected) {
   return connected && row.status === 'queued' &&
     (row.origin === 'human' || conversation.bot_mode === 'active') &&

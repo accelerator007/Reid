@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isOwner, inboundText, maySend, cleanReply } from '../policy.mjs';
+import { isOwner, inboundText, maySend, cleanReply, whatsappText } from '../policy.mjs';
 
 test('owner access fails closed for suspension and staff', () => {
   assert.equal(isOwner(['owner'], 'active'), true);
@@ -34,4 +34,11 @@ test('human takeover, expiry and ambiguous deliveries suppress auto resend', () 
 test('empty model replies fail explicitly', () => {
   assert.throws(()=>cleanReply('  '));
   assert.equal(cleanReply(' مرحبًا '),'مرحبًا');
+});
+
+test('WhatsApp text drops grounding citations and renders Markdown the way WhatsApp does',()=>{
+  const answer='المعلومات غير متوفرة في سجلات الشركة [Reid:memory:d4e1e5a2-7c81-4088-8812-1d2a7e455daf].\n\n\n**الخطوة القادمة:** راجع [الموقع](https://reidpro.com) [Reid:projects:aaaaaaaa-aaaa] .\n### ملخص';
+  assert.equal(whatsappText(answer),'المعلومات غير متوفرة في سجلات الشركة.\n\n*الخطوة القادمة:* راجع الموقع: https://reidpro.com.\n*ملخص*');
+  assert.equal(whatsappText('نص عادي بدون مصادر'),'نص عادي بدون مصادر');
+  assert.equal(whatsappText('[Reid:memory:only-a-citation]'),'[Reid:memory:only-a-citation]');
 });

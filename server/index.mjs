@@ -4,7 +4,7 @@ import makeWASocket, { DisconnectReason, Browsers, downloadMediaMessage, makeCac
 import pino from 'pino';
 import QRCode from 'qrcode';
 import { createAuthStore } from './auth-store.mjs';
-import { isOwner, inboundText, cleanReply, maySend } from './policy.mjs';
+import { isOwner, inboundText, cleanReply, maySend, whatsappText } from './policy.mjs';
 import { processReminders } from './reminders.mjs';
 import { createAssistantActions } from './assistant-actions.mjs';
 import { createInboundPersistence } from './inbound.mjs';
@@ -363,6 +363,10 @@ async function processJob() {
       await check(admin.from('qr_jobs').update({state:'done'}).eq('id',job.id).eq('state','running'));
       return;
     }
+    // Take the photo before any branch so it is consumed exactly once. The
+    // governed text dispatcher cannot see images, so an authenticated sender's
+    // photo is answered by the local vision model instead.
+    const photo=inboundImages.take(job.message_id);
     let decision=null;
     if(identity){
       const actionResult=await handleAssistantAction({identity,chat,text:job.input});
@@ -374,7 +378,7 @@ async function processJob() {
         return;
       }
     }
-    if(env.REID_QR_BRIDGE_TOKEN) {
+    if(env.REID_QR_BRIDGE_TOKEN&&!(identity&&photo)) {
       const dispatch=await fetch(`${env.SUPABASE_URL}/functions/v1/whatsapp-webhook`,{method:'POST',headers:{'Content-Type':'application/json','x-reid-qr-token':env.REID_QR_BRIDGE_TOKEN,'x-reid-qr-message':job.message_id},body:JSON.stringify({messageId:job.message_id}),signal:AbortSignal.timeout(30000)});
       const result=await dispatch.json().catch(()=>({}));
       if(dispatch.ok&&result.handoff){
@@ -389,7 +393,7 @@ async function processJob() {
     }
     // The owner group is an administrative channel. If the authenticated
     // admin dispatcher declines it, never fall back to the public assistant.
-    if(chat.jid.endsWith('@g.us'))throw Error('group_admin_dispatch_denied');
+    if(chat.jid.endsWith('@g.us')&&!(identity&&photo))throw Error('group_admin_dispatch_denied');
     const history=await check(admin.from('qr_messages').select('direction,body').eq('conversation_id',chat.id).order('created_at',{ascending:false}).limit(10));
     const personalContext=identity?await Promise.all([
       check(admin.from('assistant_notes').select('title,body,scope,updated_at').eq('owner_id',identity.id).eq('status','active').order('updated_at',{ascending:false}).limit(20)),
@@ -405,11 +409,11 @@ async function processJob() {
     const turns=history.reverse().map(x=>({role:x.direction==='inbound'?'user':'assistant',content:x.body.slice(0,4000)}));
     // A photo is attached to the turn it arrived with, so the model sees the
     // picture and the sentence about it together.
-    const photo=inboundImages.take(job.message_id);
     if(photo)for(let index=turns.length-1;index>=0;index-=1)if(turns[index].role==='user'){turns[index]={...turns[index],images:[photo]};break;}
+    const seeing=photo?`${system}\nأرسل المستخدم صورة مع رسالته الأخيرة. انظر إليها فعلًا: صف ما يظهر بدقة، واقرأ أي نص أو أرقام فيها كما هي، ثم نفّذ طلبه عليها. لا تخمّن ما لا يظهر، وقل بوضوح إذا كانت غير واضحة.`:system;
     const response=await fetch(`${env.AI_URL}/api/chat`,{
       method:'POST',headers:{'Content-Type':'application/json','x-reid-origin-token':env.AI_TOKEN},signal:AbortSignal.timeout(110000),
-      body:JSON.stringify({messages:[{role:'system',content:system},...turns],profile:'chat'})
+      body:JSON.stringify({messages:[{role:'system',content:seeing},...turns],profile:'chat'})
     });
     if(!response.ok)throw new Error('ai_unavailable');
     let modelBody=(await response.json()).message?.content;
@@ -478,21 +482,22 @@ async function processOutbox() {
     if(!claimed.length)continue;
     try {
       let content;
-      if(row.message_type==='text')content={text:row.body};
+      const body=whatsappText(row.body);
+      if(row.message_type==='text')content={text:body};
       else {
         const downloaded=await admin.storage.from(row.media_bucket).download(row.media_path);
         if(downloaded.error)throw downloaded.error;
         const buffer=Buffer.from(await downloaded.data.arrayBuffer());
         content=row.message_type==='image'
-          ? {image:buffer,caption:row.caption||undefined,mimetype:row.media_mime}
-          : {document:buffer,caption:row.caption||undefined,mimetype:row.media_mime,fileName:row.media_filename};
+          ? {image:buffer,caption:row.caption?whatsappText(row.caption):undefined,mimetype:row.media_mime}
+          : {document:buffer,caption:row.caption?whatsappText(row.caption):undefined,mimetype:row.media_mime,fileName:row.media_filename};
       }
       const quoted=await quotedFor(chat,row.reply_to_message_id);
       const sent=await socket.sendMessage(chat.jid,content,quoted?{quoted}:undefined);
-      previous={conversation:row.conversation_id,jid:chat.jid,body:row.body};
-      await check(admin.from('qr_messages').upsert({conversation_id:chat.id,message_id:sent.key.id,direction:'outbound',body:row.body,status:'sent',quality_score:row.quality_score??null,quality_flags:row.quality_flags||[]},{onConflict:'message_id',ignoreDuplicates:true}));
+      previous={conversation:row.conversation_id,jid:chat.jid,body};
+      await check(admin.from('qr_messages').upsert({conversation_id:chat.id,message_id:sent.key.id,direction:'outbound',body,status:'sent',quality_score:row.quality_score??null,quality_flags:row.quality_flags||[]},{onConflict:'message_id',ignoreDuplicates:true}));
       await check(admin.from('qr_outbox').update({status:'sent',wa_message_id:sent.key.id}).eq('id',row.id));
-      await check(admin.from('qr_conversations').update({last_message:row.body.slice(0,180),updated_at:new Date().toISOString()}).eq('id',chat.id));
+      await check(admin.from('qr_conversations').update({last_message:body.slice(0,180),updated_at:new Date().toISOString()}).eq('id',chat.id));
       if(row.action_id){
         const action=await check(admin.from('whatsapp_actions').update({status:'completed',wa_message_id:sent.key.id,completed_at:new Date().toISOString(),output_summary:'sent_to_whatsapp',updated_at:new Date().toISOString()}).eq('id',row.action_id).in('status',['queued','running']).select('id,kind,conversation_id,recipient_name,recipient_phone').maybeSingle());
         if(action&&['send_text','send_artifact'].includes(action.kind)&&action.conversation_id){
