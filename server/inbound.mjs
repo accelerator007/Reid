@@ -18,7 +18,7 @@ export function createInboundPersistence({admin,check,allowedOwnerGroup,rate}) {
         else chat=inserted.data;
       }
       stage='message_upsert';
-      const {error}=await admin.from('qr_messages').upsert({conversation_id:chat.id,message_id:item.id,direction:'inbound',body:item.text,sender_phone:item.senderPhone},{onConflict:'message_id',ignoreDuplicates:true});
+      const {error}=await admin.from('qr_messages').upsert({conversation_id:chat.id,message_id:item.id,direction:'inbound',body:item.text,sender_phone:item.senderPhone,media_kind:item.media?.kind||null},{onConflict:'message_id',ignoreDuplicates:true});
       if(error)throw error;
       // Every later write is idempotent. Reconcile it even if WhatsApp repeats an
       // event or an earlier attempt stopped immediately after storing the message.

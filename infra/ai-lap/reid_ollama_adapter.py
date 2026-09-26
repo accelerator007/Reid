@@ -35,6 +35,37 @@ def transcriber():
     return _transcriber
 
 
+# One decoding profile per job, instead of one setting for every call. The old
+# fixed temperature of 0.15 is correct for extraction and makes conversation
+# repeat itself word for word, which is what made the assistant read as a
+# machine. Callers that ask for nothing keep exactly the previous behaviour.
+CHAT_PROFILES = {
+    "chat": {"temperature": 0.75, "top_p": 0.92, "repeat_penalty": 1.15, "num_ctx": 16384, "num_predict": 1024},
+    "intent": {"temperature": 0.1, "top_p": 0.9, "repeat_penalty": 1.05, "num_ctx": 8192, "num_predict": 512},
+    "report": {"temperature": 0.35, "top_p": 0.9, "repeat_penalty": 1.1, "num_ctx": 16384, "num_predict": 3072},
+    "strict": {"temperature": 0.15, "top_p": 0.9, "repeat_penalty": 1.05, "num_ctx": 16384, "num_predict": 3072},
+}
+DEFAULT_PROFILE = "strict"
+OPTION_BOUNDS = {"temperature": (0.0, 1.2), "top_p": (0.1, 1.0), "repeat_penalty": (1.0, 2.0)}
+
+
+def chat_options(body: dict) -> tuple[str, dict]:
+    """Resolve a decoding profile and clamp any caller override into safe bounds."""
+    wanted = body.get("profile")
+    name = wanted if isinstance(wanted, str) and wanted in CHAT_PROFILES else DEFAULT_PROFILE
+    options = dict(CHAT_PROFILES[name])
+    supplied = body.get("options")
+    if isinstance(supplied, dict):
+        for key, (low, high) in OPTION_BOUNDS.items():
+            value = supplied.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                options[key] = min(max(float(value), low), high)
+        predict = supplied.get("num_predict")
+        if isinstance(predict, int) and not isinstance(predict, bool):
+            options["num_predict"] = min(max(predict, 64), 4096)
+    return name, options
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ReidOllamaAdapter/1"
 
@@ -110,9 +141,13 @@ class Handler(BaseHTTPRequestHandler):
             messages = body.get("messages")
             if not isinstance(messages, list) or not messages or len(messages) > 32:
                 return self.reply(400, {"error": "invalid_messages"})
-            upstream = {"model": CHAT_MODEL, "stream": False, "think": False, "messages": messages,
-                        "options": {"temperature": 0.15, "top_p": 0.9, "repeat_penalty": 1.05,
-                                    "num_ctx": 16384, "num_predict": 3072}}
+            _, options = chat_options(body)
+            upstream = {"model": CHAT_MODEL, "stream": False, "think": False, "messages": messages, "options": options}
+            # JSON mode is the only format the adapter forwards. It makes a
+            # structured extraction parseable instead of hopeful, and it cannot
+            # widen what the model is allowed to reach.
+            if body.get("format") == "json":
+                upstream["format"] = "json"
             return self.proxy("/api/chat", upstream)
 
         if self.path == "/api/transcribe":

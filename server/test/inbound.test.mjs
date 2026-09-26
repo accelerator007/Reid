@@ -62,7 +62,7 @@ test('first inbound message creates a sanitized conversation, message and reply 
     last_message:item.text.slice(0,180),updated_at:tables.qr_conversations[0].updated_at,
   });
   assert.ok(Number.isFinite(Date.parse(tables.qr_conversations[0].updated_at)));
-  assert.deepEqual(tables.qr_messages,[{conversation_id:'chat-new',message_id:item.id,direction:'inbound',body:item.text,sender_phone:item.senderPhone}]);
+  assert.deepEqual(tables.qr_messages,[{conversation_id:'chat-new',message_id:item.id,direction:'inbound',body:item.text,sender_phone:item.senderPhone,media_kind:null}]);
   assert.deepEqual(tables.qr_jobs,[{conversation_id:'chat-new',message_id:item.id,input:item.text,sender_phone:item.senderPhone}]);
   assert.deepEqual(rates,[['in:chat-new',6]]);
   assert.deepEqual(authorizations,[]);

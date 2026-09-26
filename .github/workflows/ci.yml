@@ -15,6 +15,57 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
 
+  # The WhatsApp assistant runs from server/ and was never covered by CI, so its
+  # tests never ran on a pull request.
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm, cache-dependency-path: server/package-lock.json}
+      - run: npm ci
+        working-directory: server
+      - run: npm test
+        working-directory: server
+      # The deployment image ships no system fonts at all. Building it and
+      # generating a real Arabic PDF inside it is the only check that proves
+      # reports cannot silently regress to a Latin-only fallback face.
+      - run: docker build -t reid-api-ci server
+      - name: Arabic PDF renders inside the deployment image
+        run: docker run --rm reid-api-ci node verify-pdf.mjs
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: node scripts/secret-scan.mjs
+      # The planted value is generated at runtime: committing a literal that the
+      # scanner is meant to catch would make the scanner fail on its own repo.
+      - name: Secret scan detects a planted credential
+        run: |
+          planted="$(head -c 200 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 35)"
+          printf 'const key = "AIza%s";\n' "$planted" > scripts/__planted.mjs
+          git add -N scripts/__planted.mjs
+          if node scripts/secret-scan.mjs; then echo "scanner failed to detect a planted key"; exit 1; fi
+          git rm -q --cached scripts/__planted.mjs
+          rm -f scripts/__planted.mjs
+          node scripts/secret-scan.mjs
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm ci
+        working-directory: server
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: server
+      # Runtime credentials live outside the repository. A build context that
+      # can see an env file is a leak waiting for the next image push.
+      - name: Docker build context excludes environment files
+        run: |
+          test -f server/.dockerignore
+          grep -qx 'node_modules' server/.dockerignore
+          grep -qx '.env\*' server/.dockerignore
+
   rls:
     runs-on: ubuntu-latest
     services:

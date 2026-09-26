@@ -17,3 +17,10 @@ QR operations:
 - Before rebuilding `api`, tag the running image (for example `docker tag reid-services:local reid-services:rollback-YYYYMMDD`) and confirm the outbox has no pending item. Roll back by retagging that image as `reid-services:local` and running `docker compose up -d --no-deps api`.
 
 Database changes remain additive migrations with reviewed RLS. Apply to the linked project, run live allow/deny tests with disposable identities, clean them in `finally`, and reconcile migration history only after the exact schema is verified. Only the Owner promotes feature work through the protected branch/release process.
+
+Assistant service configuration (`server/`): `AI_URL` and `AI_TOKEN` reach the ai-lap adapter for chat, embeddings, transcription and images. `REID_ASSISTANT_SIGNALS=0` disables read receipts, reactions and the typing indicator. `REID_WEB_SEARCH_PROVIDER` (`brave` or `tavily`) with `REID_WEB_SEARCH_KEY` enables web access; leaving the key unset keeps both web tools off, and `REID_WEB_SEARCH_DAILY` caps daily searches (default 60). `REID_PDF_FONT` and `REID_PDF_FONT_BOLD` override the bundled Arabic faces; the service refuses to start a PDF rather than render one without a font that covers Arabic.
+
+The Arabic report font ships inside the repository at `server/assets/fonts/` because the deployment image contains no system fonts at all. Do not rely on an apt-installed font; the CI `server` job builds the image and generates a real Arabic PDF inside it to prove the bundled face is present.
+
+Apply migrations `202609140001` through `202609140005` before deploying this build: they add media and reply-quality columns, conversation memory and mood, semantic recall, the web-search quota and the initiative log. `scripts/rls-local.sh` applies every migration to a throwaway database and runs the allow/deny suites; run it before promoting.
+
