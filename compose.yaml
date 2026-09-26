@@ -40,6 +40,23 @@ services:
     read_only: true
     tmpfs: [/tmp]
 
+  runner:
+    image: python:3.12-slim
+    container_name: reid-agent-runner
+    user: "1000:1000"
+    restart: unless-stopped
+    profiles: [migrated]
+    env_file: /home/reid/.config/reid-os/runner.env
+    command: [python, -B, /runner/reid_agent_runner.py]
+    volumes:
+      - ./infra/ai-lap:/runner:ro
+    depends_on: [ai-relay]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+
   web:
     build:
       context: .

@@ -5,6 +5,7 @@ Only reads the configured source. Auth API exports omit password hashes and
 provider secrets; a full database export is still required for exact migration.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -97,16 +98,24 @@ def main():
         print(json.dumps({'table': table, 'exported_rows': total}), flush=True)
 
     users = 0
+    user_ids = []
     for page in range(1, 10001):
         response = request(f'/auth/v1/admin/users?page={page}&per_page=500')
         rows = response['users']
         save(f'auth-users-api/{page}', response)
         users += len(rows)
+        user_ids.extend(row['id'] for row in rows)
         if len(rows) < 500:
             break
     else:
         raise RuntimeError('auth_pagination_limit')
     manifest['auth_users'] = users
+    # List-users omits identities and can omit security state. Preserve the
+    # per-user admin representation too; it still never exposes password hashes.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        details = pool.map(lambda user_id: request('/auth/v1/admin/users/' + quote(user_id, safe='')), user_ids)
+        for user_id, detail in zip(user_ids, details):
+            save('auth-user-detail/' + user_id, detail)
     save('public-auth-settings', request('/auth/v1/settings'))
 
     buckets = request('/storage/v1/bucket')

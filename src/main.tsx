@@ -193,13 +193,33 @@ function Login({
     if (!error) done();
     setBusy(false);
   };
-  const oauth = async (provider: "google" | "azure" | "github") => {
-    if (!supabase) return;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: `${location.origin}/dashboard` },
-    });
-    if (error) setMessage(error.message);
+  const oauth = async () => {
+    if (!supabase || busy) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/settings`, {
+        headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) throw new Error("auth_settings_unavailable");
+      const settings = await response.json();
+      if (settings.external?.google !== true) {
+        setMessage(lang === "ar"
+          ? "الدخول بجوجل غير مفعّل حاليًا. استخدم البريد وكلمة المرور."
+          : "Google sign-in is not available yet. Use your email and password.");
+        return;
+      }
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${location.origin}/dashboard` },
+      });
+      if (error) setMessage(error.message);
+    } catch {
+      setMessage(lang === "ar" ? "تعذر الاتصال بخدمة الدخول. حاول مرة أخرى." : "Unable to connect to sign-in. Try again.");
+    } finally {
+      setBusy(false);
+    }
   };
   const emailLink = async (kind: "magic" | "recovery") => {
     if (!supabase || !email.trim()) {
@@ -240,9 +260,7 @@ function Login({
             : "Approved accounts only. If you do not have an account, submit a join request first."}
         </p>
         <div className="oauth">
-          <button onClick={() => oauth("google")}>G Google</button>
-          <button onClick={() => oauth("azure")}>▦ Microsoft</button>
-          <button onClick={() => oauth("github")}>◉ GitHub</button>
+          <button onClick={oauth} disabled={busy}>G Google</button>
         </div>
         <div className="or">
           <i />

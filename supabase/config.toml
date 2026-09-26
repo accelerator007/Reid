@@ -5,7 +5,8 @@ additional_redirect_urls = ["https://reidpro.com", "https://reidpro.com/profile"
 jwt_expiry = 3600
 enable_signup = false
 [auth.email]
-enable_signup = false
+# Provider enabled; global auth.enable_signup=false still blocks public signup.
+enable_signup = true
 double_confirm_changes = true
 enable_confirmations = true
 max_frequency = "1m"

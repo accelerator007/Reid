@@ -1,98 +1,113 @@
 # Reid project migration — 2026-09-26
 
-The Owner selected destination `cfxntjnewkmlvkogfxyu` and then explicitly replaced
-the initial fresh-start request with migration of all existing data and accounts.
-Do not create a new Owner or discard existing identities based on the superseded
-fresh-start instruction.
+Production switched from `pkogchbrknwmzefjklkr` to the Owner-selected
+`cfxntjnewkmlvkogfxyu` at **18:24 UTC on 2026-09-26**. The website, full API,
+WhatsApp bridge and new agent queue worker now use the destination. The encrypted
+WhatsApp session and its original encryption key were preserved; WhatsApp linked
+again without a QR reset. The old project was not deleted.
 
-## Source and destination
+## Authorization and authentication
 
-| Item | Source, still live | Destination, not serving production |
-| --- | --- | --- |
-| Project | `pkogchbrknwmzefjklkr` | `cfxntjnewkmlvkogfxyu` |
-| Region | Mumbai | Seoul |
-| Site/API runtime | Existing phase-1 containers | Candidate not activated |
-| Administrative API | Current CLI account gets HTTP 403 | Authorized |
-| Schema | Existing production | All 53 repository migrations applied |
-| Accounts | 116 visible through Auth admin API | 0; not recreated with new passwords |
-| Files | 11 files in six private buckets | All 11 copied and SHA-256 verified |
+The Owner replaced the initial fresh-start instruction with migration of all
+existing accounts/data. After confirming they could not access the old project's
+management account, they accepted migration with new passwords instead of
+preserving unavailable password hashes. The Owner subsequently selected **Google
+and normal email/password** as the two sign-in methods. Microsoft/GitHub buttons
+are removed; their destination providers are disabled. Public signup stays off.
 
-The repository CLI link and `supabase/config.toml` now identify the destination.
-Production `service.env`, `build.env`, QR session volume and ai-lap configuration
-remain on the source. Do not infer that CLI linking migrated production.
+The destination email provider is enabled and a synthetic account successfully
+signed in using its email/password. Global `auth.enable_signup=false` prevents
+public account creation; `auth.email.enable_signup=true` is required by this CLI
+configuration to keep the email provider itself enabled.
 
-## Completed and verified
+Google is still **not configured**: the destination has no Google client ID or
+secret, and this session cannot control the user's Windows Chrome/Google Cloud
+session. An authorized Google web OAuth client must allow
+`https://cfxntjnewkmlvkogfxyu.supabase.co/auth/v1/callback`, then its ID/secret must
+be saved in the destination provider settings. The UI checks availability before
+redirecting, so an unconfigured Google button explains the email alternative.
+The company Owner account and its original UUID/role were verified. Existing
+passwords do not transfer; accounts need a new password. No migration email or
+test WhatsApp message was sent. Custom SMTP is not configured, so broad email
+invitation/recovery delivery is not verified.
 
-- `supabase db push --dry-run`, then `supabase db push --yes`, applied all 53
-  migrations to the initially empty destination.
-- Destination has 78 public base tables; all 78 have RLS enabled.
-- All nine Edge Function sources were deployed. The six public/internal-token
-  functions retain their own authentication checks; `manage-account`,
-  `decide-application`, and `whatsapp-inbox` also retain gateway JWT verification.
-  Deployment alone does not make integrations operational: secrets, identities,
-  providers and the runner still need migration/configuration.
-- Reviewed `supabase config diff`, then pushed only four declared differences:
-  production site URL, redirect allow-list, and disabling public/email signups.
-  Existing undeclared destination settings were retained.
-- `scripts/export-project-api.py` produced an AES-256-GCM recovery export of 77
-  exposed public tables/views (22,112 rows), 116 Auth API user records, bucket
-  metadata, public Auth settings, and all 11 file contents. Every encrypted write
-  was read back and decrypted for equality.
-- `scripts/copy-project-storage.py` verified all export hashes, retained bucket
-  access settings, copied missing files, and downloaded every destination object
-  to verify SHA-256 equality. It refuses to overwrite different existing bytes.
+## Data restored and validated
 
-Private recovery material is outside Git under
-`/home/reid/.local/state/reid-migration-20260926/`. Directories are private and
-credentials, encryption key and recovery files are mode 0600. Do not commit,
-print, or attach these exports or keys. The summary files contain counts only.
+- Applied 54 migrations, including the production-only `whatsapp_pending_sends`
+  ledger discovered through source OpenAPI. All 79 public base tables have RLS.
+- Restored 116 Auth users and 117 original identities with original IDs, metadata,
+  verification and ban state. One OAuth-only user received an additional email
+  identity, giving 118 identities. No user had a verified MFA factor. Existing
+  sessions, password hashes and provider secrets were unavailable and not copied.
+- Restored 22,112 public records across 76 persisted tables; the 77th exposed
+  resource is a derived workshop-count view. Relationships were checked against
+  every public foreign key and the Auth identity foreign keys.
+- Copied all 11 files in six private buckets and verified byte SHA-256 equality.
+  The real Owner's scoped session downloaded and hash-verified all 11 files.
+  Paths and application ownership records were preserved. Storage service object
+  IDs/upload timestamps/owner metadata were not exactly restored: the source list
+  API does not expose the original owner. Current file policies use preserved
+  record/path permissions, and Owner access was exercised.
+- The source API export is not a transactional database dump. Before cutover the
+  old web/API were stopped and all exposed table contents plus account UUIDs were
+  compared with the export; only the old runner heartbeat differed. Other source
+  clients were not administratively locked because old management access remains
+  unavailable. Final destination comparison found all expected source records
+  unchanged after the explicitly approved policy differences.
+- Preserved historical finance records while disabling Finance and its tools.
+  Retained new web tools absent from the old source. Disabled the cloud Gemini
+  provider and set local-only Edge Function policy. Validation created additional
+  audit records and one successful embedding job; synthetic users were deleted.
 
-## Remaining blockers and limitations
+## Services and verification
 
-The recovery export is **not a transactional database backup**. Source traffic
-continued during its creation. Public records are backed up but have not yet
-been imported into the destination. Original Storage owner IDs/timestamps and
-complete account authentication data are not restored.
+All nine Edge Functions are deployed. New internal runner/QR/gateway/cron secrets
+are private server-side values. The existing authenticated relay still reaches
+ai-lap for local models. A new `reid-agent-runner` container polls the new project;
+the physical ai-lap worker still polls the old project and is not used by the new
+site. The relay worker omits local CPU/RAM/GPU telemetry so it cannot attribute
+Reid host measurements to ai-lap. The physical ai-lap CPU/RAM/GPU telemetry remains
+unavailable on the destination; heartbeat and AI health are verified separately.
 
-The Auth admin API does not provide a full `auth` schema dump with password
-hashes, sessions, and MFA secrets. Source Google and GitHub login are enabled;
-destination Google and GitHub login are not configured. Access to the old
-project's administrative/database configuration or an authorized full source
-backup is required to preserve these details. Do not replace accounts with
-passwordless or randomly reset users and describe that as a complete migration.
+Validation passed: SQL/RLS harness after migration 54; rollback-only transactional
+restore before commit; all copied relationships/counts; Owner Auth/role/project
+access; ordinary-user rejection from the Owner API and administrator-memory rows;
+all private-file hashes; real local embedding through the new queue; 192 server
+checks in the actual candidate image; 202 frontend tests and production build;
+runner telemetry isolation and four agent-quality checks. Public authenticated
+operations status returned healthy website, database, AI, runner and connected
+WhatsApp, with zero pending/failed/uncertain queue items. The public health route
+returned 200. Browser headers are needed for the public edge's bot filtering.
 
-Source management queries and function listing both returned HTTP 403 for the
-currently authenticated account. Having the destination open does not grant
-access to the source. A clarification is pending about access to the old project.
+## Recovery and operational controls
 
-## Completion sequence after source access is available
+Private encrypted exports, private SQL staging files, credentials and detailed
+verification results are outside Git in
+`/home/reid/.local/state/reid-migration-20260926/`. Do not print, commit or attach
+that directory. Export directories are 0700 and sensitive files are 0600.
 
-1. Obtain an authorized full source database/Auth export and source schema,
-   role, publication, extension, OAuth, SMTP, integration and scheduled-job
-   configuration. Verify schema drift against repository migrations. Keep the
-   destination CLI link explicit so source access cannot redirect deployment.
-2. Plan a bounded write pause for the final consistent export. Drain/inspect
-   WhatsApp jobs, outbound sends and reminders. Preserve uncertain-send states;
-   never replay messages or old due reminders as a consequence of import.
-3. Restore original Auth identities and public rows with their original UUIDs,
-   relationships, timestamps and ownership in a tested transaction. Account for
-   target seed records; suppress restore-time side-effect triggers only inside
-   the restore transaction and restore normal enforcement afterward. Preserve
-   historical finance records while retaining the approved no-money product
-   behavior and disabled finance tools.
-4. Reconcile Storage owner metadata and any files created since the recovery
-   export. Rewrite project-specific public URLs where needed. Recheck every
-   object hash, table count and relevant foreign-key relationship.
-5. Configure secrets server-side, OAuth callback URLs, email delivery, QR
-   transport, and the ai-lap runner's project URL/token. Preserve `SESSION_KEY`
-   and the existing encrypted QR session together. Test the new project using
-   isolated candidate services before changing live environment files.
-6. Verify Owner and non-Owner access, existing account sign-in, scoped memories,
-   private files, photo/voice processing, approvals, clock answers and queue
-   behavior. Activate the candidate only after these checks. Keep source and
-   rollback images available until final acceptance and document the cutover.
+`scripts/export-project-api.py` exports authenticated user details and all exposed
+records/storage into AES-GCM records. `scripts/prepare-project-import.py` verifies
+all hashes, refuses verified MFA/unrelated destination users/schema drift, and
+prepares a rollback-only SQL transaction by default. `--stage-dir` creates private
+SQL upload chunks in a non-public schema to avoid the Management API request-size
+limit. Upload those chunks only to the explicitly selected destination; execute
+the small restore transaction with explicit `--project-ref`. The actual committed
+restore dropped the staging schema. Do not rerun against active production: it
+replaces public rows and would discard new writes.
 
-Supabase references:
+The original runtime environment files remain private as `service-source.env`
+and `build-source.env`. Images `reid-services:pre-migration-20260926` and
+`reid-web:pre-migration-20260926` preserve the previously running source deployment.
+A rollback now requires reconciling new-project writes first; do not simply point
+production back at the old database and lose activity. The existing QR volume and
+`SESSION_KEY` must always stay together. Compose's `migrated` profile starts the
+new worker with `/home/reid/.config/reid-os/runner.env`.
 
-- [Migrating Auth users](https://supabase.com/docs/guides/troubleshooting/migrating-auth-users-between-projects)
-- [Backup and restore with the CLI](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore)
+Remaining integration work: Google OAuth credentials/callback, custom SMTP/email
+acceptance, web-search provider credentials, and optional direct ai-lap telemetry.
+No claim is made that unavailable source OAuth/SMTP/cron configuration, non-exposed
+schemas or all historical Storage service metadata were reproduced.
+
+References: [Auth user migration](https://supabase.com/docs/guides/troubleshooting/migrating-auth-users-between-projects),
+[Google provider setup](https://supabase.com/docs/guides/auth/social-login/auth-google).
