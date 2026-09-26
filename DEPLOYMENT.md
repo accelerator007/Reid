@@ -1,5 +1,12 @@
 # Deployment
 
+Migration in progress: the repository CLI link now targets new project
+`cfxntjnewkmlvkogfxyu`, while live runtime configuration still targets
+`pkogchbrknwmzefjklkr`. The new project has the schema and functions but no migrated
+Auth identities/public data yet. Follow `docs/SUPABASE_MIGRATION_20260926.md` before
+changing live configuration. Do not run the old hard-coded `provision-local.mjs`
+as a migration/cutover command.
+
 Production is hosted on the saved `Reid` Ubuntu host. Docker Compose runs the unprivileged web and QR/API containers; the `reid-local` Cloudflare Tunnel publishes only the web origin at `reidpro.com`. Supabase project `pkogchbrknwmzefjklkr` remains the hosted database/Auth/Storage/Edge Functions system. `ai-lap` runs Ollama and accepts Reid only through the restricted private SSH relay.
 
 Runtime/build credentials live under `/home/reid/.config/reid-os/` with mode `0600`, outside the repository. `scripts/provision-local.mjs` refreshes browser-safe/service configuration without printing credentials and preserves the QR session/bridge keys. Do not copy those files into Git or the Docker build context.

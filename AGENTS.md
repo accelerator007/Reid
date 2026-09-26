@@ -2,6 +2,15 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-09-26 selected replacement Supabase project — migration incomplete
+
+- The Owner explicitly selected new project `cfxntjnewkmlvkogfxyu` (Reid, Seoul), then replaced the initial fresh-start preference with migration of **all existing data and accounts** from `pkogchbrknwmzefjklkr`. Preserve original identities; do not reset or recreate them under the superseded instruction.
+- The CLI link and `supabase/config.toml` now target the new project. The production web/API environments, QR session and ai-lap runner still use the old project. Production cutover has not occurred.
+- Applied all 53 repository migrations to the initially empty destination, deployed all nine Edge Functions, and pushed the reviewed site URL/redirect and disabled-signup settings. Destination has 78 public base tables with RLS enabled on every table and zero Auth users.
+- Created and verified an encrypted API recovery export of 77 exposed tables/views containing 22,112 rows, 116 Auth API users, six private buckets and 11 files. Copied all 11 file contents to the destination and verified their SHA-256 hashes. Public records/accounts are not yet imported; original file ownership metadata is still pending.
+- The export is not a transactionally consistent full database/Auth backup. Old-project management access still returns HTTP 403; complete password hashes, MFA/session data, provider credentials, schema drift and OAuth settings require old-project access or an authorized full backup. Google/GitHub sign-in were enabled on the source and remain unconfigured on the destination. Do not activate the new API against empty identities or call the migration complete.
+- Recovery files/keys are private and outside Git at `/home/reid/.local/state/reid-migration-20260926/`. See `docs/SUPABASE_MIGRATION_20260926.md` for evidence, exclusions and the ordered cutover requirements. The old project's failed administrative access is a migration blocker, not a failure of the running phase-1 site.
+
 ## 2026-09-26 organising workspace without money, WhatsApp operations and assistant senses
 
 Branch `feature/whatsapp-site-operations-20260926`. Owner decisions on 2026-09-26: manage the website and monitor the servers from WhatsApp with every sensitive change previewed and confirmed; run Reid as an organising workspace with no money anywhere; enable every assistant capability that helps the company (research, photos, voice).
