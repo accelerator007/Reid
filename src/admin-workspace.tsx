@@ -21,7 +21,6 @@ const roleLabel:Record<Role,{ar:string;en:string}>={owner:{ar:'المالك',en:
 const permissions=[
   ['admin','مركز الإدارة','Administration','owner · super_admin','إدارة الحسابات والصلاحيات والحالة وسجل التغييرات.','Accounts, permissions, status, and the complete change trail.'],
   ['whatsapp','واتساب والاتصالات','WhatsApp & connections','owner','ربط الرقم، المحادثات، والتحكم بالمساعد.','Phone linking, inbox, and assistant control.'],
-  ['finance','المالية','Finance','owner · super_admin','العروض والفواتير والمصروفات والسجل المالي.','Quotes, invoices, expenses, and financial records.'],
   ['people','الفريق والطلبات','People & applications','owner · super_admin · admin · hr','الموظفون، التهيئة، الإجازات وطلبات الانضمام.','People, onboarding, leave, and join applications.'],
   ['crm','العملاء والمبيعات','CRM & sales','owner · super_admin · admin · hr · sales','العملاء المحتملون والصفقات والمتابعات حسب النطاق.','Leads, deals, and follow-ups within role scope.'],
   ['projects','المشاريع والتشغيل','Projects & operations','all staff · scoped','المشاريع والمهام والسجلات بحسب العضوية والمسؤولية.','Projects, tasks, and records scoped by membership and responsibility.'],

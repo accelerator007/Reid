@@ -16,8 +16,6 @@ export type Page =
   | "today"
   | "inbox"
   | "connections"
-  | "finance"
-  | "business"
   | "operations"
   | "assistant"
   | "admin"
@@ -77,8 +75,6 @@ export const routes: readonly Route[] = [
   { page: "today", path: "/today", authenticated: true, allow: staff },
   { page: "inbox", path: "/inbox", authenticated: true, allow: ["owner"] },
   { page: "connections", path: "/connections", authenticated: true, allow: ["owner"] },
-  { page: "finance", path: "/finance", authenticated: true, allow: ["owner", "super_admin"] },
-  { page: "business", path: "/business", authenticated: true, allow: ["owner", "super_admin", "admin", "sales"] },
   { page: "operations", path: "/operations", authenticated: true, allow: staff },
   { page: "assistant", path: "/assistant", authenticated: true, allow: ["owner", "super_admin", "admin"] },
   { page: "admin", path: "/admin", authenticated: true, allow: ["owner", "super_admin", "admin"] },
@@ -157,4 +153,7 @@ export function isAppShellPath(pathname: string): boolean {
 /** Old static URLs kept working so existing links and search results survive. */
 export const legacyRedirects: Readonly<Record<string, string>> = {
   "/privacy.html": "/privacy",
+  // Reid no longer runs money through the workspace; old bookmarks land somewhere useful.
+  "/finance": "/today",
+  "/business": "/crm",
 };

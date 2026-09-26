@@ -31,7 +31,7 @@ export type AgentTopology = {
   purpose: { ar: string; en: string };
 };
 
-// The eleven database agents stay separate for audit and least-privilege. The
+// The ten database agents stay separate for audit and least-privilege. The
 // map groups them into six operating domains instead of pretending every agent
 // is an equal peer. Specialist nodes keep their own tools and approval ceiling.
 export const agentTopology: readonly AgentTopology[] = [
@@ -41,7 +41,6 @@ export const agentTopology: readonly AgentTopology[] = [
   { id: 'sales', parent: 'ceo', x: 18, y: 61, domain: 'revenue', tools: ['CRM', 'الفرص', 'المتابعة'], memories: ['الشركة', 'CRM'], purpose: { ar: 'يدير العملاء المحتملين والصفقات والمتابعات.', en: 'Runs leads, deals, and commercial follow-up.' } },
   { id: 'knowledge', parent: 'ceo', x: 82, y: 61, domain: 'knowledge', tools: ['البحث', 'RAG', 'المستندات'], memories: ['الشركة', 'المشاريع', 'المعرفة'], purpose: { ar: 'خدمة معرفة مشتركة؛ RAG وDrive يبقيان غير مفعّلين حتى اكتمال الربط.', en: 'Shared knowledge service; RAG and Drive remain gated until connected.' } },
   { id: 'hr', parent: 'ceo', x: 38, y: 82, domain: 'governance', tools: ['CV', 'الموظفون', 'التوظيف L3'], memories: ['الموارد البشرية فقط'], purpose: { ar: 'يعالج بيانات الموظفين المقيدة داخل حد أمني مستقل.', en: 'Handles restricted people data inside an isolated security boundary.' } },
-  { id: 'finance', parent: 'ceo', x: 62, y: 82, domain: 'governance', tools: ['الميزانية', 'التحليل المالي', 'المدفوعات L4'], memories: ['المالية فقط'], purpose: { ar: 'تحليل مالي مع موافقة بشرية إلزامية للالتزامات والمدفوعات.', en: 'Financial analysis with mandatory human approval for commitments.' } },
   { id: 'analytics', parent: 'operations', x: 36, y: 51, domain: 'delivery', tools: ['KPIs', 'التقارير', 'التنبيهات'], memories: ['الشركة', 'المشاريع'], purpose: { ar: 'خدمة قياس مشتركة للتشغيل والتقارير.', en: 'Shared measurement service for operations and reporting.' } },
   { id: 'content', parent: 'marketing', x: 64, y: 51, domain: 'growth', tools: ['المحتوى', 'Instagram', 'LinkedIn'], memories: ['العلامة', 'الحملات'], purpose: { ar: 'ينشئ محتوى موحدًا لـInstagram وLinkedIn؛ النشر L2.', en: 'Creates unified Instagram and LinkedIn content; publishing is L2.' } },
   { id: 'competitor', parent: 'marketing', x: 88, y: 40, domain: 'growth', tools: ['رصد المنافسين', 'المقارنة', 'التنبيهات'], memories: ['السوق', 'المنافسون'], purpose: { ar: 'مختص رصد تحت فريق النمو، وليس مركز قرار مستقل.', en: 'A growth specialist for market monitoring, not a decision authority.' } },

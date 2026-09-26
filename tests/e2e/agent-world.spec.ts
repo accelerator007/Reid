@@ -53,8 +53,8 @@ test('selects an agent by pointer and by keyboard alone', async ({ page }) => {
   // The canvas is hidden from assistive technology on purpose, so the
   // nameplates have to carry the whole interaction.
   await expect(page.locator('.agent-world-canvas')).toHaveAttribute('aria-hidden', 'true');
-  await page.getByRole('button', { name: /^FINANCE/ }).focus();
-  await expect(page.locator('#selected')).toHaveText('finance');
+  await page.getByRole('button', { name: /^HR/ }).focus();
+  await expect(page.locator('#selected')).toHaveText('hr');
 });
 
 test('stays inside its scene budget, and spends less on a weak device', async ({ page }) => {

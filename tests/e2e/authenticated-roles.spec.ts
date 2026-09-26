@@ -190,7 +190,7 @@ test.describe('authenticated employee role journeys', () => {
       return response.data;
     };
     try {
-      const project=await admin.from('projects').insert({name:`Agent matrix ${stamp}`,type:'internal',status:'active',manager_id:users.owner.id,budget:1000,currency:'OMR'}).select('id').single();
+      const project=await admin.from('projects').insert({name:`Agent matrix ${stamp}`,type:'internal',status:'active',manager_id:users.owner.id}).select('id').single();
       if(project.error)throw project.error; projectId=project.data.id;
       const company=await admin.from('crm_companies').insert({name:`Agent matrix ${stamp}`,owner_id:users.owner.id}).select('id').single();
       if(company.error)throw company.error; companyId=company.data.id;
@@ -199,7 +199,7 @@ test.describe('authenticated employee role journeys', () => {
 
       for(const [agent,tool] of [
         ['operations','projects.list'],['operations','tasks.list'],['sales','crm.pipeline'],
-        ['hr','people.list'],['hr','applications.list'],['finance','finance.budgets'],
+        ['hr','people.list'],['hr','applications.list'],
         ['content','content.context'],['knowledge','knowledge.search'],
       ] as const) {
         const result=await invoke(agent,tool,tool==='knowledge.search'?{query:'Agent matrix'}:{});
@@ -220,12 +220,6 @@ test.describe('authenticated employee role journeys', () => {
       const rejectedPublish=await caller.functions.invoke('llm-gateway',{body:{action:'reject',runId:publish.run.id}});
       if(rejectedPublish.error)throw rejectedPublish.error; expect(rejectedPublish.data.status).toBe('cancelled');
 
-      const budget=await invoke('finance','projects.budget.update',{project_id:projectId,budget:9999,currency:'OMR'});
-      expect(budget.status).toBe('pending_approval'); expect(budget.approvalLevel).toBe(3);
-      const rejectedBudget=await caller.functions.invoke('llm-gateway',{body:{action:'reject',runId:budget.run.id}});
-      if(rejectedBudget.error)throw rejectedBudget.error; expect(rejectedBudget.data.status).toBe('cancelled');
-      const unchanged=await admin.from('projects').select('budget').eq('id',projectId).single();
-      expect(Number(unchanged.data?.budget)).toBe(1000);
     } finally {
       if(activityId)await admin.from('crm_activities').delete().eq('id',activityId);
       if(taskId)await admin.from('tasks').delete().eq('id',taskId);

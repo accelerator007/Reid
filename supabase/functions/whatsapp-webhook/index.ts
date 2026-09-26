@@ -111,7 +111,7 @@ async function recordOutbound(admin: any, conversationId: string, body: string, 
 const agentFor = (text: string) => {
   const value=text.toLowerCase();
   const routes: Array<[string,string[]]> = [
-    ['hr',['hr','الموارد','موظف','سيرة','cv']], ['finance',['finance','مالية','ميزانية']],
+    ['hr',['hr','الموارد','موظف','سيرة','cv']],
     ['sales',['sales','مبيعات','crm','عميل','صفقة']], ['operations',['operations','عمليات','مشروع','مهمة','ذكرني','تذكير','موعد','خطط']],
     ['content',['content','محتوى','انشر','منشور']], ['marketing',['marketing','تسويق']],
     ['analytics',['analytics','تحليل','تقرير']], ['knowledge',['knowledge','معرفة','مستند','ابحث']],

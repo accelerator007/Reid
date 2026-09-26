@@ -23,8 +23,6 @@ type Project = {
   manager_id: string | null;
   client_name: string | null;
   status: string;
-  budget: number | null;
-  currency: string;
   github_repo: string | null;
   start_date: string | null;
   target_date: string | null;
@@ -168,7 +166,7 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
     const q = await supabase
       .from("projects")
       .select(
-        "id,name,type,description,manager_id,client_name,status,budget,currency,github_repo,start_date,target_date,archived_at",
+        "id,name,type,description,manager_id,client_name,status,github_repo,start_date,target_date,archived_at",
       )
       .order("updated_at", { ascending: false });
     setProjects((q.data || []) as Project[]);
@@ -384,8 +382,6 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
                     manager_id: f.get("manager_id"),
                     client_name: f.get("client_name") || null,
                     status: "planning",
-                    budget: Number(f.get("budget") || 0),
-                    currency: f.get("currency"),
                     github_repo: f.get("github_repo") || null,
                     start_date: f.get("start_date") || null,
                     target_date: f.get("target_date") || null,
@@ -442,17 +438,6 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
                 required={false}
               />
               <Field
-                name="budget"
-                label={lang === "ar" ? "الميزانية" : "Budget"}
-                type="number"
-                required={false}
-              />
-              <Field
-                name="currency"
-                label={lang === "ar" ? "العملة" : "Currency"}
-                value="OMR"
-              />
-              <Field
                 name="github_repo"
                 label="GitHub URL"
                 type="url"
@@ -499,9 +484,6 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
           <p>{project.description}</p>
         </div>
         <div>
-          <b>
-            {project.budget || 0} {project.currency}
-          </b>
           <span>{person(project.manager_id)}</span>
           {project.github_repo && (
             <a href={project.github_repo} target="_blank" rel="noreferrer">
@@ -623,7 +605,6 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
                         name: f.get("name"),
                         description: f.get("description"),
                         status: f.get("status"),
-                        budget: Number(f.get("budget") || 0),
                         client_name: f.get("client_name") || null,
                         github_repo: f.get("github_repo") || null,
                         target_date: f.get("target_date") || null,
@@ -652,12 +633,6 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
                     <option value="completed">completed</option>
                   </select>
                 </label>
-                <Field
-                  name="budget"
-                  label={lang === "ar" ? "الميزانية" : "Budget"}
-                  type="number"
-                  value={String(project.budget || 0)}
-                />
                 <Field
                   name="client_name"
                   label={lang === "ar" ? "العميل" : "Client"}

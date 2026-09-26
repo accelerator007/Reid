@@ -59,7 +59,7 @@ describe('agent gateway policy', () => {
   });
 
   it('models one governed tree with CEO as its only root', () => {
-    expect(agentTopology).toHaveLength(11);
+    expect(agentTopology).toHaveLength(10);
     expect(agentTopology.filter(node => node.parent === null).map(node => node.id)).toEqual(['ceo']);
     expect(agentTopology.filter(node => node.parent && !agentTopology.some(parent => parent.id === node.parent))).toEqual([]);
   });

@@ -1,11 +1,10 @@
 import React from 'react';
-import { ArrowUpRight, CheckCircle2, Clock3, FolderKanban, Plus, Search, X, Sparkles, Send, FileText, CalendarDays, Circle, RefreshCw, Wallet, UsersRound, Target, BriefcaseBusiness } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, Clock3, FolderKanban, Plus, Search, X, Sparkles, Send, FileText, CalendarDays, Circle, RefreshCw, BriefcaseBusiness } from 'lucide-react';
 import { supabase } from './supabase';
 import { list, run, messageFor, toAppError } from './db';
 import { useSession } from './shell';
 import { runAgent } from './agents';
 import type { Page } from './routes';
-import { FinanceDocuments } from './finance-documents';
 
 type Lang='ar'|'en';
 const tr=(lang:Lang,ar:string,en:string)=>lang==='ar'?ar:en;
@@ -46,7 +45,7 @@ export function Today({lang,go}:{lang:Lang;go:(page:Page)=>void}) {
 }
 
 type WorkRecord={id:string;kind:string;title:string;description:string;status:string;due_date:string|null;owner_id:string};
-const kinds=[['goal','الأهداف','Goals'],['ticket','الدعم','Support'],['leave','الإجازات','Leave'],['purchase','المشتريات','Purchases'],['asset','العهد والأصول','Assets'],['content','المحتوى','Content'],['decision','القرارات','Decisions'],['contract','العقود','Contracts']];
+const kinds=[['goal','الأهداف','Goals'],['ticket','الدعم','Support'],['leave','الإجازات','Leave'],['asset','العهد والأصول','Assets'],['content','المحتوى','Content'],['decision','القرارات','Decisions'],['contract','العقود','Contracts']];
 export function Operations({lang}:{lang:Lang}) {
   const {roles,user}=useSession();const privileged=roles.some(x=>['owner','super_admin'].includes(x));
   const allowed=kinds.filter(([k])=>privileged||['ticket','leave'].includes(k)||(roles.includes('admin')&&['goal','asset','content','decision'].includes(k)));
@@ -65,10 +64,6 @@ export function Operations({lang}:{lang:Lang}) {
     </section>
     {adding&&<div className="os-modal-backdrop"><section className="os-modal" role="dialog" aria-modal="true" aria-labelledby="record-title"><div className="os-section-title"><h2 id="record-title">{tr(lang,'سجل جديد','New record')}</h2><button onClick={()=>setAdding(false)} aria-label={tr(lang,'إغلاق','Close')}><X/></button></div><form onSubmit={e=>void create(e)}><label>{tr(lang,'العنوان','Title')}<input name="title" required maxLength={250} autoFocus/></label><label>{tr(lang,'التفاصيل','Details')}<textarea name="description" rows={4}/></label><label>{tr(lang,'تاريخ الاستحقاق','Due date')}<input type="date" name="due"/></label><button className="os-primary" disabled={saving}>{tr(lang,'حفظ السجل','Save record')}</button></form></section></div>}
   </main>;
-}
-
-export function Finance({lang,go}:{lang:Lang;go:(page:Page)=>void}) {
-  return <FinanceDocuments lang={lang} go={go}/>;
 }
 
 export function AssistantWorkspace({lang}:{lang:Lang}) {

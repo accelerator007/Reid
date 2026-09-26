@@ -68,7 +68,7 @@ async function bridgeOperation(admin:ReturnType<typeof createClient>,body:Record
   const owner=await bridgeOwner(admin,body.sender);
   const operation=String(body.operation||''), args=(body.args&&typeof body.args==='object'?body.args:{}) as Record<string,unknown>;
   if(operation==='projects.summary'){
-    const projects=await admin.from('projects').select('id,name,type,status,description,start_date,target_date,budget,currency,manager_id,updated_at').is('archived_at',null).order('updated_at',{ascending:false}).limit(40);
+    const projects=await admin.from('projects').select('id,name,type,status,description,start_date,target_date,manager_id,updated_at').is('archived_at',null).order('updated_at',{ascending:false}).limit(40);
     if(projects.error) throw projects.error;
     const ids=(projects.data||[]).map(project=>project.id);
     const [tasks,milestones,kpis]=ids.length?await Promise.all([

@@ -130,7 +130,7 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     const [notes,tasks,workshops]=await Promise.all([
       check(admin.from('assistant_notes').select('title,body,scope,updated_at').eq('owner_id',identity.id).eq('status','active').order('updated_at',{ascending:false}).limit(20)),
       check(admin.from('tasks').select('title,status,priority,due_at,project_id').eq('assignee_id',identity.id).order('due_at').limit(30)),
-      check((manager?admin.from('workshops').select('title_ar,title_en,status,visibility,start_at,end_at,capacity,price_omr'):admin.from('workshops').select('title_ar,title_en,status,visibility,start_at,end_at,capacity,price_omr').eq('status','published')).order('start_at').limit(30)),
+      check((manager?admin.from('workshops').select('title_ar,title_en,status,visibility,start_at,end_at,capacity'):admin.from('workshops').select('title_ar,title_en,status,visibility,start_at,end_at,capacity').eq('status','published')).order('start_at').limit(30)),
     ]);
     return {notes,tasks,workshops};
   }
@@ -249,14 +249,14 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
 
   async function workshopPlan(input) {
     const now=new Date().toISOString();
-    return safeJson(await aiChat(`حوّل طلب إنشاء ورشة إلى JSON فقط. الوقت الحالي ${now} والمنطقة Asia/Muscat. الحقول: title_ar,title_en,description_ar,description_en,visibility(public/internal),format(onsite/online/hybrid),venue_ar,venue_en,facilitator_name,start_at,end_at,registration_deadline,capacity,price_omr. ترجم العنوان والوصف للغتين. التاريخ ISO مع +04:00. إن لم يذكر المدة اجعل النهاية بعد ساعتين. إن غاب التاريخ أو الوقت اجعل start_at null. الافتراضي public,onsite,capacity 20,price_omr 0. لا تضف أي نص خارج JSON.`,input,{profile:'intent',json:true}));
+    return safeJson(await aiChat(`حوّل طلب إنشاء ورشة إلى JSON فقط. الوقت الحالي ${now} والمنطقة Asia/Muscat. الحقول: title_ar,title_en,description_ar,description_en,visibility(public/internal),format(onsite/online/hybrid),venue_ar,venue_en,facilitator_name,start_at,end_at,registration_deadline,capacity. ترجم العنوان والوصف للغتين. التاريخ ISO مع +04:00. إن لم يذكر المدة اجعل النهاية بعد ساعتين. إن غاب التاريخ أو الوقت اجعل start_at null. الافتراضي public,onsite,capacity 20. لا توجد رسوم أو أسعار. لا تضف أي نص خارج JSON.`,input,{profile:'intent',json:true}));
   }
 
   async function handleWorkshop(identity,chat,command) {
     if(!identity.workshops_enabled)return {handled:true,text:'أوامر الورش مقفّلة لحسابك.'};
     const manager=hasRole(identity,workshopManagerRoles);
     if(command.kind==='list'){
-      let query=admin.from('workshops').select('id,title_ar,title_en,status,visibility,format,venue_ar,start_at,end_at,capacity,price_omr').order('start_at').limit(20);
+      let query=admin.from('workshops').select('id,title_ar,title_en,status,visibility,format,venue_ar,start_at,end_at,capacity').order('start_at').limit(20);
       if(!manager)query=query.eq('status','published');
       const rows=await check(query);
       return {handled:true,text:rows.length?`الورش المتاحة:\n${rows.map((row,index)=>`${index+1}. ${row.title_ar} — ${new Intl.DateTimeFormat('ar-OM',{timeZone:'Asia/Muscat',dateStyle:'medium',timeStyle:'short'}).format(new Date(row.start_at))} — ${row.status}`).join('\n')}\n\nالتفاصيل والإدارة: https://reidpro.com/workshops`:'ما توجد ورش مسجلة حاليًا.'};
@@ -265,9 +265,9 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     if(command.kind==='create'){
       const plan=await workshopPlan(command.input);
       if(!plan?.title_ar||!plan?.title_en||!plan?.start_at||!plan?.end_at||!Number.isFinite(Date.parse(plan.start_at))||!Number.isFinite(Date.parse(plan.end_at)))return {handled:true,text:'أقدر أضيفها، بس اكتب اسم الورشة واليوم والساعة. مثال: أضف ورشة ذكاء اصطناعي الخميس الساعة 5 مساءً.'};
-      const payload={title_ar:clean(plan.title_ar).slice(0,180),title_en:clean(plan.title_en).slice(0,180),description_ar:clean(plan.description_ar).slice(0,4000),description_en:clean(plan.description_en).slice(0,4000),visibility:['public','internal'].includes(plan.visibility)?plan.visibility:'public',format:['onsite','online','hybrid'].includes(plan.format)?plan.format:'onsite',venue_ar:clean(plan.venue_ar).slice(0,240),venue_en:clean(plan.venue_en).slice(0,240),facilitator_name:clean(plan.facilitator_name).slice(0,160),registration_url:null,start_at:new Date(plan.start_at).toISOString(),end_at:new Date(plan.end_at).toISOString(),registration_deadline:plan.registration_deadline?new Date(plan.registration_deadline).toISOString():null,capacity:Math.min(Math.max(Number(plan.capacity)||20,1),10000),price_omr:Math.max(Number(plan.price_omr)||0,0)};
+      const payload={title_ar:clean(plan.title_ar).slice(0,180),title_en:clean(plan.title_en).slice(0,180),description_ar:clean(plan.description_ar).slice(0,4000),description_en:clean(plan.description_en).slice(0,4000),visibility:['public','internal'].includes(plan.visibility)?plan.visibility:'public',format:['onsite','online','hybrid'].includes(plan.format)?plan.format:'onsite',venue_ar:clean(plan.venue_ar).slice(0,240),venue_en:clean(plan.venue_en).slice(0,240),facilitator_name:clean(plan.facilitator_name).slice(0,160),registration_url:null,start_at:new Date(plan.start_at).toISOString(),end_at:new Date(plan.end_at).toISOString(),registration_deadline:plan.registration_deadline?new Date(plan.registration_deadline).toISOString():null,capacity:Math.min(Math.max(Number(plan.capacity)||20,1),10000)};
       if(Date.parse(payload.end_at)<=Date.parse(payload.start_at))return {handled:true,text:'وقت نهاية الورشة لازم يكون بعد البداية. اكتب الموعدين من جديد.'};
-      const preview=`ورشة جديدة كمسودة:\n${payload.title_ar} / ${payload.title_en}\n${new Intl.DateTimeFormat('ar-OM',{timeZone:'Asia/Muscat',dateStyle:'medium',timeStyle:'short'}).format(new Date(payload.start_at))}\nالسعة: ${payload.capacity} — السعر: ${payload.price_omr} ر.ع`;
+      const preview=`ورشة جديدة كمسودة:\n${payload.title_ar} / ${payload.title_en}\n${new Intl.DateTimeFormat('ar-OM',{timeZone:'Asia/Muscat',dateStyle:'medium',timeStyle:'short'}).format(new Date(payload.start_at))}\nالسعة: ${payload.capacity}`;
       const action=await createAction(identity,chat,'workshop_create',payload,preview,{level:1});return {handled:true,text:`${preview}\n\nاكتب «موافقة» لإضافتها كمسودة أو «إلغاء».`,actionId:action.id};
     }
     const wanted=clean(command.query).replace(/^[«"\s]+|[»"\s.!؟?،,]+$/gu,'').toLowerCase();

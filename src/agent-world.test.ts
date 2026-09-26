@@ -23,7 +23,7 @@ describe("the campus is derived from the reporting tree", () => {
     const layout = worldLayout(nodes);
     expect(layout.get("ceo")).toMatchObject({ x: 0, z: 0, depth: 0 });
     const reports = nodes.filter(node => node.parent === "ceo").map(node => layout.get(node.id)!);
-    expect(reports).toHaveLength(6);
+    expect(reports).toHaveLength(5);
     for (const report of reports) expect(Math.hypot(report.x, report.z)).toBeCloseTo(ringRadius(1), 5);
   });
 

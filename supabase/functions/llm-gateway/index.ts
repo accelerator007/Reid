@@ -179,27 +179,18 @@ async function scopedMemories(admin: ReturnType<typeof createClient>, agentId: s
 async function buildAgentContext(admin: ReturnType<typeof createClient>, agentId: string, requesterId: string, args: Record<string, unknown> = {}) {
   const context: Record<string, unknown> = { meta: { generated_at: new Date().toISOString(), timezone: 'Asia/Muscat', company: 'Reid' } };
   if (['ceo', 'operations', 'analytics'].includes(agentId)) {
-    context.projects = await rows(admin, 'projects', 'id,name,type,status,budget,currency,start_date,target_date,manager_id', 'updated_at');
+    context.projects = await rows(admin, 'projects', 'id,name,type,status,start_date,target_date,manager_id', 'updated_at');
     context.tasks = await rows(admin, 'tasks', 'id,title,status,priority,due_at,project_id,research_id,assignee_id');
   }
   if (['ceo', 'sales', 'support'].includes(agentId)) {
-    context.leads = await rows(admin, 'crm_leads', 'id,title,stage,estimated_value,probability,next_follow_up_at,owner_id', 'updated_at');
-    context.deals = await rows(admin, 'crm_deals', 'id,title,stage,value,currency,expected_close_date,owner_id', 'updated_at');
+    context.leads = await rows(admin, 'crm_leads', 'id,title,stage,probability,next_follow_up_at,owner_id', 'updated_at');
+    context.deals = await rows(admin, 'crm_deals', 'id,title,stage,expected_close_date,owner_id', 'updated_at');
     context.followUps = await rows(admin, 'crm_activities', 'id,activity_type,subject,due_at,completed_at,owner_id');
-  }
-  if (['ceo', 'operations', 'analytics'].includes(agentId)) {
-    context.businessCases = await rows(admin, 'business_cases', 'id,title,stage,value,currency,owner_id,project_id,invoice_id,updated_at', 'updated_at');
   }
   if (agentId === 'hr') {
     context.people = await rows(admin, 'profiles', 'id,full_name,email,department,position,employment_status,hire_date', 'updated_at');
     context.applications = await rows(admin, 'applications', 'id,full_name,email,organization,title,account_type,join_reason,cover_letter,status,cv_path');
     context.documents = await rows(admin, 'employee_documents', 'id,owner_id,title,category,storage_path');
-  }
-  if (agentId === 'finance') {
-    context.budgets = await rows(admin, 'projects', 'id,name,type,status,budget,currency,client_name,start_date,target_date', 'updated_at');
-    context.pipeline = await rows(admin, 'crm_deals', 'id,title,stage,value,currency,expected_close_date', 'updated_at');
-    context.documents = await rows(admin, 'finance_documents', 'id,number,kind,title,counterparty,amount,paid_amount,currency,status,due_date,business_case_id,project_id,issued_at,paid_at', 'updated_at');
-    context.businessCases = await rows(admin, 'business_cases', 'id,title,stage,value,currency,project_id,invoice_id,updated_at', 'updated_at');
   }
   if (['marketing', 'content', 'competitor'].includes(agentId)) {
     context.announcements = await rows(admin, 'announcements', 'id,title_ar,title_en,body_ar,body_en,published_at,expires_at');
@@ -224,19 +215,15 @@ async function executeTool(admin: ReturnType<typeof createClient>, tool: AgentTo
   const text = (value: unknown, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : null;
   const uuid = (value: unknown) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value) ? value : null;
   switch (tool.id) {
-    case 'projects.list': return rows(admin, 'projects', 'id,name,type,status,budget,currency,start_date,target_date,manager_id', 'updated_at');
+    case 'projects.list': return rows(admin, 'projects', 'id,name,type,status,start_date,target_date,manager_id', 'updated_at');
     case 'tasks.list': return rows(admin, 'tasks', 'id,title,status,priority,due_at,project_id,research_id,assignee_id');
     case 'crm.pipeline': return {
-      leads: await rows(admin, 'crm_leads', 'id,title,stage,estimated_value,probability,next_follow_up_at,owner_id', 'updated_at'),
-      deals: await rows(admin, 'crm_deals', 'id,title,stage,value,currency,expected_close_date,owner_id', 'updated_at'),
+      leads: await rows(admin, 'crm_leads', 'id,title,stage,probability,next_follow_up_at,owner_id', 'updated_at'),
+      deals: await rows(admin, 'crm_deals', 'id,title,stage,expected_close_date,owner_id', 'updated_at'),
       followUps: await rows(admin, 'crm_activities', 'id,activity_type,subject,due_at,completed_at,owner_id'),
     };
     case 'people.list': return rows(admin, 'profiles', 'id,full_name,email,department,position,employment_status,hire_date', 'updated_at');
     case 'applications.list': return rows(admin, 'applications', 'id,full_name,email,organization,title,account_type,join_reason,cover_letter,status,cv_path');
-    case 'finance.budgets': return {
-      projects: await rows(admin, 'projects', 'id,name,status,budget,currency,client_name,target_date', 'updated_at'),
-      deals: await rows(admin, 'crm_deals', 'id,title,stage,value,currency,expected_close_date', 'updated_at'),
-    };
     case 'content.context': return {
       announcements: await rows(admin, 'announcements', 'id,title_ar,title_en,body_ar,body_en,published_at,expires_at'),
       publicProjects: (await rows(admin, 'projects', 'id,name,type,status,visibility,start_date,target_date', 'updated_at'))
@@ -279,10 +266,6 @@ async function executeTool(admin: ReturnType<typeof createClient>, tool: AgentTo
     case 'onboarding.create': {
       const result = await admin.from('onboarding_items').insert({ user_id: uuid(args.user_id), title_ar: text(args.title_ar, 200), title_en: text(args.title_en, 200), due_date: text(args.due_date, 20), assigned_by: requesterId }).select('id,user_id,title_ar,title_en,due_date,completed').single();
       if (result.error) throw new Error('tool_onboarding_create_failed'); return result.data;
-    }
-    case 'projects.budget.update': {
-      const result = await admin.from('projects').update({ budget: Number(args.budget), ...(text(args.currency, 6) ? { currency: text(args.currency, 6) } : {}) }).eq('id', uuid(args.project_id)).select('id,name,budget,currency').single();
-      if (result.error) throw new Error('tool_project_budget_update_failed'); return result.data;
     }
     case 'content.draft.create': {
       const result = await admin.from('content_drafts').insert({ title_ar: text(args.title_ar, 200), title_en: text(args.title_en, 200), body_ar: text(args.body_ar, 5000), body_en: text(args.body_en, 5000), created_by: requesterId }).select('id,status,title_ar,title_en').single();
@@ -463,7 +446,6 @@ Deno.serve(async (request) => {
     if (internal && !requesterRoles.some(role => ['owner','super_admin'].includes(role))) {
       const allowed = new Set(['ceo','operations','marketing','content','sales','analytics','knowledge','support','competitor']);
       if (requesterRoles.includes('hr')) allowed.add('hr');
-      if (requesterRoles.includes('finance')) allowed.add('finance');
       if (!allowed.has(agent.id)) throw new Error('agent_not_allowed_for_admin');
     }
     if (!agent.enabled) throw new Error('agent_disabled');

@@ -12,6 +12,7 @@ const ownerGroupMigration = readFileSync(new URL("../supabase/migrations/2026091
 const ownerGroupPinned = readFileSync(new URL("../supabase/migrations/202609120004_owner_group_always_active.sql", import.meta.url), "utf8");
 const qrPolicy = readFileSync(new URL("../server/policy.mjs", import.meta.url), "utf8");
 const qrService = readFileSync(new URL("../server/index.mjs", import.meta.url), "utf8");
+const qrInbound = readFileSync(new URL("../server/inbound.mjs", import.meta.url), "utf8");
 const qrTransport = readFileSync(new URL("../supabase/functions/_shared/qr-transport.ts", import.meta.url), "utf8");
 
 describe("WhatsApp Owner inbox contract", () => {
@@ -94,7 +95,7 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(qrPolicy).toContain("repliedToBot");
     expect(qrPolicy).toContain("addressed=mentioned||reidName.test(text)||repliedToBot");
     expect(qrService).toContain("if(!item.addressed)");
-    expect(qrService).toContain("async function persistInbound");
+    expect(qrInbound).toContain("async function persistInbound");
     expect(qrService).toContain("setTimeout(resolve,300)");
   });
 

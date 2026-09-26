@@ -40,7 +40,6 @@ type Workshop = {
   end_at: string;
   registration_deadline: string | null;
   capacity: number;
-  price_omr: number;
 };
 
 type Registration = {
@@ -49,15 +48,14 @@ type Registration = {
   status: "registered" | "waitlisted" | "attended" | "cancelled";
 };
 
-type Draft = Omit<Workshop, "id" | "price_omr" | "capacity"> & {
+type Draft = Omit<Workshop, "id" | "capacity"> & {
   id?: string;
   capacity: string;
-  price_omr: string;
 };
 
 const tr = (lang: Lang, ar: string, en: string) => (lang === "ar" ? ar : en);
 const editableRoles = ["owner", "super_admin", "admin", "hr"];
-const workshopSelect = "id,title_ar,title_en,description_ar,description_en,status,visibility,format,venue_ar,venue_en,facilitator_name,registration_url,start_at,end_at,registration_deadline,capacity,price_omr";
+const workshopSelect = "id,title_ar,title_en,description_ar,description_en,status,visibility,format,venue_ar,venue_en,facilitator_name,registration_url,start_at,end_at,registration_deadline,capacity";
 
 function localInput(value: string | null) {
   if (!value) return "";
@@ -86,7 +84,6 @@ function defaultDraft(): Draft {
     end_at: localInput(end.toISOString()),
     registration_deadline: "",
     capacity: "20",
-    price_omr: "0",
   };
 }
 
@@ -154,7 +151,6 @@ export function Workshops({ lang, go }: { lang: Lang; go: (page: Page) => void }
       end_at: end.toISOString(),
       registration_deadline: draft.registration_deadline ? new Date(draft.registration_deadline).toISOString() : null,
       capacity: Number(draft.capacity),
-      price_omr: Number(draft.price_omr),
     };
     const result = draft.id
       ? await run(supabase.from("workshops").update(payload).eq("id", draft.id).select("id").single())
@@ -196,7 +192,6 @@ export function Workshops({ lang, go }: { lang: Lang; go: (page: Page) => void }
     end_at: localInput(workshop.end_at),
     registration_deadline: localInput(workshop.registration_deadline),
     capacity: String(workshop.capacity),
-    price_omr: String(workshop.price_omr),
   });
 
   const now = Date.now();
@@ -244,7 +239,6 @@ export function Workshops({ lang, go }: { lang: Lang; go: (page: Page) => void }
           <div><dt><CalendarDays />{tr(lang, "الموعد", "Schedule")}</dt><dd>{formatter.format(new Date(workshop.start_at))}</dd></div>
           <div><dt>{workshop.format === "online" ? <Video /> : <MapPin />}{formatLabel(workshop.format)}</dt><dd>{(lang === "ar" ? workshop.venue_ar : workshop.venue_en) || "—"}</dd></div>
           <div><dt><UsersRound />{tr(lang, "المقاعد", "Capacity")}</dt><dd>{canManage ? `${count} / ${workshop.capacity}` : workshop.capacity}</dd></div>
-          <div><dt><TicketCheck />{tr(lang, "الرسوم", "Fee")}</dt><dd>{Number(workshop.price_omr) === 0 ? tr(lang, "مجانية", "Free") : `${Number(workshop.price_omr).toFixed(3)} OMR`}</dd></div>
         </dl>
         {workshop.facilitator_name && <small className="os-workshop-facilitator">{tr(lang, "يقدّمها", "Facilitated by")}: <b>{workshop.facilitator_name}</b></small>}
         <footer>
@@ -265,7 +259,7 @@ export function Workshops({ lang, go }: { lang: Lang; go: (page: Page) => void }
         <div className="os-form-row"><label>{tr(lang, "آخر موعد للتسجيل", "Registration deadline")}<input type="datetime-local" value={draft.registration_deadline || ""} onChange={event => setDraft({ ...draft, registration_deadline: event.target.value })} /></label><label>{tr(lang, "المقدّم", "Facilitator")}<input maxLength={160} value={draft.facilitator_name} onChange={event => setDraft({ ...draft, facilitator_name: event.target.value })} /></label></div>
         <div className="os-form-row os-form-row-three"><label>{tr(lang, "الحالة", "Status")}<select value={draft.status} onChange={event => setDraft({ ...draft, status: event.target.value as WorkshopStatus })}><option value="draft">{tr(lang, "مسودة", "Draft")}</option><option value="published">{tr(lang, "منشورة", "Published")}</option><option value="completed">{tr(lang, "مكتملة", "Completed")}</option><option value="cancelled">{tr(lang, "ملغاة", "Cancelled")}</option></select></label><label>{tr(lang, "الظهور", "Visibility")}<select value={draft.visibility} onChange={event => setDraft({ ...draft, visibility: event.target.value as WorkshopVisibility })}><option value="public">{tr(lang, "عامة", "Public")}</option><option value="internal">{tr(lang, "داخلية", "Internal")}</option></select></label><label>{tr(lang, "النوع", "Format")}<select value={draft.format} onChange={event => setDraft({ ...draft, format: event.target.value as WorkshopFormat })}><option value="onsite">{tr(lang, "حضوري", "On-site")}</option><option value="online">{tr(lang, "عن بُعد", "Online")}</option><option value="hybrid">{tr(lang, "هجين", "Hybrid")}</option></select></label></div>
         <div className="os-form-row"><label>{tr(lang, "المكان بالعربية", "Arabic venue")}<input maxLength={240} value={draft.venue_ar} onChange={event => setDraft({ ...draft, venue_ar: event.target.value })} /></label><label>{tr(lang, "المكان بالإنجليزية", "English venue")}<input maxLength={240} dir="ltr" value={draft.venue_en} onChange={event => setDraft({ ...draft, venue_en: event.target.value })} /></label></div>
-        <div className="os-form-row os-form-row-three"><label>{tr(lang, "السعة", "Capacity")}<input required type="number" min="1" max="10000" value={draft.capacity} onChange={event => setDraft({ ...draft, capacity: event.target.value })} /></label><label>{tr(lang, "السعر بالريال", "Price in OMR")}<input required type="number" min="0" step="0.001" value={draft.price_omr} onChange={event => setDraft({ ...draft, price_omr: event.target.value })} /></label><label>{tr(lang, "رابط تسجيل خارجي (اختياري)", "External registration URL (optional)")}<input type="url" dir="ltr" placeholder="https://" value={draft.registration_url || ""} onChange={event => setDraft({ ...draft, registration_url: event.target.value })} /></label></div>
+        <div className="os-form-row"><label>{tr(lang, "السعة", "Capacity")}<input required type="number" min="1" max="10000" value={draft.capacity} onChange={event => setDraft({ ...draft, capacity: event.target.value })} /></label><label>{tr(lang, "رابط تسجيل خارجي (اختياري)", "External registration URL (optional)")}<input type="url" dir="ltr" placeholder="https://" value={draft.registration_url || ""} onChange={event => setDraft({ ...draft, registration_url: event.target.value })} /></label></div>
         <button className="os-primary" type="submit" disabled={saving}>{saving ? tr(lang, "جارٍ الحفظ…", "Saving…") : tr(lang, "حفظ الورشة", "Save workshop")}</button>
       </form>
     </section></div>}
