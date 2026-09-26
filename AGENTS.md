@@ -2,28 +2,42 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
-## 2026-09-26 WhatsApp site operations and server monitoring
+## 2026-09-26 organising workspace without money, WhatsApp operations and assistant senses
 
-Branch `feature/whatsapp-site-operations-20260926`. Scope chosen by the Owner: manage the website and monitor the servers from WhatsApp, with every sensitive change previewed and confirmed first.
+Branch `feature/whatsapp-site-operations-20260926`. Owner decisions on 2026-09-26: manage the website and monitor the servers from WhatsApp with every sensitive change previewed and confirmed; run Reid as an organising workspace with no money anywhere; enable every assistant capability that helps the company (research, photos, voice).
 
-- Owner/Super Admin status commands work in private chat and the `Reid_Owner` group: `حالة النظام`, `حالة الموقع`, `حالة السيرفر`, `حالة واتساب` and `أوامر الإدارة` (English: `system status`, `site status`, `server status`, `whatsapp status`, `admin help`). Every source is fixed in `server/operations-snapshot.mjs`; no WhatsApp text becomes a URL, query selector, path or command. Replies separate site, database, AI, runner, WhatsApp and queue, and say what could not be verified instead of defaulting to healthy. Admin, employee and customer senders are refused before any data is read. Snapshots are cached for 10 s and concurrent requests coalesce.
-- Reid host CPU/RAM/disk are sampled in-process from the host-wide `/proc/stat`, `/proc/meminfo` and the Docker-backed root filesystem; ai-lap metrics come from its existing heartbeat row. No host service, Docker socket or sudo is involved. `GET /api/operations/status` returns the same snapshot behind the existing Owner-only `/api` gate.
-- Workshops: `أخف الورشة <name>` withdraws a workshop to draft after L2 confirmation. Publish, cancel and hide now require exactly one name match; an empty or ambiguous name asks for the full name instead of acting on the first row.
-- Every approval re-resolves the sender's current identity and rechecks that action's permission (outbound scope and an active company recipient, `workshops_enabled` plus a manager role, `notes_enabled`). A revoked permission cancels the pending preview instead of executing it. `workshop_update` accepts only `{workshop_id,status:'draft'}`.
-- Fixed a Production defect: the first message from any new WhatsApp number threw `ReferenceError: display_name` while inserting the conversation, so it was not stored and got no reply. Inbound persistence moved to `server/inbound.mjs` with stage diagnostics and one retry.
-- Restart, deploy and backup remain deliberately unavailable from WhatsApp; they would need Docker-socket/root control behind an unofficial linked-device library.
-- Previously undocumented 2026-09-13 work carried on this branch is already running in Production: workshops (`/workshops`, public catalogue in the site assistant) and WhatsApp employee assistants (confirmed actions, notes, contacts, generated PDF/Word/Excel/image artifacts, media outbox). Migrations `202609130003_workshops.sql` and `202609130004_whatsapp_employee_assistants.sql` are present in Production; their tables were readable on 2026-09-26. The `reid-web` and `reid-services` containers built on 2026-09-13 run that code, but it has not been committed or reviewed through a PR.
+No money in the product:
+
+- `/finance` and `/business` are removed from the route manifest, navigation and bundle (`finance-documents.tsx`, `business-flow.tsx` deleted); nginx redirects them to `/today` and `/crm`. The Owner brief shows people, projects, overdue tasks, approvals, applications and agent failures only.
+- CRM leads/deals, projects, research and workshops no longer collect or display value, budget, funding amount, currency or price. Database defaults keep inserts valid; historical rows are untouched for audit.
+- Migration `202609260001_organisation_without_money.sql` retires the Finance agent, disables `finance.budgets` and `projects.budget.update` and removes their assignments, and makes the executive report count deals instead of summing them. `llm-gateway` no longer places budgets, deal values, business cases or invoices in any agent context, `whatsapp-webhook` no longer routes to Finance, and the WhatsApp/website assistants no longer mention prices. The agent map now has ten agents.
+
+WhatsApp operations:
+
+- Owner/Super Admin status commands in private chat and the `Reid_Owner` group: `حالة النظام`, `حالة الموقع`, `حالة السيرفر`, `حالة واتساب`, `أوامر الإدارة` (English equivalents too). Sources are fixed in `server/operations-snapshot.mjs`; no message text becomes a URL, selector, path or command, and an unchecked component is reported as unverified. Reid host CPU/RAM/disk are read in-process from host-wide `/proc` and the Docker-backed root filesystem; ai-lap metrics come from its heartbeat. `GET /api/operations/status` is behind the Owner-only `/api` gate.
+- `أخف الورشة <name>` withdraws a workshop to draft after L2 confirmation; publish/cancel/hide require exactly one name match. Every approval re-resolves the sender's current permissions and cancels the preview if they were revoked.
+- Time and date questions are answered from the server clock in Muscat time (`server/clock.mjs`), and both the local chat prompt and the gateway context carry the current Muscat time. Previously the Owner group repeated a stale time taken from a memory record.
+- The send step strips `[Reid:collection:id]` grounding markers and rewrites Markdown into WhatsApp formatting; the markers remain for the quality gate only.
+- Fixed a Production defect: the first message from any new number threw `ReferenceError: display_name`, so it was never stored or answered (`server/inbound.mjs`).
+- Restart, deploy and backup remain unavailable from WhatsApp; they would need Docker-socket/root control behind an unofficial linked-device library.
+
+Assistant senses (merged from the undeployed 2026-09-14 branch `claude/whatsapp-bot-smart-interactive-c42ef8`): voice notes transcribed on ai-lap, photos answered by the local vision model (an authenticated administrator's photo now bypasses the text-only governed dispatcher, including in the Owner group), read receipts/reactions/typing, quoted and paced replies, intent routing into the existing handlers, semantic recall, reply-quality scoring and feedback, opt-in morning initiative, Arabic PDF/Word/Excel reports with charts, an image budget, and governed web search/read (off until a provider key is configured). The previously undocumented 2026-09-13 work (workshops, employee assistant actions, notes, contacts, artifacts, media outbox) is also on this branch and is already running in Production with migrations `202609130003`/`202609130004` applied.
 
 Verification on 2026-09-26:
 
-- `npm test --prefix server` equivalent: 57/57 passed in a network-isolated container using the Production image's dependencies; `node --check server/index.mjs` and `git diff --check` passed.
-- A read-only Production snapshot from a throwaway container returned site, database, AI, runner and WhatsApp healthy, fresh Reid and ai-lap host metrics, and 0 pending/failed/uncertain queue items.
-- `npm run check` was not run: the host has no Node toolchain or installed dependencies, and no web file changed in this increment.
+- Server suite 192/192 in a network-isolated container using the Production image's dependencies; `node --check server/index.mjs`.
+- `npm run check`: 202/202 Vitest checks and the Production TypeScript/Vite build (dependencies from the lockfile inside `node:22`).
+- A candidate API image (`reid-services:candidate`) built and passed `verify-pdf.mjs`. The rebuilt `reid-web:local` served `/healthz`, `/today`, `/owner`, `/crm` and `/workshops` with 200, redirected `/finance` and `/business` with relative 301s carrying the security headers, and its bundle contains none of the removed finance strings (the live bundle still does).
+- Live ai-lap probes: the vision model identified a generated two-colour test image correctly; `/api/transcribe` answered 200.
+- A read-only Production operations snapshot reported site, database, AI, runner and WhatsApp healthy with an empty queue.
+- `scripts/rls-local.sh` was not run: no PostgreSQL 16 binaries on this host. CI runs it.
 
 Still open and must not be presented as complete:
 
-- Not deployed. `reid-services:local` is rebuilt from this tree, but the running container still uses the 2026-09-13 image, tagged `reid-services:rollback-20260926`. After `docker compose --env-file /home/reid/.config/reid-os/build.env up -d --no-deps api`, acceptance is: container healthy, `حالة النظام` answered for an Owner, refused for a non-Owner, and a first message from a new number stored and answered.
-- Not committed and no PR. A separate unmerged branch, `claude/whatsapp-bot-smart-interactive-c42ef8` (worktree in `.claude/worktrees/`), holds an undeployed 2026-09-14 assistant rewrite (intent routing, web access, recall) whose `assistant-actions.mjs` diverges from this branch; reconcile before merging either.
+- Nothing from this branch is deployed. Order matters: (1) apply migrations `202609140001`–`202609140005` and `202609260001`; (2) deploy `llm-gateway`, `whatsapp-webhook` and `ai-lap-runner`; (3) rebuild and restart `api` and `web`. The merged `api` writes columns added by `202609140001`–`202609140005` and must not start before them. This host has no Supabase CLI credentials, so steps 1–2 need an authenticated operator. The current `web` image and the pre-merge `reid-services:ops-20260926` image are safe to run against today's schema. Rollback images: `reid-services:rollback-20260926`, `reid-web:rollback-20260926`.
+- Web search needs `REID_WEB_SEARCH_PROVIDER` (`brave` or `tavily`) and `REID_WEB_SEARCH_KEY` in `service.env`; without them research requests say it is not enabled. The ai-lap adapter changes (decoding profiles, JSON mode) are in `infra/ai-lap/` but must be installed on ai-lap; until then those options are ignored.
+- The `gemini` provider row in Production has `max_classification = 'restricted'`, which contradicts the recorded free-tier cap of `public` above. It was observed, not changed; it needs an Owner decision.
+- Not merged through a PR yet.
 
 ## 2026-09-12 governed agent quality and WhatsApp administrator memory
 
