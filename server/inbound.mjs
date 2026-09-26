@@ -1,0 +1,31 @@
+export function createInboundPersistence({admin,check,allowedOwnerGroup,rate}) {
+  return async function persistInbound(message,item) {
+    let stage='authorize';
+    try {
+      const group=item.isGroup?await allowedOwnerGroup(item):null;
+      if(item.isGroup&&!group){console.info('group_message_denied');return;}
+      const displayName=String(group?.display_name||message.pushName||item.jid.split('@')[0])
+        .replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,120)||item.jid.split('@')[0];
+      stage='conversation_read';
+      let chat=await check(admin.from('qr_conversations').select('*').eq('jid',item.jid).maybeSingle());
+      if(!chat){
+        stage='conversation_insert';
+        const inserted=await admin.from('qr_conversations').insert({jid:item.jid,display_name:displayName,bot_mode:'active'}).select('*').single();
+        if(inserted.error?.code==='23505'){
+          stage='conversation_race_read';
+          chat=await check(admin.from('qr_conversations').select('*').eq('jid',item.jid).single());
+        }else if(inserted.error)throw inserted.error;
+        else chat=inserted.data;
+      }
+      stage='message_upsert';
+      const {error}=await admin.from('qr_messages').upsert({conversation_id:chat.id,message_id:item.id,direction:'inbound',body:item.text,sender_phone:item.senderPhone},{onConflict:'message_id',ignoreDuplicates:true});
+      if(error)throw error;
+      // Every later write is idempotent. Reconcile it even if WhatsApp repeats an
+      // event or an earlier attempt stopped immediately after storing the message.
+      stage='conversation_update';
+      await check(admin.from('qr_conversations').update({last_message:item.text.slice(0,180),updated_at:new Date().toISOString()}).eq('id',chat.id));
+      stage='job_upsert';
+      if(chat.bot_mode==='active'&&rate(`in:${chat.id}`,6))await check(admin.from('qr_jobs').upsert({conversation_id:chat.id,message_id:item.id,input:item.text,sender_phone:item.senderPhone},{onConflict:'message_id',ignoreDuplicates:true}));
+    }catch(error){throw new Error(`inbound_${stage}_failed`,{cause:error});}
+  };
+}

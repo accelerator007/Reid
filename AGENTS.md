@@ -2,6 +2,29 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-09-26 WhatsApp site operations and server monitoring
+
+Branch `feature/whatsapp-site-operations-20260926`. Scope chosen by the Owner: manage the website and monitor the servers from WhatsApp, with every sensitive change previewed and confirmed first.
+
+- Owner/Super Admin status commands work in private chat and the `Reid_Owner` group: `حالة النظام`, `حالة الموقع`, `حالة السيرفر`, `حالة واتساب` and `أوامر الإدارة` (English: `system status`, `site status`, `server status`, `whatsapp status`, `admin help`). Every source is fixed in `server/operations-snapshot.mjs`; no WhatsApp text becomes a URL, query selector, path or command. Replies separate site, database, AI, runner, WhatsApp and queue, and say what could not be verified instead of defaulting to healthy. Admin, employee and customer senders are refused before any data is read. Snapshots are cached for 10 s and concurrent requests coalesce.
+- Reid host CPU/RAM/disk are sampled in-process from the host-wide `/proc/stat`, `/proc/meminfo` and the Docker-backed root filesystem; ai-lap metrics come from its existing heartbeat row. No host service, Docker socket or sudo is involved. `GET /api/operations/status` returns the same snapshot behind the existing Owner-only `/api` gate.
+- Workshops: `أخف الورشة <name>` withdraws a workshop to draft after L2 confirmation. Publish, cancel and hide now require exactly one name match; an empty or ambiguous name asks for the full name instead of acting on the first row.
+- Every approval re-resolves the sender's current identity and rechecks that action's permission (outbound scope and an active company recipient, `workshops_enabled` plus a manager role, `notes_enabled`). A revoked permission cancels the pending preview instead of executing it. `workshop_update` accepts only `{workshop_id,status:'draft'}`.
+- Fixed a Production defect: the first message from any new WhatsApp number threw `ReferenceError: display_name` while inserting the conversation, so it was not stored and got no reply. Inbound persistence moved to `server/inbound.mjs` with stage diagnostics and one retry.
+- Restart, deploy and backup remain deliberately unavailable from WhatsApp; they would need Docker-socket/root control behind an unofficial linked-device library.
+- Previously undocumented 2026-09-13 work carried on this branch is already running in Production: workshops (`/workshops`, public catalogue in the site assistant) and WhatsApp employee assistants (confirmed actions, notes, contacts, generated PDF/Word/Excel/image artifacts, media outbox). Migrations `202609130003_workshops.sql` and `202609130004_whatsapp_employee_assistants.sql` are present in Production; their tables were readable on 2026-09-26. The `reid-web` and `reid-services` containers built on 2026-09-13 run that code, but it has not been committed or reviewed through a PR.
+
+Verification on 2026-09-26:
+
+- `npm test --prefix server` equivalent: 57/57 passed in a network-isolated container using the Production image's dependencies; `node --check server/index.mjs` and `git diff --check` passed.
+- A read-only Production snapshot from a throwaway container returned site, database, AI, runner and WhatsApp healthy, fresh Reid and ai-lap host metrics, and 0 pending/failed/uncertain queue items.
+- `npm run check` was not run: the host has no Node toolchain or installed dependencies, and no web file changed in this increment.
+
+Still open and must not be presented as complete:
+
+- Not deployed. `reid-services:local` is rebuilt from this tree, but the running container still uses the 2026-09-13 image, tagged `reid-services:rollback-20260926`. After `docker compose --env-file /home/reid/.config/reid-os/build.env up -d --no-deps api`, acceptance is: container healthy, `حالة النظام` answered for an Owner, refused for a non-Owner, and a first message from a new number stored and answered.
+- Not committed and no PR. A separate unmerged branch, `claude/whatsapp-bot-smart-interactive-c42ef8` (worktree in `.claude/worktrees/`), holds an undeployed 2026-09-14 assistant rewrite (intent routing, web access, recall) whose `assistant-actions.mjs` diverges from this branch; reconcile before merging either.
+
 ## 2026-09-12 governed agent quality and WhatsApp administrator memory
 
 - The Production QR service accepts group messages only from the exact database-registered `Reid_Owner` JID and only when the authenticated sender is an enabled active Owner. That immutable JID is pinned by migration `202609120004_owner_group_always_active.sql`; mutable WhatsApp display-subject normalization is no longer part of the live decision. For Ali and Sheikha, invocation requires standalone `ريد`/`ريّد`/`Reid`, an actual bot mention, or a reply to a message authored by Reid. Ordinary group conversation and every other sender/group remain silent.
@@ -140,7 +163,7 @@ Only the three `public` agents run today. The `internal` five unlock by moving t
 
 ## Implemented and verified
 
-Last verified: 2026-09-11, Asia/Muscat.
+Last verified: 2026-09-26, Asia/Muscat (server suite and read-only Production snapshot; see the 2026-09-26 section).
 
 ### 2026-09-11 Owner operating brief
 

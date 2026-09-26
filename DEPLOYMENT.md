@@ -13,5 +13,7 @@ QR operations:
 - To revoke access, remove the linked device from the Reid phone. If the service reports `scan_required`, scan a new code.
 - Never auto-retry an `uncertain` outbox item. Check the phone first to avoid a duplicate external message.
 - Cloud API send paths stay disabled while `REID_WHATSAPP_TRANSPORT=qr` is set in Reid and Supabase. Do not re-enable without an explicit Owner migration decision.
+- An Owner can check health from WhatsApp with `حالة النظام`, `حالة الموقع`, `حالة السيرفر` or `حالة واتساب`. Host metrics are read by the API container itself; no host timer or sudo is required.
+- Before rebuilding `api`, tag the running image (for example `docker tag reid-services:local reid-services:rollback-YYYYMMDD`) and confirm the outbox has no pending item. Roll back by retagging that image as `reid-services:local` and running `docker compose up -d --no-deps api`.
 
 Database changes remain additive migrations with reviewed RLS. Apply to the linked project, run live allow/deny tests with disposable identities, clean them in `finally`, and reconcile migration history only after the exact schema is verified. Only the Owner promotes feature work through the protected branch/release process.

@@ -40,6 +40,7 @@ export function parseWorkshopCommand(text) {
   const value=clean(text);
   if(/^(?:أضف|اضف|أنشئ|انشئ|سوي|سوّي)\s+(?:لي\s+)?ورشة/iu.test(value))return {kind:'create',input:value};
   if(/^(?:انشر|نشر)\s+(?:ورشة|الورشة)/iu.test(value))return {kind:'publish',query:value.replace(/^(?:انشر|نشر)\s+(?:ورشة|الورشة)\s*/iu,'').trim()};
+  if(/^(?:أخف|اخف|أخفي|اخفي|إخفاء|اخفاء|اسحب\s+نشر)\s+(?:ورشة|الورشة)/iu.test(value))return {kind:'unpublish',query:value.replace(/^(?:أخف|اخف|أخفي|اخفي|إخفاء|اخفاء|اسحب\s+نشر)\s+(?:ورشة|الورشة)\s*/iu,'').trim()};
   if(/^(?:الغ|ألغي|الغي)\s+(?:ورشة|الورشة)/iu.test(value))return {kind:'cancel',query:value.replace(/^(?:الغ|ألغي|الغي)\s+(?:ورشة|الورشة)\s*/iu,'').trim()};
   const details=/(?:تفاصيل|معلومات|موعد|مواعيد|اعرض|اظهر|أظهر|وش|ما هي).*(?:الورش|الورشة|ورشة)|^(?:الورش|الورشة)$/iu.test(value);
   return details?{kind:'list',query:value}:null;
@@ -148,9 +149,48 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     return {handled:true,text:'تم إنشاء الملف وإرساله لك هنا ✅'};
   }
 
+  async function pendingPermissionError(identity,action) {
+    // A preview is not a durable permission grant. The caller resolves the
+    // sender's current identity for every inbound message, including approvals.
+    switch(action.kind){
+      case 'send_text':
+      case 'send_artifact': {
+        if(!['company','any'].includes(identity.outbound_scope))return 'outbound_disabled';
+        if(identity.outbound_scope==='company'){
+          const recipient=await check(admin.from('whatsapp_admin_profiles').select('user_id').eq('phone_e164',action.recipient_phone).eq('enabled',true).maybeSingle());
+          if(!recipient)return 'recipient_not_active_company_member';
+          const [control,roles]=await Promise.all([
+            check(admin.from('account_controls').select('status').eq('user_id',recipient.user_id).maybeSingle()),
+            check(admin.from('user_roles').select('role').eq('user_id',recipient.user_id)),
+          ]);
+          if(control?.status!=='active'||!roles.some(row=>row.role!=='guest'))return 'recipient_not_active_company_member';
+        }
+        return null;
+      }
+      case 'workshop_create':
+      case 'workshop_publish':
+      case 'workshop_cancel':
+        return identity.workshops_enabled&&hasRole(identity,workshopManagerRoles)?null:'workshops_permission_revoked';
+      case 'workshop_update':
+        // This action can only withdraw publication. Never pass a model- or
+        // caller-supplied update object through to the service-role client.
+        if(action.payload?.status!=='draft'||typeof action.payload.workshop_id!=='string'||!action.payload.workshop_id.trim()||Object.keys(action.payload).some(key=>!['workshop_id','status'].includes(key)))return 'unsupported_action';
+        return identity.workshops_enabled&&hasRole(identity,workshopManagerRoles)?null:'workshops_permission_revoked';
+      case 'note_delete':
+        return identity.notes_enabled?null:'notes_permission_revoked';
+      default:
+        return 'unsupported_action';
+    }
+  }
+
   async function executePending(identity,chat) {
     const action=await check(admin.from('whatsapp_actions').select('*').eq('requester_id',identity.id).eq('conversation_id',chat.id).eq('status','pending_confirmation').gt('expires_at',new Date().toISOString()).order('created_at',{ascending:false}).limit(1).maybeSingle());
     if(!action)return null;
+    const permissionError=await pendingPermissionError(identity,action);
+    if(permissionError){
+      await check(admin.from('whatsapp_actions').update({status:'cancelled',error_code:permissionError,updated_at:new Date().toISOString()}).eq('id',action.id).eq('status','pending_confirmation'));
+      return {handled:true,text:'لم يتم تنفيذ الطلب؛ صلاحياته الحالية لا تسمح به أو لم يعد متاحًا. ألغيت التأكيد السابق، ويمكنك طلبه مجددًا بعد تحديث الصلاحيات.'};
+    }
     const claimed=await check(admin.from('whatsapp_actions').update({status:'running',updated_at:new Date().toISOString()}).eq('id',action.id).eq('status','pending_confirmation').select('*').maybeSingle());
     if(!claimed)return {handled:true,text:'هذا الطلب سبق حسمه أو انتهت صلاحيته.'};
     try{
@@ -167,11 +207,11 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
         await check(admin.from('whatsapp_actions').update({status:'completed',completed_at:new Date().toISOString(),output_summary:`workshop:${row.id}`,updated_at:new Date().toISOString()}).eq('id',action.id));
         return {handled:true,text:`تمت إضافة الورشة «${row.title_ar}» كمسودة ✅\nراجعها وانشرها من https://reidpro.com/workshops`};
       }
-      if(['workshop_publish','workshop_cancel'].includes(action.kind)){
-        const status=action.kind==='workshop_publish'?'published':'cancelled';
+      if(['workshop_publish','workshop_cancel','workshop_update'].includes(action.kind)){
+        const status=action.kind==='workshop_publish'?'published':action.kind==='workshop_update'?'draft':'cancelled';
         const row=await check(admin.from('workshops').update({status}).eq('id',action.payload.workshop_id).select('id,title_ar').single());
         await check(admin.from('whatsapp_actions').update({status:'completed',completed_at:new Date().toISOString(),output_summary:`workshop:${row.id}:${status}`,updated_at:new Date().toISOString()}).eq('id',action.id));
-        return {handled:true,text:`تم ${status==='published'?'نشر':'إلغاء'} ورشة «${row.title_ar}» ✅`};
+        return {handled:true,text:status==='draft'?`تم إخفاء ورشة «${row.title_ar}» وإعادتها إلى مسودة ✅`: `تم ${status==='published'?'نشر':'إلغاء'} ورشة «${row.title_ar}» ✅`};
       }
       if(action.kind==='note_delete'){
         await check(admin.from('assistant_notes').update({status:'archived'}).eq('id',action.payload.note_id).eq('owner_id',identity.id));
@@ -205,11 +245,15 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
       const preview=`ورشة جديدة كمسودة:\n${payload.title_ar} / ${payload.title_en}\n${new Intl.DateTimeFormat('ar-OM',{timeZone:'Asia/Muscat',dateStyle:'medium',timeStyle:'short'}).format(new Date(payload.start_at))}\nالسعة: ${payload.capacity} — السعر: ${payload.price_omr} ر.ع`;
       const action=await createAction(identity,chat,'workshop_create',payload,preview,{level:1});return {handled:true,text:`${preview}\n\nاكتب «موافقة» لإضافتها كمسودة أو «إلغاء».`,actionId:action.id};
     }
+    const wanted=clean(command.query).replace(/^[«"\s]+|[»"\s.!؟?،,]+$/gu,'').toLowerCase();
+    if(!wanted)return {handled:true,text:'اكتب اسم الورشة التي تريد تعديلها. مثال: أخف الورشة مقدمة في الذكاء الاصطناعي.'};
     const candidates=await check(admin.from('workshops').select('id,title_ar,title_en,status').order('created_at',{ascending:false}).limit(30));
-    const wanted=clean(command.query).toLowerCase(),row=candidates.find(item=>!wanted||item.title_ar.toLowerCase().includes(wanted)||item.title_en.toLowerCase().includes(wanted))||(!wanted&&candidates[0]);
-    if(!row)return {handled:true,text:'ما لقيت الورشة المقصودة. اكتب اسمها بشكل أوضح.'};
-    const kind=command.kind==='publish'?'workshop_publish':'workshop_cancel',verb=command.kind==='publish'?'نشر':'إلغاء';
-    const action=await createAction(identity,chat,kind,{workshop_id:row.id},`${verb} ورشة «${row.title_ar}»`,{level:2});return {handled:true,text:`تأكيد L2: ${verb} ورشة «${row.title_ar}».\nاكتب «موافقة» للتنفيذ أو «إلغاء».`,actionId:action.id};
+    const matches=candidates.filter(item=>item.title_ar.toLowerCase().includes(wanted)||item.title_en.toLowerCase().includes(wanted));
+    if(!matches.length)return {handled:true,text:'ما لقيت الورشة المقصودة. اكتب اسمها بشكل أوضح.'};
+    if(matches.length>1)return {handled:true,text:`لقيت أكثر من ورشة بهذا الاسم:\n${matches.slice(0,5).map(item=>`• ${item.title_ar}`).join('\n')}\nاكتب الاسم كاملًا لتحديد ورشة واحدة.`};
+    const row=matches[0],kind=command.kind==='publish'?'workshop_publish':command.kind==='unpublish'?'workshop_update':'workshop_cancel',verb=command.kind==='publish'?'نشر':command.kind==='unpublish'?'إخفاء وإعادة إلى مسودة':'إلغاء';
+    const payload=command.kind==='unpublish'?{workshop_id:row.id,status:'draft'}:{workshop_id:row.id};
+    const action=await createAction(identity,chat,kind,payload,`${verb} ورشة «${row.title_ar}»`,{level:2});return {handled:true,text:`${verb} ورشة «${row.title_ar}».\nاكتب «موافقة» للتنفيذ أو «إلغاء».`,actionId:action.id};
   }
 
   async function handleNote(identity,chat,command) {
@@ -229,7 +273,7 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
   }
 
   return async function handle({identity,chat,text}) {
-    const value=clean(text);if(!value)return null;
+    const value=chat.jid?.endsWith('@g.us')?clean(text).replace(/^(?:ري[ّ]?د|reid)(?:\s*[:،,]\s*|\s+)/iu,''):clean(text);if(!value)return null;
     await admin.from('whatsapp_actions').update({status:'expired',error_code:'confirmation_expired',updated_at:new Date().toISOString()}).eq('requester_id',identity.id).eq('status','pending_confirmation').lte('expires_at',new Date().toISOString());
     if(isCancellation(value)){const cancelled=await check(admin.from('whatsapp_actions').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('requester_id',identity.id).eq('conversation_id',chat.id).eq('status','pending_confirmation').select('id'));return cancelled.length?{handled:true,text:'تم إلغاء الطلب، وما تنفذ شيء 👍🏻'}:null;}
     if(isConfirmation(value))return executePending(identity,chat);
