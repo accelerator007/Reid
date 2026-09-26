@@ -10,6 +10,7 @@ import { createAssistantActions } from './assistant-actions.mjs';
 import { createInboundPersistence } from './inbound.mjs';
 import { createOperationsHandler } from './operations.mjs';
 import { createOperationsSnapshot, sampleLocalHost } from './operations-snapshot.mjs';
+import { clockContext, clockReply, parseClockQuestion } from './clock.mjs';
 import { createImageCache, mediaLimits, mediaPlaceholder, transcribeAudio, transcriptBody } from './media.mjs';
 import { createTyping, pacingDelay, reactions, splitReply } from './signals.mjs';
 import { createMemory, describeStyle } from './memory.mjs';
@@ -357,6 +358,12 @@ async function processJob() {
   const stopTyping=signalsEnabled?typingFor(chat.jid):()=>{};
   try {
     const identity=await assistantIdentity(job.sender_phone);
+    const clock=parseClockQuestion(job.input);
+    if(clock){
+      await queueText(chat,clockReply(clock),{dedupeKey:`clock:${job.id}`,replyTo:job.message_id});
+      await check(admin.from('qr_jobs').update({state:'done'}).eq('id',job.id).eq('state','running'));
+      return;
+    }
     const operationsResult=await handleOperations({identity,text:job.input});
     if(operationsResult?.handled){
       await queueText(chat,operationsResult.text,{dedupeKey:`operations:${job.id}`,replyTo:job.message_id});
@@ -410,7 +417,7 @@ async function processJob() {
     // A photo is attached to the turn it arrived with, so the model sees the
     // picture and the sentence about it together.
     if(photo)for(let index=turns.length-1;index>=0;index-=1)if(turns[index].role==='user'){turns[index]={...turns[index],images:[photo]};break;}
-    const seeing=photo?`${system}\nأرسل المستخدم صورة مع رسالته الأخيرة. انظر إليها فعلًا: صف ما يظهر بدقة، واقرأ أي نص أو أرقام فيها كما هي، ثم نفّذ طلبه عليها. لا تخمّن ما لا يظهر، وقل بوضوح إذا كانت غير واضحة.`:system;
+    const seeing=photo?`${system}\n${clockContext()}\nأرسل المستخدم صورة مع رسالته الأخيرة. انظر إليها فعلًا: صف ما يظهر بدقة، واقرأ أي نص أو أرقام فيها كما هي، ثم نفّذ طلبه عليها. لا تخمّن ما لا يظهر، وقل بوضوح إذا كانت غير واضحة.`:`${system}\n${clockContext()}`;
     const response=await fetch(`${env.AI_URL}/api/chat`,{
       method:'POST',headers:{'Content-Type':'application/json','x-reid-origin-token':env.AI_TOKEN},signal:AbortSignal.timeout(110000),
       body:JSON.stringify({messages:[{role:'system',content:seeing},...turns],profile:'chat'})
@@ -422,7 +429,7 @@ async function processJob() {
     if(identity&&repeatsOpener(modelBody,chat.recent_openers)){
       const retry=await fetch(`${env.AI_URL}/api/chat`,{
         method:'POST',headers:{'Content-Type':'application/json','x-reid-origin-token':env.AI_TOKEN},signal:AbortSignal.timeout(60000),
-        body:JSON.stringify({messages:[{role:'system',content:`${system}\nبدأت ردك بنفس بداية رد سابق. أعد صياغته ببداية وتركيب مختلفين تمامًا مع نفس المعنى.`},...turns],profile:'chat'}),
+        body:JSON.stringify({messages:[{role:'system',content:`${seeing}\nبدأت ردك بنفس بداية رد سابق. أعد صياغته ببداية وتركيب مختلفين تمامًا مع نفس المعنى.`},...turns],profile:'chat'}),
       }).catch(()=>null);
       const alternative=retry?.ok?(await retry.json()).message?.content:null;
       if(alternative&&!repeatsOpener(alternative,chat.recent_openers))modelBody=alternative;

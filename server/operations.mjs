@@ -6,7 +6,7 @@ const healthLabels = Object.freeze({
   unknown: 'لم يتم التحقق',
 });
 
-function normalizeCommand(text) {
+export function normalizeCommand(text) {
   return String(text || '').normalize('NFKC')
     .replace(/[\u064b-\u065f\u0670\u0640]/gu, '')
     .replace(/[أإآ]/gu, 'ا')

@@ -177,7 +177,11 @@ async function scopedMemories(admin: ReturnType<typeof createClient>, agentId: s
 }
 
 async function buildAgentContext(admin: ReturnType<typeof createClient>, agentId: string, requesterId: string, args: Record<string, unknown> = {}) {
-  const context: Record<string, unknown> = { meta: { generated_at: new Date().toISOString(), timezone: 'Asia/Muscat', company: 'Reid' } };
+  const now = new Date();
+  // A model has no clock; without an explicit local time it quotes stale times
+  // from memory. This value is the only authority for "now".
+  const localTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Muscat', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
+  const context: Record<string, unknown> = { meta: { generated_at: now.toISOString(), timezone: 'Asia/Muscat', local_time: `${localTime} (Asia/Muscat, UTC+4)`, clock_rule: 'Use meta.local_time for any question about the current time or date; never reuse a time found in memory or conversation.', company: 'Reid' } };
   if (['ceo', 'operations', 'analytics'].includes(agentId)) {
     context.projects = await rows(admin, 'projects', 'id,name,type,status,start_date,target_date,manager_id', 'updated_at');
     context.tasks = await rows(admin, 'tasks', 'id,title,status,priority,due_at,project_id,research_id,assignee_id');
