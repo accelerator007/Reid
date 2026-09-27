@@ -20,12 +20,14 @@ signed in using its email/password. Global `auth.enable_signup=false` prevents
 public account creation; `auth.email.enable_signup=true` is required by this CLI
 configuration to keep the email provider itself enabled.
 
-Google is still **not configured**: the destination has no Google client ID or
-secret, and this session cannot control the user's Windows Chrome/Google Cloud
-session. An authorized Google web OAuth client must allow
-`https://cfxntjnewkmlvkogfxyu.supabase.co/auth/v1/callback`, then its ID/secret must
-be saved in the destination provider settings. The UI checks availability before
-redirecting, so an unconfigured Google button explains the email alternative.
+Google was configured by the Owner on 2026-09-27. The public Auth settings report
+Google enabled, while the management configuration confirms both client ID and
+secret are present. A live authorization probe returned HTTP 302 to
+`accounts.google.com` with only `email profile` scope and the exact callback
+`https://cfxntjnewkmlvkogfxyu.supabase.co/auth/v1/callback`. The Owner's migrated
+account already has Google and email identities, so the same email resolves to the
+preserved account. The final Google consent/account-selection click remains a
+human browser action and was not automated.
 The company Owner account and its original UUID/role were verified. Existing
 passwords do not transfer; accounts need a new password. No migration email or
 test WhatsApp message was sent. Custom SMTP is not configured, so broad email
@@ -104,8 +106,8 @@ production back at the old database and lose activity. The existing QR volume an
 `SESSION_KEY` must always stay together. Compose's `migrated` profile starts the
 new worker with `/home/reid/.config/reid-os/runner.env`.
 
-Remaining integration work: Google OAuth credentials/callback, custom SMTP/email
-acceptance, web-search provider credentials, and optional direct ai-lap telemetry.
+Remaining integration work: custom SMTP/email acceptance, web-search provider
+credentials, and optional direct ai-lap telemetry.
 No claim is made that unavailable source OAuth/SMTP/cron configuration, non-exposed
 schemas or all historical Storage service metadata were reproduced.
 
