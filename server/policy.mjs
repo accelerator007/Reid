@@ -1,3 +1,14 @@
+import { timingSafeEqual } from 'node:crypto';
+
+// A service-to-service token check that fails closed: no configured token, a
+// missing header or any length mismatch is a refusal, and equal lengths are
+// compared in constant time.
+export function internalTokenValid(expected, supplied) {
+  if (typeof expected !== 'string' || !expected || typeof supplied !== 'string') return false;
+  const left = Buffer.from(expected), right = Buffer.from(supplied);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
 export function isOwner(roles, status) {
   return status === 'active' && roles.includes('owner');
 }

@@ -58,6 +58,13 @@ class AdapterContract(unittest.TestCase):
         self.assertNotIn("stop", options)
         self.assertNotIn("mirostat", options)
 
+    def test_transcription_language_hint_is_limited_to_arabic_and_english(self):
+        self.assertEqual(adapter.transcribe_language({"language": "ar"}), "ar")
+        self.assertEqual(adapter.transcribe_language({"language": "en"}), "en")
+        self.assertIsNone(adapter.transcribe_language({"language": "fr"}))
+        self.assertIsNone(adapter.transcribe_language({"language": ["ar"]}))
+        self.assertIsNone(adapter.transcribe_language({}))
+
 
 if __name__ == "__main__":
     unittest.main()

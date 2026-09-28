@@ -49,6 +49,17 @@ DEFAULT_PROFILE = "strict"
 OPTION_BOUNDS = {"temperature": (0.0, 1.2), "top_p": (0.1, 1.0), "repeat_penalty": (1.0, 2.0)}
 
 
+TRANSCRIBE_LANGUAGES = frozenset({"ar", "en"})
+
+
+def transcribe_language(body: dict) -> str | None:
+    """An optional language hint. Short Gulf Arabic phrases such as "تم" are
+    easily auto-detected as English; callers that know the speaker's language
+    pass it. Anything else keeps Whisper's automatic detection."""
+    wanted = body.get("language")
+    return wanted if isinstance(wanted, str) and wanted in TRANSCRIBE_LANGUAGES else None
+
+
 def chat_options(body: dict) -> tuple[str, dict]:
     """Resolve a decoding profile and clamp any caller override into safe bounds."""
     wanted = body.get("profile")
@@ -168,7 +179,8 @@ class Handler(BaseHTTPRequestHandler):
                     temp.write(raw)
                     path = temp.name
                 with _transcriber_lock:
-                    segments, info = transcriber().transcribe(path, beam_size=5, vad_filter=True)
+                    segments, info = transcriber().transcribe(
+                        path, beam_size=5, vad_filter=True, language=transcribe_language(body))
                     text = " ".join(segment.text.strip() for segment in segments if segment.text.strip()).strip()
                 return self.reply(200, {"text": text[:16000], "language": info.language})
             except Exception:

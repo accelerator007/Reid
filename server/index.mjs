@@ -4,7 +4,7 @@ import makeWASocket, { DisconnectReason, Browsers, downloadMediaMessage, makeCac
 import pino from 'pino';
 import QRCode from 'qrcode';
 import { createAuthStore } from './auth-store.mjs';
-import { isOwner, inboundText, cleanReply, maySend, whatsappText } from './policy.mjs';
+import { isOwner, inboundText, cleanReply, maySend, whatsappText, internalTokenValid } from './policy.mjs';
 import { processReminders } from './reminders.mjs';
 import { createAssistantActions } from './assistant-actions.mjs';
 import { createInboundPersistence } from './inbound.mjs';
@@ -243,6 +243,13 @@ app.post('/api/public/chat',async(req,res)=>{
     if(!response.ok)throw Error('model_unavailable');
     res.json({reply:cleanReply((await response.json()).message?.content),handoff:false});
   }catch{res.status(503).json({error:'assistant_unavailable'});}finally{publicBusy=false;}
+});
+// Reid Assistant's alert engine reads the same operations snapshot over the
+// private Docker network. nginx proxies only /api/, so this path is never
+// reachable from the Internet, and it answers 404 without the internal token.
+app.get('/internal/operations/status',async(req,res)=>{
+  if(!internalTokenValid(env.REID_OPS_STATUS_TOKEN,req.get('x-reid-internal-token')))return res.status(404).end();
+  res.json(await getOperationsSnapshot());
 });
 app.use('/api',async(req,res,next)=>{
   try {

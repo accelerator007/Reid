@@ -81,6 +81,24 @@ services:
       api:
         condition: service_healthy
 
+  # Reid Assistant (مساعد ريد): emergency alert engine, phone-call webhooks and
+  # the desktop assistant API. Source: ../reid-assistant. Opt-in profile so the
+  # website never depends on it; nginx resolves it lazily and answers 502 when
+  # it is not running.
+  assistant:
+    build: ../reid-assistant
+    image: reid-assistant:local
+    container_name: reid-assistant
+    restart: unless-stopped
+    profiles: [assistant]
+    env_file: /home/reid/.config/reid-os/assistant.env
+    depends_on: [ai-relay, api]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+
   tunnel:
     image: cloudflare/cloudflared:2026.9.0
     container_name: reid-tunnel

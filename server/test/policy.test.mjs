@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isOwner, inboundText, maySend, cleanReply, whatsappText } from '../policy.mjs';
+import { isOwner, inboundText, maySend, cleanReply, whatsappText, internalTokenValid } from '../policy.mjs';
 
 test('owner access fails closed for suspension and staff', () => {
   assert.equal(isOwner(['owner'], 'active'), true);
@@ -41,4 +41,13 @@ test('WhatsApp text drops grounding citations and renders Markdown the way Whats
   assert.equal(whatsappText(answer),'المعلومات غير متوفرة في سجلات الشركة.\n\n*الخطوة القادمة:* راجع الموقع: https://reidpro.com.\n*ملخص*');
   assert.equal(whatsappText('نص عادي بدون مصادر'),'نص عادي بدون مصادر');
   assert.equal(whatsappText('[Reid:memory:only-a-citation]'),'[Reid:memory:only-a-citation]');
+});
+
+test('internal service token fails closed', () => {
+  assert.equal(internalTokenValid('secret-token', 'secret-token'), true);
+  assert.equal(internalTokenValid('secret-token', 'secret-tokeN'), false);
+  assert.equal(internalTokenValid('secret-token', 'secret'), false);
+  assert.equal(internalTokenValid('secret-token', undefined), false);
+  assert.equal(internalTokenValid('', ''), false);
+  assert.equal(internalTokenValid(undefined, 'anything'), false);
 });
