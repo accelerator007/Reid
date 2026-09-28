@@ -5,7 +5,7 @@ from agent_quality import assess, language, revision_instruction, subject
 RUNNER_URL=os.environ['REID_RUNNER_URL']; RUNNER_TOKEN=os.environ['REID_RUNNER_TOKEN']; ORIGIN_TOKEN=os.environ['REID_ORIGIN_TOKEN']
 ADAPTER=os.environ.get('REID_ADAPTER_URL','http://127.0.0.1:11436')
 REMOTE_ADAPTER=os.environ.get('REID_REMOTE_ADAPTER')=='1'
-VERSION='1.2.1'; last_heartbeat=0.0; last_ping=None
+VERSION='1.2.2'; last_heartbeat=0.0; last_ping=None
 
 def telemetry():
     # A relay worker cannot measure the remote GPU host from its own /proc.
@@ -33,17 +33,27 @@ def post(url,payload,token_header='authorization',token=None,timeout=140):
 
 def adapter(path,payload): return post(ADAPTER+path,payload,'x-reid-origin-token',ORIGIN_TOKEN)
 
+def adapter_available():
+    request=urllib.request.Request(ADAPTER+'/health',headers={'x-reid-origin-token':ORIGIN_TOKEN})
+    try:
+      with urllib.request.urlopen(request,timeout=5) as response:return 200 <= response.status < 300
+    except Exception:return False
+
 def main():
   global last_heartbeat, last_ping
   while True:
     try:
+      ready=adapter_available()
       if time.monotonic()-last_heartbeat > 5:
         ping_started=time.monotonic()
-        payload={'action':'heartbeat','version':VERSION,'model':'gemma4:12b','gpu':None if REMOTE_ADAPTER else 'NVIDIA RTX 3080 Ti 12GB',**telemetry()}
+        payload={'action':'heartbeat','status':'online' if ready else 'degraded','version':VERSION,'model':'gemma4:12b','gpu':None if REMOTE_ADAPTER else 'NVIDIA RTX 3080 Ti 12GB',**telemetry()}
         if last_ping is not None: payload['pingMs']=last_ping
         post(RUNNER_URL,payload)
         last_ping=round((time.monotonic()-ping_started)*1000)
         last_heartbeat=time.monotonic()
+      if not ready:
+        time.sleep(3)
+        continue
       claimed=post(RUNNER_URL,{'action':'claim'}); job=claimed.get('job')
       if not job: time.sleep(3); continue
       started=time.monotonic()

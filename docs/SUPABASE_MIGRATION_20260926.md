@@ -81,6 +81,15 @@ operations status returned healthy website, database, AI, runner and connected
 WhatsApp, with zero pending/failed/uncertain queue items. The public health route
 returned 200. Browser headers are needed for the public edge's bot filtering.
 
+On 2026-09-28 an Owner-authorized live WhatsApp status test completed and received
+a WhatsApp message ID. It then exposed a later `ai-lap` network outage: the private
+address was unreachable but the relay worker still published an online heartbeat.
+Runner v1.2.2 now probes the authenticated adapter health route, reports degraded,
+and stops claiming jobs while the adapter is unavailable. The updated Edge Function
+is deployed. A second live status response correctly reported AI unavailable and
+the runner needing attention; both test jobs completed and all queues returned to
+zero. Local inference resumes automatically when `ai-lap` becomes reachable.
+
 ## Recovery and operational controls
 
 Private encrypted exports, private SQL staging files, credentials and detailed

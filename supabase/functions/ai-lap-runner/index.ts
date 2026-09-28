@@ -232,7 +232,7 @@ Deno.serve(async request => {
       const numberOrNull=(value:unknown)=>Number.isFinite(Number(value))?Number(value):null;
       const heartbeat = await admin.from('agent_runner_status').upsert({
         id: 'ai-lap',
-        status: 'online',
+        status: body.status === 'degraded' ? 'degraded' : 'online',
         version: String(body.version || 'unknown').slice(0, 40),
         model: String(body.model || 'gemma4:12b').slice(0, 80),
         gpu: String(body.gpu || '').slice(0, 120) || null,

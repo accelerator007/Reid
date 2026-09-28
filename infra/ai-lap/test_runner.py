@@ -1,6 +1,6 @@
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 with patch.dict(os.environ, {'REID_RUNNER_URL': 'https://example.invalid',
                              'REID_RUNNER_TOKEN': 'test', 'REID_ORIGIN_TOKEN': 'test'}):
@@ -17,6 +17,19 @@ class RemoteTelemetryTests(unittest.TestCase):
             local_files.assert_not_called()
             gpu_probe.assert_not_called()
             cpu_probe.assert_not_called()
+
+    def test_adapter_health_requires_a_successful_authenticated_response(self):
+        response = MagicMock()
+        response.status = 200
+        response.__enter__.return_value = response
+        with patch.object(runner.urllib.request, 'urlopen', return_value=response) as request:
+            self.assertTrue(runner.adapter_available())
+            sent = request.call_args.args[0]
+            self.assertEqual(sent.full_url, 'http://127.0.0.1:11436/health')
+            self.assertEqual(sent.get_header('X-reid-origin-token'), 'test')
+
+        with patch.object(runner.urllib.request, 'urlopen', side_effect=TimeoutError):
+            self.assertFalse(runner.adapter_available())
 
 
 if __name__ == '__main__':
