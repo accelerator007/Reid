@@ -324,7 +324,12 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     }
     if(!found.results.length)return {handled:true,text:'ما لقيت نتائج واضحة لهذا السؤال على الويب.'};
     const context=found.results.map(item=>wrapUntrusted(item.url,`${item.title}\n${item.snippet}`)).join('\n');
-    const answer=await aiChat(webAnswerPrompt,`سؤال المستخدم: ${clean(userText).slice(0,500)}\n${context}`,{profile:'report'});
+    let answer;
+    try{answer=await aiChat(webAnswerPrompt,`سؤال المستخدم: ${clean(userText).slice(0,500)}\n${context}`,{profile:'report'});}
+    catch{
+      const direct=found.results.slice(0,3).map((item,index)=>`${index+1}. ${item.title}${item.snippet?`\n${item.snippet}`:''}`).join('\n\n');
+      return {handled:true,text:`تعذر التلخيص الآلي الآن، لكن هذه مقتطفات نتائج البحث الخارجية كما وردت:\n${direct}\n\nالمصادر:\n${sourcesLine(found.results)}`};
+    }
     return {handled:true,text:`${clean(answer)}\n\nمن الويب، مو من بيانات ريّد:\n${sourcesLine(found.results)}`};
   }
 
