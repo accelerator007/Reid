@@ -2,6 +2,13 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-09-28 agent operations interface simplified
+
+- At the Owner's request, the experimental Three.js desert world was removed from the Agent dashboard. The renderer, styles, benchmark, harness, dedicated unit/E2E suites, colour tokens, and `three`/`@types/three` dependencies were deleted rather than left as dormant production code.
+- `/dashboard` now presents the same live agent state, provider, approval level, queue count, tools, manual-run controls, pause/enable controls, and run history in a responsive card roster with a single selected-agent inspector. The inspector no longer creates a second internal scrollbar; it follows the page on desktop and returns to normal document flow on smaller screens.
+- The Production web image was rebuilt with the replacement Supabase build environment and activated at 16:49 UTC. `reid-web` and `reid-services` are healthy, local and public `/healthz` return `200`, `/dashboard` returns `200` with the security headers, the unauthenticated operations endpoint still returns `401`, and the deployed assets contain the new Arabic `إدارة الوكلاء` interface with no 3D-world artifact. Rollback image: `reid-web:pre-agent-roster-20260928`.
+- Verification: clean TypeScript/Vite production build; 180/180 frontend checks across 11 files; `npm ci` reported no vulnerabilities; deployed image `sha256:ab4108dbb479865dbf3d0c20ad6ec2d13b2e6e10045910c5cf88c27787429530` is healthy. No database, API, agent policy, or WhatsApp behavior changed.
+
 ## 2026-09-26 replacement Supabase project — production migrated
 
 - Production switched at 18:24 UTC to Owner-selected `cfxntjnewkmlvkogfxyu`. Web, full candidate API, WhatsApp and the new relay queue worker use the new project. Original encrypted QR credentials were preserved and WhatsApp reconnected. The old source `pkogchbrknwmzefjklkr` remains intact; its management API is still inaccessible.

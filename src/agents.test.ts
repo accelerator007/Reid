@@ -93,4 +93,11 @@ describe('ai-lap primary runtime contract', () => {
     expect(commandCenter).toContain("owner && <SystemOverview");
     expect(commandCenter).toContain("postgres_changes");
   });
+
+  it('uses the compact operating roster without the experimental 3D world',()=>{
+    expect(commandCenter).toContain('className="agent-roster-grid"');
+    expect(commandCenter).toContain('className="agent-inspector"');
+    expect(commandCenter).not.toContain('AgentWorld');
+    expect(commandCenter).not.toContain('agent-world');
+  });
 });

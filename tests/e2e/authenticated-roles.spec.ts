@@ -112,7 +112,7 @@ test.describe('authenticated employee role journeys', () => {
     await page.locator('input[name="email"]').fill(users.owner.email);
     await page.locator('input[name="password"]').fill(password);
     await page.locator('form button.primary').click();
-    await expect(page.getByRole('heading', { name: 'خريطة قيادة الوكلاء' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'إدارة الوكلاء' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'مركز قيادة النظام' })).toBeVisible();
     const runnerCard=page.locator('.runner-card');
     await expect(runnerCard).toContainText('gemma4:12b');
