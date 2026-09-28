@@ -1338,7 +1338,7 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
     case "connections": return lang === "ar" ? "الاتصالات" : "Connections";
     case "operations": return lang === "ar" ? "إدارة الأعمال" : "Operations";
     case "workshops": return lang === "ar" ? "الورشات" : "Workshops";
-    case "assistant": return lang === "ar" ? "مساعد ريّد" : "Reid assistant";
+    case "assistant": return lang === "ar" ? "فريق الوكلاء" : "Agent team";
     case "admin": return lang === "ar" ? "إدارة النظام" : "Administration";
     case "owner": return lang === "ar" ? "موجز المالك" : "Owner brief";
     case "home":
@@ -1364,7 +1364,7 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
 
 const workspaceIcons: Partial<Record<Page, React.ReactNode>> = {
   today: <CalendarDays />, inbox: <MessageCircle />, connections: <Settings2 />,
-  operations: <BriefcaseBusiness />, assistant: <Sparkles />,
+  operations: <BriefcaseBusiness />, assistant: <UsersRound />,
   workshops: <GraduationCap />,
   admin: <ShieldCheck />,
   owner: <Crown />,

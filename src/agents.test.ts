@@ -9,6 +9,7 @@ const agent = (over: Partial<AgentRow>): AgentRow => ({ id: 'hr', name: 'HR', st
 
 const localPrimaryMigration=readFileSync(new URL('../supabase/migrations/202609060005_ollama_primary_gemini_fallback.sql',import.meta.url),'utf8');
 const localRunner=readFileSync(new URL('../supabase/functions/ai-lap-runner/index.ts',import.meta.url),'utf8');
+const gateway=readFileSync(new URL('../supabase/functions/llm-gateway/index.ts',import.meta.url),'utf8');
 const commandCenter=readFileSync(new URL('./agent-command.tsx',import.meta.url),'utf8');
 const telemetryMigration=readFileSync(new URL('../supabase/migrations/202609070002_owner_command_center_metrics.sql',import.meta.url),'utf8');
 const hostRunner=readFileSync(new URL('../infra/ai-lap/reid_agent_runner.py',import.meta.url),'utf8');
@@ -99,5 +100,20 @@ describe('ai-lap primary runtime contract', () => {
     expect(commandCenter).toContain('className="agent-inspector"');
     expect(commandCenter).not.toContain('AgentWorld');
     expect(commandCenter).not.toContain('agent-world');
+  });
+});
+
+describe('agent team room runtime contract',()=>{
+  it('binds every generated room reply to an authorized room and a real run',()=>{
+    expect(gateway).toContain("from('agent_rooms')");
+    expect(gateway).toContain(".eq('created_by',requesterId)");
+    expect(gateway).toContain("from('agent_room_messages').insert");
+    expect(gateway).toContain('run_id:created.id');
+  });
+
+  it('persists the complete asynchronous output back into the room',()=>{
+    expect(localRunner).toContain("from('agent_room_messages').update");
+    expect(localRunner).toContain('patch.body=body.slice(0,12000)');
+    expect(localRunner).toContain("updateAgentRoomMessage(admin,run.data.id,'completed',output,null)");
   });
 });

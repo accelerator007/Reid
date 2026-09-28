@@ -115,14 +115,22 @@ export const needsApproval = (approvalLevel: number) => approvalLevel >= 2;
 export const canRun = (agent: AgentRow, provider: ProviderRow | undefined) =>
   agent.enabled && agent.status !== 'paused' && !!provider && providerAccepts(provider, agent.classification);
 
-export async function runAgent(agentId: string, input: string, classification: Classification = 'public', history: { role: 'user' | 'assistant'; content: string }[] = []) {
+export async function runAgent(agentId: string, input: string, classification: Classification = 'public', history: { role: 'user' | 'assistant'; content: string }[] = [], room?: { roomId:string; replyToMessageId?:string|null }) {
   if (!supabase) throw new Error('supabase_unavailable');
   const { data, error } = await supabase.functions.invoke('llm-gateway', {
-    body: { action: 'run', agentId, input, classification, history },
+    body: { action: 'run', agentId, input, classification, history, ...(room ? { roomId:room.roomId, replyToMessageId:room.replyToMessageId||null } : {}) },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
   return data as { runId: string; output: string; latencyMs: number; tokenUsage: number | null; status?: string; quality?: { score: number; passed: boolean; flags: string[] } };
+}
+
+export async function agentRunResult(runId:string) {
+  if (!supabase) throw new Error('supabase_unavailable');
+  const {data,error}=await supabase.functions.invoke('llm-gateway',{body:{action:'result',runId}});
+  if(error) throw error;
+  if(data?.error) throw new Error(data.error);
+  return data as {status:RunState;output:string;qualityScore:number|null;qualityFlags:string[];revisionCount:number};
 }
 
 export async function runAgentTool(agentId: string, toolName: string, args: Record<string, unknown>, classification: Classification) {

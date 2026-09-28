@@ -173,6 +173,14 @@ async function notifyWhatsApp(admin: ReturnType<typeof createClient>, runId: str
   });
 }
 
+async function updateAgentRoomMessage(admin:ReturnType<typeof createClient>,runId:string,state:'queued'|'running'|'completed'|'failed',body?:string,error?:string|null){
+  const patch:Record<string,unknown>={state,updated_at:new Date().toISOString()};
+  if(body)patch.body=body.slice(0,12000);
+  if(error!==undefined)patch.error=error?.slice(0,500)||null;
+  const updated=await admin.from('agent_room_messages').update(patch).eq('run_id',runId);
+  if(updated.error)console.error('agent_room_message_update_failed',runId,updated.error.message);
+}
+
 async function completeWithGeminiFallback(admin: ReturnType<typeof createClient>, runId: string, localError: string) {
   if(Deno.env.get('REID_LOCAL_AI_ONLY')==='1') throw new Error('local_only_policy');
   const key=Deno.env.get('GEMINI_API_KEY');
@@ -213,6 +221,7 @@ async function completeWithGeminiFallback(admin: ReturnType<typeof createClient>
   }).eq('id',runId).eq('run_state','running');
   if(updated.error) throw updated.error;
   await admin.from('memories').insert({scope:'agent',scope_id:run.data.agent_id,title:`Run ${runId}`,content:output.slice(0,4000),classification:run.data.classification,created_by:run.data.requested_by,source_run_id:runId});
+  await updateAgentRoomMessage(admin,runId,'completed',output,null);
   await admin.from('agent_run_payloads').delete().eq('run_id',runId);
   await notifyWhatsApp(admin,runId,output,'completed');
 }
@@ -262,6 +271,7 @@ Deno.serve(async request => {
         .eq('id',pending.data.id).eq('run_state','queued').select('id,agent_id,classification,approval_level').maybeSingle();
       if (claimed.error) throw claimed.error;
       if (!claimed.data) return json({ job: null });
+      await updateAgentRoomMessage(admin,claimed.data.id,'running');
       const [payload, agent, provider] = await Promise.all([
         admin.from('agent_run_payloads').select('action,input').eq('run_id',claimed.data.id).single(),
         admin.from('agents').select('system_prompt').eq('id',claimed.data.agent_id).single(),
@@ -294,6 +304,7 @@ Deno.serve(async request => {
       }).eq('id',run.data.id);
       if (updated.error) throw updated.error;
       if (output) await admin.from('memories').insert({scope:'agent',scope_id:run.data.agent_id,title:`Run ${run.data.id}`,content:output.slice(0,4000),embedding,classification:run.data.classification,created_by:run.data.requested_by,source_run_id:run.data.id});
+      if(output) await updateAgentRoomMessage(admin,run.data.id,'completed',output,null);
       await admin.from('agent_run_payloads').delete().eq('run_id',run.data.id);
       await notifyWhatsApp(admin,run.data.id,output?`رد الوكيل:\n${output}`:'اكتمل تنفيذ الأمر.', 'completed');
       return json({ ok:true });
@@ -308,6 +319,7 @@ Deno.serve(async request => {
         const error=`${localError}; ${fallbackError instanceof Error?fallbackError.message:'fallback_failed'}`.slice(0,500);
         const run = await admin.from('agent_runs').update({run_state:'failed',status:'failed',error,finished_at:new Date().toISOString()}).eq('id',body.runId).eq('provider_id','ollama').eq('run_state','running').select('id').single();
         if (run.error) throw new Error('run_not_claimed');
+        await updateAgentRoomMessage(admin,run.data.id,'failed','تعذر تنفيذ المهمة.',error);
         await admin.from('agent_run_payloads').delete().eq('run_id',run.data.id);
         await notifyWhatsApp(admin,run.data.id,'تعذر التنفيذ محليًا وتعذر البديل الاحتياطي. تم تسجيل الخطأ في لوحة الوكلاء.', 'failed');
         return json({ok:false,fallback:'failed'});

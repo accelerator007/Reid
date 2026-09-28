@@ -2,6 +2,14 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-09-28 private agent team room
+
+- `/assistant` is now a durable, private **Agent team** room for Owner/Super Admin/Admin accounts. A user can assign one or several specialists with English or Arabic mentions (for example `@operations`, `@marketing @content`, `@التحليلات`, or `@الجميع`); a message without a mention goes to the CEO orchestrator. Replies show the verified agent identity, state and time and persist across sessions with Realtime updates.
+- Agents receive the last eight completed room turns and can hand a bounded task to a colleague using the explicit `[HANDOFF:@agent_id]` protocol. Only explicit handoffs run, each agent runs at most once per user turn, and automatic handoffs stop after three. This prevents accidental mentions, loops and uncontrolled quota use.
+- Migration `202609280001_agent_team_room.sql` creates the isolated room/message ledger. RLS limits every administrator to their own room, browser clients can insert only their own human messages, cross-room replies are rejected, and only the service-role gateway can attach an agent reply to a real `agent_runs` row. `llm-gateway` and `ai-lap-runner` keep queued/running/completed/failed/cancelled states and full replies synchronized. Sensitive tool actions continue through the existing approval flow.
+- Production project `cfxntjnewkmlvkogfxyu` received the migration and both Edge Functions. Web image `sha256:b7850dda26032b16022a2ec00e44b1ae3078785b919ea9d48c42911b1a5d5563` was activated at 17:09 UTC; local and public health checks return `200`, `/assistant` returns the security headers, and the live bundle contains the team room, handoff and message-ledger code. Rollback image: `reid-web:pre-agent-team-20260928`.
+- Verification: clean TypeScript/Vite production build; 189/189 frontend checks across 12 files; the full isolated PostgreSQL migration/RLS harness passed, including 11/11 agent-room isolation checks. The physical `ai-lap` remains unreachable as recorded below; eligible room work therefore uses the already governed Gemini fallback, subject to its clearance and quota.
+
 ## 2026-09-28 agent operations interface simplified
 
 - At the Owner's request, the experimental Three.js desert world was removed from the Agent dashboard. The renderer, styles, benchmark, harness, dedicated unit/E2E suites, colour tokens, and `three`/`@types/three` dependencies were deleted rather than left as dormant production code.

@@ -340,10 +340,19 @@ async function executeRun(admin: ReturnType<typeof createClient>, run: Run, agen
   return { runId: run.id, output: result.text, latencyMs: latency, tokenUsage: result.tokens, provider: provider.id, quality };
 }
 
+async function updateTeamRoomMessage(admin:ReturnType<typeof createClient>,runId:string,state:'queued'|'running'|'completed'|'failed'|'cancelled',body?:string,error?:string|null) {
+  const patch:Record<string,unknown>={state,updated_at:new Date().toISOString()};
+  if(body) patch.body=body.slice(0,12000);
+  if(error!==undefined) patch.error=error?.slice(0,500)||null;
+  const updated=await admin.from('agent_room_messages').update(patch).eq('run_id',runId);
+  if(updated.error) console.error('agent_room_message_update_failed',runId,updated.error.message);
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: cors });
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   let runId: string | null = null;
+  let roomId: string | null = null;
   try {
     const body = await request.json();
     const internalExpected = Deno.env.get('REID_INTERNAL_GATEWAY_TOKEN') || '';
@@ -390,6 +399,20 @@ Deno.serve(async (request) => {
       }
       return Response.json({status:result.data.run_state,output,qualityScore:result.data.quality_score,qualityFlags:result.data.quality_flags,revisionCount:result.data.revision_count},{headers:cors});
     }
+
+    let replyToMessageId:string|null=null;
+    if(action==='run'&&body.roomId!==undefined) {
+      const candidate=String(body.roomId||'');
+      if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(candidate)) throw new Error('agent_room_invalid');
+      const room=await admin.from('agent_rooms').select('id').eq('id',candidate).eq('created_by',requesterId).maybeSingle();
+      if(room.error||!room.data) throw new Error('agent_room_not_found');
+      roomId=room.data.id;
+      if(body.replyToMessageId) {
+        const reply=await admin.from('agent_room_messages').select('id').eq('id',String(body.replyToMessageId)).eq('room_id',roomId).maybeSingle();
+        if(reply.error||!reply.data) throw new Error('agent_room_reply_invalid');
+        replyToMessageId=reply.data.id;
+      }
+    }
     const input: string = action === 'tool'
       ? JSON.stringify({ toolName: body.toolName || '', arguments: body.arguments || {} })
       : (body.input || '').toString();
@@ -415,6 +438,7 @@ Deno.serve(async (request) => {
       runId = approved.id;
       if (decision === 'rejected') {
         await admin.from('agent_run_payloads').delete().eq('run_id', approved.id);
+        await updateTeamRoomMessage(admin,approved.id,'cancelled','تم رفض المهمة.');
         return Response.json({ runId: approved.id, status: 'cancelled' }, { headers: cors });
       }
 
@@ -428,9 +452,11 @@ Deno.serve(async (request) => {
       if (payloadError) throw payloadError;
       if ((resumedProvider as Provider).kind === 'local' && payload.action !== 'tool') {
         await admin.from('agent_runs').update({run_state:'queued',status:'queued',started_at:null}).eq('id',approved.id);
+        await updateTeamRoomMessage(admin,approved.id,'queued');
         return Response.json({runId:approved.id,status:'queued',provider:resumedProvider.id},{headers:cors});
       }
       const result = await executeRun(admin, approved, resumedAgent as Agent, resumedProvider as Provider, payload.action, payload.input);
+      if(payload.action==='run'&&'output' in result) await updateTeamRoomMessage(admin,approved.id,'completed',String(result.output||'اكتمل التنفيذ.'),null);
       await admin.from('agent_run_payloads').delete().eq('run_id', approved.id);
       return Response.json(result, { headers: cors });
     }
@@ -563,6 +589,14 @@ Deno.serve(async (request) => {
     if (createError) throw createError;
     runId = created.id;
 
+    if(roomId&&action==='run') {
+      const roomMessage=await admin.from('agent_room_messages').insert({
+        room_id:roomId,sender_kind:'agent',sender_agent_id:agent.id,body:'…',run_id:created.id,
+        reply_to:replyToMessageId,state:needsApproval?'pending_approval':provider.kind==='local'?'queued':'running',
+      });
+      if(roomMessage.error) throw new Error('agent_room_message_create_failed');
+    }
+
     // L2+ work stops here until a human approves it through approve_agent_run.
     if (needsApproval) {
       const payload = await admin.from('agent_run_payloads').insert({ run_id: created.id, action, input: executionInput });
@@ -578,6 +612,7 @@ Deno.serve(async (request) => {
     }
 
     const result = await executeRun(admin, created as Run, agent, provider, action, executionInput);
+    if(roomId&&action==='run'&&'output' in result) await updateTeamRoomMessage(admin,created.id,'completed',String(result.output||'اكتمل التنفيذ.'),null);
     return Response.json(result, { headers: cors });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown_error';
@@ -587,6 +622,7 @@ Deno.serve(async (request) => {
         run_state: 'failed', status: 'failed', error: message, finished_at: new Date().toISOString(),
       }).eq('id', runId);
       await admin.from('agent_run_payloads').delete().eq('run_id', runId);
+      await updateTeamRoomMessage(admin,runId,'failed','تعذر تنفيذ المهمة.',message);
     }
     return Response.json({ error: message, runId }, { status: 400, headers: cors });
   }
