@@ -82,6 +82,25 @@ test('web search returns cited external snippets when the local model is offline
   assert.match(result.text, /https:\/\/news\.example\/oman/);
 });
 
+test('a current-news question bypasses the offline intent model and searches directly', async () => {
+  let routed=0, searched=0;
+  const { handle } = build({
+    route: async () => { routed += 1; throw new Error('local_provider_offline'); },
+    webSearch: async (userText,query) => {
+      searched += 1;
+      assert.equal(userText, 'ويش اخر اخبار جامعة صحار؟؟');
+      assert.equal(query, userText);
+      return { query, results: [{ title: 'جامعة صحار', url: 'https://news.example/su', snippet: 'آخر خبر منشور.' }] };
+    },
+    aiChat: async () => { throw new Error('local_provider_offline'); },
+  });
+  const result = await handle({ identity: owner, chat, text: 'ويش اخر اخبار جامعة صحار؟؟' });
+  assert.equal(result.handled, true);
+  assert.equal(routed, 0, 'news detection must not depend on the local intent model');
+  assert.equal(searched, 1);
+  assert.match(result.text, /https:\/\/news\.example\/su/);
+});
+
 test('a routed recipient absent from the request is refused before any action exists', async () => {
   const { admin, handle } = build({
     // A compromised or confused router returning an arbitrary number is the

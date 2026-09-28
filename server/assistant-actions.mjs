@@ -16,6 +16,17 @@ export const isSmalltalk=text=>/^(?:هلا(?:\s+والله)?|مرحبا|السل
 export const isConfirmation=text=>/^(?:ارسلها|أرسلها|ارسله|أرسله|موافقة|وافق|نفذ|نفّذ|confirm|approve|send it)\s*[.!؟?،,]*$/iu.test(clean(text));
 export const isCancellation=text=>/^(?:لا\s*ترسلها|الغ(?:ي)?|ألغي|الغي|رفض|ارفض|cancel|reject)\s*[.!؟?،,]*$/iu.test(clean(text));
 
+// Current news and explicit search wording do not need a model to understand.
+// Keeping this read-only path deterministic means web search still works when
+// the local intent model is unavailable.
+export function parseWebSearchRequest(text) {
+  const value=clean(text);
+  if(!value||value.length>500||linkInText(value))return null;
+  const explicit=/^(?:ابحث|إبحث|دور|دوّر|فتش|شيك)(?:\s+لي)?(?:\s+(?:في\s+)?(?:الويب|النت|الإنترنت|الانترنت))?(?:\s+عن)?\s+.{2,}$/iu.test(value);
+  const news=/(?<![\p{L}\p{N}])(?:(?:اخر|آخر|احدث|أحدث)\s+)?(?:خبر|اخبار|أخبار|تحديثات)(?![\p{L}\p{N}])/iu.test(value);
+  return explicit||news?{query:value}:null;
+}
+
 export function parseOutboundRequest(text) {
   const value=clean(text);
   const recipient='(?:علي|ali|شيخة|شيخه|sheikha)';
@@ -406,6 +417,8 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     // is needed to know that.
     const link=linkInText(value);
     if(link)return handleWebRead(identity,chat,value,link);
+    const search=parseWebSearchRequest(value);
+    if(search)return handleWebSearch(identity,chat,value,search.query);
     // The written grammar is the fast path. Anything it could not parse goes to
     // the router, so the person writes their own sentence instead of learning
     // the machine's one accepted phrasing.
