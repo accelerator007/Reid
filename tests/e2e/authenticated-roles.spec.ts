@@ -15,6 +15,19 @@ test.describe('authenticated employee role journeys', () => {
   const users: Record<string, { id: string; email: string }> = {};
   let departmentId: string | undefined;
 
+  const cleanup = async (steps: Array<{ label: string; run: () => PromiseLike<{ error: { message?: string } | null }> }>) => {
+    const failures: string[] = [];
+    for (const step of steps) {
+      try {
+        const result = await step.run();
+        if (result.error) failures.push(`${step.label}: ${result.error.message || 'unknown cleanup error'}`);
+      } catch (error) {
+        failures.push(`${step.label}: ${error instanceof Error ? error.message : 'cleanup threw'}`);
+      }
+    }
+    if (failures.length) throw new Error(`E2E cleanup failed:\n${failures.join('\n')}`);
+  };
+
   const createUser = async (label: string, role: 'employee' | 'hr' | 'owner') => {
     const email = `reid-browser-${label}-${stamp}@example.com`;
     const created = await admin.auth.admin.createUser({
@@ -63,8 +76,10 @@ test.describe('authenticated employee role journeys', () => {
   });
 
   test.afterAll(async () => {
-    if (departmentId) await admin.from('departments').delete().eq('id', departmentId);
-    for (const user of Object.values(users)) await admin.auth.admin.deleteUser(user.id);
+    const steps: Array<{ label: string; run: () => PromiseLike<{ error: { message?: string } | null }> }> = [];
+    if (departmentId) steps.push({ label:'department', run:() => admin.from('departments').delete().eq('id', departmentId!) });
+    for (const [label,user] of Object.entries(users)) steps.push({ label:`auth user ${label}`, run:() => admin.auth.admin.deleteUser(user.id) });
+    await cleanup(steps);
   });
 
   test('Employee opens an active employee workspace with the assigned role', async ({ page }) => {
@@ -221,14 +236,20 @@ test.describe('authenticated employee role journeys', () => {
       if(rejectedPublish.error)throw rejectedPublish.error; expect(rejectedPublish.data.status).toBe('cancelled');
 
     } finally {
-      if(activityId)await admin.from('crm_activities').delete().eq('id',activityId);
-      if(taskId)await admin.from('tasks').delete().eq('id',taskId);
-      if(onboardingId)await admin.from('onboarding_items').delete().eq('id',onboardingId);
-      if(draftId)await admin.from('content_drafts').delete().eq('id',draftId);
-      if(leadId)await admin.from('crm_leads').delete().eq('id',leadId);
-      if(companyId)await admin.from('crm_companies').delete().eq('id',companyId);
-      if(projectId)await admin.from('projects').delete().eq('id',projectId);
-      if(runIds.length)await admin.from('agent_runs').delete().in('id',runIds);
+      const steps: Array<{ label: string; run: () => PromiseLike<{ error: { message?: string } | null }> }> = [];
+      if(activityId)steps.push({label:'CRM activity',run:()=>admin.from('crm_activities').delete().eq('id',activityId!)});
+      if(taskId)steps.push({label:'project task',run:()=>admin.from('tasks').delete().eq('id',taskId!)});
+      if(projectId)steps.push(
+        {label:'remaining project tasks',run:()=>admin.from('tasks').delete().eq('project_id',projectId!)},
+        {label:'project activity',run:()=>admin.from('project_activity').delete().eq('project_id',projectId!)},
+      );
+      if(onboardingId)steps.push({label:'onboarding item',run:()=>admin.from('onboarding_items').delete().eq('id',onboardingId!)});
+      if(draftId)steps.push({label:'content draft',run:()=>admin.from('content_drafts').delete().eq('id',draftId!)});
+      if(leadId)steps.push({label:'CRM lead',run:()=>admin.from('crm_leads').delete().eq('id',leadId!)});
+      if(companyId)steps.push({label:'CRM company',run:()=>admin.from('crm_companies').delete().eq('id',companyId!)});
+      if(projectId)steps.push({label:'project',run:()=>admin.from('projects').delete().eq('id',projectId!)});
+      if(runIds.length)steps.push({label:'agent runs',run:()=>admin.from('agent_runs').delete().in('id',runIds)});
+      await cleanup(steps);
     }
   });
 });
