@@ -115,8 +115,11 @@ production back at the old database and lose activity. The existing QR volume an
 `SESSION_KEY` must always stay together. Compose's `migrated` profile starts the
 new worker with `/home/reid/.config/reid-os/runner.env`.
 
-Remaining integration work: custom SMTP/email acceptance, web-search provider
-credentials, and optional direct ai-lap telemetry.
+Tavily web search was enabled and verified from both the authenticated CLI and the
+running Reid service on 2026-09-28. The credential supplied in chat/screenshot is
+exposed and must be rotated; update the CLI credential and private service runtime
+file together. Remaining integration work: custom SMTP/email acceptance and
+optional direct ai-lap telemetry.
 No claim is made that unavailable source OAuth/SMTP/cron configuration, non-exposed
 schemas or all historical Storage service metadata were reproduced.
 

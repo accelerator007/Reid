@@ -48,7 +48,7 @@ Verification on 2026-09-26:
 Still open and must not be presented as complete:
 
 - Full candidate and migrations are now active on the selected replacement project; see the migration status above. The old project remains available as recovery material, not the active site backend.
-- Web search needs `REID_WEB_SEARCH_PROVIDER` (`brave` or `tavily`) and `REID_WEB_SEARCH_KEY` in `service.env`; without them research requests say it is not enabled. The ai-lap adapter changes (decoding profiles, JSON mode) are in `infra/ai-lap/` but must be installed on ai-lap; until then those options are ignored.
+- Tavily web search was enabled on 2026-09-28 through private `service.env` values. The host Tavily CLI 0.1.8 is authenticated, all eight official Tavily Agent Skills are installed globally for Codex, a CLI search returned ten results with a request ID, and the running Reid service returned HTTPS results through its actual `createWebSearch` integration. The current Codex session loaded its skill inventory before installation, so a restart/rescan is required before the new skills appear active. The API key supplied in chat/screenshot is exposed and must be rotated in Tavily; replace both the Tavily CLI credential and `REID_WEB_SEARCH_KEY` together. The ai-lap adapter changes (decoding profiles, JSON mode) are in `infra/ai-lap/` but must be installed on ai-lap; until then those options are ignored.
 - The `gemini` provider row in Production has `max_classification = 'restricted'`, which contradicts the recorded free-tier cap of `public` above. It was observed, not changed; it needs an Owner decision.
 - Not merged through a PR yet.
 
