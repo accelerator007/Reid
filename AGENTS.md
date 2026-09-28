@@ -2,6 +2,12 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-09-28 site restructure plan
+
+- The Owner requested a full information-architecture and interface restructure after the new Agent team destination was not visible in their current navigation. The immediate code-level cause is confirmed: the Agent team sits in the third navigation group after many destinations, while `.workspace-sidebar nav` has neither a flexible bounded height nor vertical overflow, so lower groups can fall below the viewport.
+- The implementation plan is recorded in `docs/SITE_RESTRUCTURE_PLAN_20260928.md`. It puts the Agent team directly after the overview, fixes desktop/mobile navigation first, then rebuilds the Owner center, agent room, work modules, shared design system, accessibility, performance and production verification in bounded phases.
+- This entry records planning only. The navigation restructure and page rebuild remain to be implemented and must not be presented as deployed.
+
 ## 2026-09-28 private agent team room
 
 - `/assistant` is now a durable, private **Agent team** room for Owner/Super Admin/Admin accounts. A user can assign one or several specialists with English or Arabic mentions (for example `@operations`, `@marketing @content`, `@التحليلات`, or `@الجميع`); a message without a mention goes to the CEO orchestrator. Replies show the verified agent identity, state and time and persist across sessions with Realtime updates.
