@@ -2,11 +2,12 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
-## 2026-09-28 site restructure plan
+## 2026-09-28 site restructure
 
-- The Owner requested a full information-architecture and interface restructure after the new Agent team destination was not visible in their current navigation. The immediate code-level cause is confirmed: the Agent team sits in the third navigation group after many destinations, while `.workspace-sidebar nav` has neither a flexible bounded height nor vertical overflow, so lower groups can fall below the viewport.
-- The implementation plan is recorded in `docs/SITE_RESTRUCTURE_PLAN_20260928.md`. It puts the Agent team directly after the overview, fixes desktop/mobile navigation first, then rebuilds the Owner center, agent room, work modules, shared design system, accessibility, performance and production verification in bounded phases.
-- This entry records planning only. The navigation restructure and page rebuild remain to be implemented and must not be presented as deployed.
+- The authenticated workspace now has one ordered navigation model shared by desktop, mobile and the command launcher. **Agent team** is the first destination after the Owner center, the desktop sidebar has bounded scrolling and a remembered collapsed state, the mobile layout has persistent primary navigation, and `Ctrl/Cmd+K` opens role-filtered quick navigation. Existing URLs, permissions and data contracts remain compatible.
+- `/owner` is the clear starting point with direct cards for the agent team, projects, tasks and CRM. `/assistant` is a durable team room with message search, sender filters, visible agent status, mention suggestions, reply context and handoff summaries. `/dashboard` remains the operational agent roster and is labelled **Agent management** to remove the former ambiguity.
+- Internal routes are loaded as independent Vite chunks while the public entry remains eager. This reduced the blank-environment main JavaScript bundle from roughly 480 KB to 256 KB (141 KB to 81 KB gzip) before route chunks. The implementation follows `docs/SITE_RESTRUCTURE_PLAN_20260928.md`.
+- Production image `sha256:6fce2076be32bd26e692f1dd0505e06441b8a1cdbb231a29f659c1c6ec879fd7` was activated at 18:03 UTC. The container is healthy; local and public health, `/owner` and `/assistant` probes return `200`; the served chunks contain the new Agent team and quick-navigation interfaces. The clean production build and all 194/194 frontend tests across 13 files passed. Rollback tag: `reid-web:pre-site-restructure-20260928` (the last retained pre-Agent-team image because Docker had already pruned the prior container image layers).
 
 ## 2026-09-28 private agent team room
 

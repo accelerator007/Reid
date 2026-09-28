@@ -14,18 +14,9 @@ import {
 } from "./shell";
 import type { AppError } from "./db";
 import type { Page } from "./routes";
-import { EmployeeWorkspace } from "./employee";
-import { ProjectWorkspace } from "./projects";
-import { AgentCommand } from "./agent-command";
-import { AdminWorkspace } from "./admin-workspace";
-import { OwnerOverview } from "./owner-overview";
-import { Today, Operations, AssistantWorkspace } from "./os-workspace";
-import { Connections, QrInbox } from "./qr-workspace";
 import { PublicHome } from "./public-home";
-import { ResearchWorkspace } from "./research";
-import { CrmWorkspace } from "./crm";
-import { Workshops } from "./workshops";
-import { Building2, Crown, FolderKanban, FlaskConical, GraduationCap, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X, CalendarDays, Settings2, BriefcaseBusiness, Search, ShieldCheck } from "lucide-react";
+import { workspaceLabel, workspaceNavGroups, mobilePrimaryPages } from "./workspace-navigation";
+import { Building2, Crown, FolderKanban, FlaskConical, GraduationCap, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X, CalendarDays, Settings2, BriefcaseBusiness, Search, ShieldCheck, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 // Imported rather than written as a literal URL. The assets directory sits
 // outside Vite's public directory, so a hard-coded path is never emitted to
 // dist and the header mark 404s in production while still resolving in dev.
@@ -38,9 +29,25 @@ import "./profile.css";
 import "./workflow.css";
 import "./agents.css";
 import "./crm.css";
-import "./workspace-shell.css";
 import "./whatsapp-inbox.css";
 import "./reid-os.css";
+// The authenticated shell intentionally loads last: it owns navigation width,
+// responsive drawers and workspace offsets across every legacy page stylesheet.
+import "./workspace-shell.css";
+
+const EmployeeWorkspace=React.lazy(()=>import('./employee').then(module=>({default:module.EmployeeWorkspace})));
+const ProjectWorkspace=React.lazy(()=>import('./projects').then(module=>({default:module.ProjectWorkspace})));
+const AgentCommand=React.lazy(()=>import('./agent-command').then(module=>({default:module.AgentCommand})));
+const AdminWorkspace=React.lazy(()=>import('./admin-workspace').then(module=>({default:module.AdminWorkspace})));
+const OwnerOverview=React.lazy(()=>import('./owner-overview').then(module=>({default:module.OwnerOverview})));
+const Today=React.lazy(()=>import('./os-workspace').then(module=>({default:module.Today})));
+const Operations=React.lazy(()=>import('./os-workspace').then(module=>({default:module.Operations})));
+const AssistantWorkspace=React.lazy(()=>import('./os-workspace').then(module=>({default:module.AssistantWorkspace})));
+const Connections=React.lazy(()=>import('./qr-workspace').then(module=>({default:module.Connections})));
+const QrInbox=React.lazy(()=>import('./qr-workspace').then(module=>({default:module.QrInbox})));
+const ResearchWorkspace=React.lazy(()=>import('./research').then(module=>({default:module.ResearchWorkspace})));
+const CrmWorkspace=React.lazy(()=>import('./crm').then(module=>({default:module.CrmWorkspace})));
+const Workshops=React.lazy(()=>import('./workshops').then(module=>({default:module.Workshops})));
 
 type Lang = "ar" | "en";
 type ProfileData = {
@@ -1333,30 +1340,13 @@ function Chat({ lang }: { lang: Lang }) {
 
 function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
   switch (page) {
-    case "today": return lang === "ar" ? "يومي" : "My day";
-    case "inbox": return lang === "ar" ? "المحادثات" : "Inbox";
-    case "connections": return lang === "ar" ? "الاتصالات" : "Connections";
-    case "operations": return lang === "ar" ? "إدارة الأعمال" : "Operations";
-    case "workshops": return lang === "ar" ? "الورشات" : "Workshops";
-    case "assistant": return lang === "ar" ? "فريق الوكلاء" : "Agent team";
-    case "admin": return lang === "ar" ? "إدارة النظام" : "Administration";
-    case "owner": return lang === "ar" ? "موجز المالك" : "Owner brief";
+    case "today": case "inbox": case "connections": case "operations": case "workshops":
+    case "assistant": case "admin": case "owner": case "workspace": case "projects":
+    case "research": case "crm": case "dashboard": case "profile": return workspaceLabel(page,lang);
     case "home":
       return t.home;
     case "apply":
       return t.join;
-    case "workspace":
-      return lang === "ar" ? "الفريق والعمل" : "People & work";
-    case "projects":
-      return t.projects;
-    case "research":
-      return t.research;
-    case "crm":
-      return t.crm;
-    case "dashboard":
-      return lang === "ar" ? "مركز الإدارة" : "Command center";
-    case "profile":
-      return t.account;
     default:
       return page;
   }
@@ -1372,19 +1362,30 @@ const workspaceIcons: Partial<Record<Page, React.ReactNode>> = {
   research: <FlaskConical />, crm: <Handshake />, profile: <UserRound />,
 };
 
-function WorkspaceSidebar({ lang, page, navigation, open, go, signout }: { lang: Lang; page: Page; navigation: ReturnType<typeof useNavigation>; open: boolean; go: (page: Page) => void; signout: () => void }) {
+function WorkspaceSidebar({ lang, page, navigation, open, collapsed, go, toggleCollapsed, signout }: { lang: Lang; page: Page; navigation: ReturnType<typeof useNavigation>; open: boolean; collapsed:boolean; go: (page: Page) => void; toggleCollapsed:()=>void; signout: () => void }) {
   const t = tr[lang];
-  const groups:{ar:string;en:string;pages:Page[]}[] = [
-    {ar:"نظرة سريعة",en:"Overview",pages:["owner","today","inbox"]},
-    {ar:"تشغيل الشركة",en:"Company operations",pages:["projects","crm","workshops","workspace","operations","research"]},
-    {ar:"الذكاء",en:"Intelligence",pages:["assistant","dashboard"]},
-    {ar:"الإدارة",en:"Administration",pages:["admin","connections","profile"]},
-  ];
+  const navRef=React.useRef<HTMLElement>(null);
+  React.useEffect(()=>{navRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({block:'nearest'});},[page,open]);
   return <aside className="workspace-sidebar" data-open={open} aria-label={lang === "ar" ? "تنقل نظام الشركة" : "Company system navigation"}>
-    <div className="workspace-sidebar-heading"><small>REID OS</small><b>{lang === "ar" ? "مساحة الشركة" : "Company workspace"}</b></div>
-    <nav>{groups.map(group=>{const destinations=group.pages.flatMap(target=>navigation.filter(route=>route.page===target));return destinations.length?<React.Fragment key={group.en}><small className="os-nav-group">{lang==='ar'?group.ar:group.en}</small>{destinations.map(route => <button key={route.page} type="button" aria-current={page === route.page ? "page" : undefined} onClick={() => go(route.page)}>{workspaceIcons[route.page]}<span>{navLabel(route.page, lang, t)}</span></button>)}</React.Fragment>:null;})}</nav>
-    <footer><button type="button" onClick={signout}><LogOut /><span>{lang === "ar" ? "تسجيل الخروج" : "Sign out"}</span></button></footer>
+    <div className="workspace-sidebar-heading"><div><small>REID OS</small><b>{lang === "ar" ? "مساحة الشركة" : "Company workspace"}</b></div><button type="button" className="workspace-collapse" onClick={toggleCollapsed} aria-label={collapsed?(lang==='ar'?'توسيع القائمة':'Expand navigation'):(lang==='ar'?'تصغير القائمة':'Collapse navigation')}>{collapsed?<PanelLeftOpen/>:<PanelLeftClose/>}</button></div>
+    <nav ref={navRef}>{workspaceNavGroups.map(group=>{const destinations=group.pages.flatMap(target=>navigation.filter(route=>route.page===target));return destinations.length?<section className={`workspace-nav-group workspace-nav-${group.id}`} key={group.id}><small className="os-nav-group">{group.label[lang]}</small>{destinations.map(route => <button className={route.page==='assistant'?'workspace-agent-destination':''} title={navLabel(route.page,lang,t)} key={route.page} type="button" aria-current={page === route.page ? "page" : undefined} onClick={() => go(route.page)}>{workspaceIcons[route.page]}<span>{navLabel(route.page, lang, t)}</span>{route.page==='assistant'&&<i>{lang==='ar'?'ابدأ':'Open'}</i>}</button>)}</section>:null;})}</nav>
+    <footer><button type="button" onClick={signout} title={lang==='ar'?'تسجيل الخروج':'Sign out'}><LogOut /><span>{lang === "ar" ? "تسجيل الخروج" : "Sign out"}</span></button></footer>
   </aside>;
+}
+
+function WorkspaceLauncher({lang,page,navigation,open,close,go}:{lang:Lang;page:Page;navigation:ReturnType<typeof useNavigation>;open:boolean;close:()=>void;go:(page:Page)=>void}){
+  const [query,setQuery]=React.useState('');
+  React.useEffect(()=>{if(open)setQuery('');},[open]);
+  if(!open)return null;
+  const allowed=new Set<Page>(navigation.map(route=>route.page));
+  const destinations=workspaceNavGroups.flatMap(group=>group.pages.map(target=>({target,group:group.label[lang]}))).filter(item=>allowed.has(item.target)).filter(item=>`${navLabel(item.target,lang,tr[lang])} ${item.group}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  return <div className="workspace-launcher-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)close();}}><section className="workspace-launcher" role="dialog" aria-modal="true" aria-label={lang==='ar'?'الانتقال السريع':'Quick navigation'}><label><Search/><input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder={lang==='ar'?'ابحث عن صفحة أو مساحة…':'Find a page or workspace…'} onKeyDown={event=>{if(event.key==='Escape')close();}}/><kbd>ESC</kbd></label><div>{destinations.map(item=><button key={item.target} aria-current={page===item.target?'page':undefined} onClick={()=>{close();go(item.target);}}><span>{workspaceIcons[item.target]}</span><div><b>{navLabel(item.target,lang,tr[lang])}</b><small>{item.group}</small></div></button>)}{!destinations.length&&<p>{lang==='ar'?'لا توجد نتيجة مطابقة.':'No matching destination.'}</p>}</div></section></div>;
+}
+
+function WorkspaceMobileNav({lang,page,navigation,go,more}:{lang:Lang;page:Page;navigation:ReturnType<typeof useNavigation>;go:(page:Page)=>void;more:()=>void}){
+  const allowed=new Set<Page>(navigation.map(route=>route.page));
+  const pages=mobilePrimaryPages.filter(target=>allowed.has(target));
+  return <nav className="workspace-mobile-nav" aria-label={lang==='ar'?'التنقل السريع':'Quick navigation'}>{pages.map(target=><button key={target} aria-current={page===target?'page':undefined} onClick={()=>go(target)}>{workspaceIcons[target]}<span>{target==='assistant'?(lang==='ar'?'الوكلاء':'Agents'):navLabel(target,lang,tr[lang])}</span></button>)}<button onClick={more}><Menu/><span>{lang==='ar'?'المزيد':'More'}</span></button></nav>;
 }
 
 function App() {
@@ -1420,6 +1421,8 @@ function Chrome({ session }: { session: Session | null }) {
   );
   const navigation = useNavigation();
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [launcherOpen,setLauncherOpen]=React.useState(false);
+  const [navCollapsed,setNavCollapsed]=React.useState(()=>typeof localStorage!=='undefined'&&localStorage.getItem('reid-nav-collapsed')==='1');
   const internalPage = session && ["owner", "today", "inbox", "connections", "operations", "assistant", "admin", "dashboard", "workspace", "projects", "research", "workshops", "crm", "profile"].includes(page);
   React.useEffect(() => {
     const client = supabase;
@@ -1429,9 +1432,14 @@ function Chrome({ session }: { session: Session | null }) {
       go("home");
     });
   }, [session]);
+  React.useEffect(()=>{setMenuOpen(false);setLauncherOpen(false);},[page]);
+  React.useEffect(()=>{if(typeof localStorage!=='undefined')localStorage.setItem('reid-nav-collapsed',navCollapsed?'1':'0');},[navCollapsed]);
+  React.useEffect(()=>{const shortcut=(event:KeyboardEvent)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLocaleLowerCase()==='k'&&internalPage){event.preventDefault();setLauncherOpen(value=>!value);}if(event.key==='Escape'){setMenuOpen(false);setLauncherOpen(false);}};addEventListener('keydown',shortcut);return()=>removeEventListener('keydown',shortcut);},[internalPage]);
+  const canOpenAgents=navigation.some(route=>route.page==='assistant');
   return (
     <div
       className={`${dark ? "app dark" : "app"}${internalPage ? " workspace-mode" : ""}`}
+      data-nav-collapsed={internalPage&&navCollapsed?'true':'false'}
       dir={lang === "ar" ? "rtl" : "ltr"}
     >
       <header className={internalPage ? "workspace-topbar" : "public-topbar"}>
@@ -1460,7 +1468,8 @@ function Chrome({ session }: { session: Session | null }) {
             {session ? t.account : t.login}
           </button>
         </nav>}
-        {internalPage && <div className="workspace-topbar-context"><Building2 /><span>{lang === "ar" ? "مساحة ريّد" : "Reid workspace"} / {navLabel(page,lang,t)}</span></div>}
+        {internalPage && <div className="workspace-topbar-context"><Building2 /><span>{lang === "ar" ? "مساحة ريّد" : "Reid workspace"} / <b>{navLabel(page,lang,t)}</b></span></div>}
+        {internalPage&&<div className="workspace-topbar-tools"><button className="workspace-command-button" onClick={()=>setLauncherOpen(true)}><Search/><span>{lang==='ar'?'انتقال سريع…':'Quick find…'}</span><kbd>{navigator.platform?.includes('Mac')?'⌘':'Ctrl'} K</kbd></button>{canOpenAgents&&<button className="workspace-agent-button" onClick={()=>go('assistant')} aria-current={page==='assistant'?'page':undefined}><UsersRound/><span>{lang==='ar'?'فريق الوكلاء':'Agent team'}</span></button>}</div>}
         <aside>
           {internalPage && <button className="mobile-menu" aria-label="Menu" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>}
           <button onClick={() => setDark(!dark)}>{dark ? "☀" : "☾"}</button>
@@ -1469,7 +1478,11 @@ function Chrome({ session }: { session: Session | null }) {
           </button>
         </aside>
       </header>
-      {internalPage && <WorkspaceSidebar lang={lang} page={page} navigation={navigation} open={menuOpen} go={(target) => { setMenuOpen(false); go(target); }} signout={async () => { await supabase?.auth.signOut(); go("home"); }} />}
+      {internalPage&&menuOpen&&<button className="workspace-nav-backdrop" aria-label={lang==='ar'?'إغلاق القائمة':'Close navigation'} onClick={()=>setMenuOpen(false)}/>}
+      {internalPage && <WorkspaceSidebar lang={lang} page={page} navigation={navigation} open={menuOpen} collapsed={navCollapsed} toggleCollapsed={()=>setNavCollapsed(value=>!value)} go={(target) => { setMenuOpen(false); go(target); }} signout={async () => { await supabase?.auth.signOut(); go("home"); }} />}
+      {internalPage&&<WorkspaceLauncher lang={lang} page={page} navigation={navigation} open={launcherOpen} close={()=>setLauncherOpen(false)} go={go}/>}
+      {internalPage&&<WorkspaceMobileNav lang={lang} page={page} navigation={navigation} go={go} more={()=>setMenuOpen(true)}/>}
+      <React.Suspense fallback={<main className="workspace-page-loading"><LoaderCircle/><span>{lang==='ar'?'جارٍ فتح المساحة…':'Opening workspace…'}</span></main>}>
       {page === "home" && <><PublicHome lang={lang} go={go} /><Chat lang={lang} /></>}
       {page === "workshops" && <Workshops lang={lang} go={go} />}
       {(["owner", "today", "inbox", "connections", "operations", "assistant", "admin"] as Page[]).includes(page) && (
@@ -1623,6 +1636,7 @@ function Chrome({ session }: { session: Session | null }) {
           </button>
         </main>
       )}
+      </React.Suspense>
       <footer>
         <button className="text-link" onClick={() => go("privacy")}>
           {lang === "ar" ? "الخصوصية" : "Privacy"}
