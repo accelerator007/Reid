@@ -92,6 +92,36 @@ const fixtures = {
     { id: 2, actor_id: 'u-ali', action: 'INSERT', entity_type: 'project_meetings', entity_id: 'mt1', details: {}, created_at: iso(-20) },
     { id: 3, actor_id: 'u-said', action: 'INSERT', entity_type: 'project_files', entity_id: 'f2', details: {}, created_at: iso(-100) },
   ],
+  crm_companies: [
+    { id: 'c1', name: 'شركة الأمل الطبية', industry: 'صحة', email: 'info@alamal.om', phone: '+968 2412 3456', status: 'active', owner_id: 'u-ali' },
+    { id: 'c2', name: 'مدارس النور', industry: 'تعليم', email: 'admin@alnoor.edu.om', phone: null, status: 'prospect', owner_id: user.id },
+    { id: 'c3', name: 'مجموعة الساحل للتجزئة', industry: 'تجزئة', email: null, phone: '+968 9911 2233', status: 'prospect', owner_id: 'u-ali' },
+  ],
+  crm_contacts: [
+    { id: 'ct1', name: 'د. خالد الراشدي', email: 'khalid@alamal.om', phone: '+968 9922 1100', position: 'المدير التنفيذي', company_id: 'c1', stage: 'customer', owner_id: 'u-ali' },
+    { id: 'ct2', name: 'أمل الهنائية', email: 'amal@alnoor.edu.om', phone: null, position: 'مديرة التقنية', company_id: 'c2', stage: 'lead', owner_id: user.id },
+  ],
+  crm_leads: [
+    { id: 'l1', title: 'بوابة أولياء الأمور — مدارس النور', stage: 'qualified', probability: 45, next_follow_up_at: iso(-26), company_id: 'c2', contact_id: 'ct2', owner_id: user.id },
+    { id: 'l2', title: 'تطبيق نقاط الولاء — الساحل', stage: 'new', probability: 15, next_follow_up_at: iso(30), company_id: 'c3', contact_id: null, owner_id: 'u-ali' },
+    { id: 'l3', title: 'مساعد واتساب للمواعيد — الأمل', stage: 'proposal', probability: 60, next_follow_up_at: iso(-2), company_id: 'c1', contact_id: 'ct1', owner_id: 'u-ali' },
+    { id: 'l4', title: 'لوحة مؤشرات المبيعات', stage: 'negotiation', probability: 75, next_follow_up_at: null, company_id: 'c3', contact_id: null, owner_id: user.id },
+    { id: 'l5', title: 'موقع تعريفي لعيادة جديدة', stage: 'new', probability: 20, next_follow_up_at: iso(80), company_id: null, contact_id: null, owner_id: 'u-ali' },
+  ],
+  crm_deals: [
+    { id: 'd1', title: 'منصة الحجز — المرحلة الثانية', stage: 'negotiation', expected_close_date: '2026-10-06', company_id: 'c1', contact_id: 'ct1', owner_id: 'u-ali' },
+    { id: 'd2', title: 'ورشة الذكاء الاصطناعي للمعلمين', stage: 'proposal', expected_close_date: '2026-10-20', company_id: 'c2', contact_id: 'ct2', owner_id: user.id },
+    { id: 'd3', title: 'منصة الحجز — المرحلة الأولى', stage: 'won', expected_close_date: '2026-08-01', company_id: 'c1', contact_id: 'ct1', owner_id: 'u-ali' },
+  ],
+  crm_activities: [
+    { id: 'a1', activity_type: 'call', subject: 'اتصال لمتابعة عرض بوابة أولياء الأمور', due_at: iso(-26), completed_at: null, created_at: iso(-50), company_id: null, contact_id: null, lead_id: 'l1', deal_id: null },
+    { id: 'a2', activity_type: 'meeting', subject: 'اجتماع تفاوض المرحلة الثانية', due_at: iso(28), completed_at: null, created_at: iso(-10), company_id: null, contact_id: null, lead_id: null, deal_id: 'd1' },
+    { id: 'a3', activity_type: 'email', subject: 'إرسال دراسة الحالة', due_at: iso(-72), completed_at: iso(-70), created_at: iso(-90), company_id: 'c3', contact_id: null, lead_id: null, deal_id: null },
+  ],
+  executive_reports: [
+    { id: 'r1', period: 'weekly', period_start: '2026-09-22', period_end: '2026-09-28', generated_at: iso(-5), email_status: 'sent',
+      metrics: { active_projects: 3, open_tasks: 14, employees: 12, new_leads: 4, open_deals: 2, won_deals: 1, pending_applications: 1, agent_failures: 0, alerts: [] } },
+  ],
   notifications: [
     { id: 'n1', title_ar: 'تم إسناد مهمة جديدة لك', title_en: 'A new task was assigned to you', read_at: null, created_at: iso(-1) },
     { id: 'n2', title_ar: 'طلب انضمام جديد', title_en: 'New join application', read_at: null, created_at: iso(-3) },

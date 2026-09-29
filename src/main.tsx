@@ -30,7 +30,6 @@ import "./auth.css";
 import "./profile.css";
 import "./workflow.css";
 import "./agents.css";
-import "./crm.css";
 import "./whatsapp-inbox.css";
 import "./reid-os.css";
 
@@ -45,7 +44,7 @@ const AssistantWorkspace=React.lazy(()=>import('./agent-team/agent-team-page').t
 const Connections=React.lazy(()=>import('./qr-workspace').then(module=>({default:module.Connections})));
 const QrInbox=React.lazy(()=>import('./qr-workspace').then(module=>({default:module.QrInbox})));
 const ResearchWorkspace=React.lazy(()=>import('./research').then(module=>({default:module.ResearchWorkspace})));
-const CrmWorkspace=React.lazy(()=>import('./crm').then(module=>({default:module.CrmWorkspace})));
+const CrmWorkspace=React.lazy(()=>import('./clients/clients-page').then(module=>({default:module.CrmWorkspace})));
 const Workshops=React.lazy(()=>import('./workshops').then(module=>({default:module.Workshops})));
 
 type Lang = "ar" | "en";
