@@ -31,3 +31,11 @@
   color: var(--purple);
   font-size: 13px;
 }
+
+/* Status line, moved from the retired employee.css. */
+.workspace-message {
+  padding: 12px 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--brand-fill);
+}

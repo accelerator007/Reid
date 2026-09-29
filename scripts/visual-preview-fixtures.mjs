@@ -18,10 +18,43 @@ const fixtures = {
   user_roles: [{ role }],
   account_controls: { status: 'active' },
   profiles: [
-    { id: user.id, full_name: 'شيخة المعمري', email: 'owner@reid.test', linkedin_url: 'https://linkedin.com/in/reid-preview' },
-    { id: 'u-ali', full_name: 'علي الحارثي', email: 'ali@reid.test', linkedin_url: 'https://linkedin.com/in/x' },
-    { id: 'u-maryam', full_name: 'مريم البلوشية', email: 'maryam@reid.test', linkedin_url: 'https://linkedin.com/in/x' },
-    { id: 'u-said', full_name: 'سعيد الكندي', email: 'said@reid.test', linkedin_url: 'https://linkedin.com/in/x' },
+    { id: user.id, full_name: 'شيخة المعمري', email: 'owner@reid.test', phone: '+968 9000 0001', position: 'المؤسسة والمديرة التنفيذية', department: null, department_id: 'dep-mgmt', hire_date: '2025-01-05', employment_status: 'active', linkedin_url: 'https://linkedin.com/in/reid-preview' },
+    { id: 'u-ali', full_name: 'علي الحارثي', email: 'ali@reid.test', phone: null, position: 'مدير المشاريع', department: null, department_id: 'dep-dev', hire_date: '2025-03-01', employment_status: 'active', linkedin_url: 'https://linkedin.com/in/x' },
+    { id: 'u-maryam', full_name: 'مريم البلوشية', email: 'maryam@reid.test', phone: '+968 9000 0003', position: 'مطورة واجهات', department: null, department_id: 'dep-dev', hire_date: '2026-09-01', employment_status: 'onboarding', linkedin_url: 'https://linkedin.com/in/x' },
+    { id: 'u-said', full_name: 'سعيد الكندي', email: 'said@reid.test', phone: null, position: 'مهندس بنية تحتية', department: null, department_id: 'dep-dev', hire_date: '2025-06-15', employment_status: 'leave', linkedin_url: 'https://linkedin.com/in/x' },
+  ],
+  departments: [
+    { id: 'dep-mgmt', name_ar: 'الإدارة', name_en: 'Management', description: 'القيادة والاستراتيجية', manager_id: user.id },
+    { id: 'dep-dev', name_ar: 'التطوير', name_en: 'Engineering', description: 'المنتجات والمشاريع التقنية', manager_id: 'u-ali' },
+  ],
+  onboarding_items: [
+    { id: 'ob1', user_id: 'u-maryam', title_ar: 'توقيع العقد وسياسة السرية', title_en: 'Sign contract and NDA', due_date: '2026-09-03', completed: true, completed_at: iso(-600) },
+    { id: 'ob2', user_id: 'u-maryam', title_ar: 'استلام الجهاز والبريد', title_en: 'Receive laptop and email', due_date: '2026-09-04', completed: true, completed_at: iso(-580) },
+    { id: 'ob3', user_id: 'u-maryam', title_ar: 'جولة على مشاريع العملاء', title_en: 'Tour of client projects', due_date: '2026-10-01', completed: false, completed_at: null },
+    { id: 'ob4', user_id: 'u-maryam', title_ar: 'أول مهمة على منصة الحجز', title_en: 'First task on the booking platform', due_date: '2026-10-05', completed: false, completed_at: null },
+  ],
+  calendar_events: [
+    { id: 'ev1', user_id: null, title: 'اجتماع الفريق الشهري', description: 'مراجعة أهداف أكتوبر', starts_at: iso(48), ends_at: iso(49), visibility: 'company' },
+    { id: 'ev2', user_id: user.id, title: 'مكالمة مع شركة الأمل', description: null, starts_at: iso(28), ends_at: iso(28.5), visibility: 'private' },
+  ],
+  announcements: [
+    { id: 'an1', title_ar: 'مرحبًا بمريم في فريق التطوير', title_en: 'Welcome Maryam to Engineering', body_ar: 'انضمت مريم البلوشية إلينا مطورةً للواجهات، وستعمل على منصة الحجز.', body_en: 'Maryam joins us as a front-end developer on the booking platform.', published_at: iso(-600) },
+    { id: 'an2', title_ar: 'إجازة اليوم الوطني', title_en: 'National Day holiday', body_ar: 'إجازة رسمية يومي 18 و19 نوفمبر.', body_en: 'Official holiday on 18 and 19 November.', published_at: iso(-100) },
+  ],
+  employee_documents: [
+    { id: 'ed1', owner_id: 'u-maryam', title: 'عقد العمل', category: 'contract', storage_path: 'u-maryam/contract.pdf', created_at: iso(-600) },
+    { id: 'ed2', owner_id: 'u-maryam', title: 'شهادة البكالوريوس', category: 'certificate', storage_path: 'u-maryam/degree.pdf', created_at: iso(-590) },
+  ],
+  employee_kpis: [
+    { id: 'ek1', user_id: 'u-maryam', title: 'شاشات منجزة', target_value: 12, current_value: 5, unit: 'شاشة', period_start: '2026-09-01', period_end: '2026-12-31', status: 'on_track' },
+  ],
+  performance_reviews: [
+    { id: 'pr1', user_id: 'u-ali', reviewer_id: user.id, period_start: '2026-01-01', period_end: '2026-06-30', rating: 4.5, summary: 'قيادة ممتازة لمشاريع العملاء والتزام بالمواعيد.', strengths: 'التواصل مع العملاء', improvements: 'توثيق القرارات التقنية' },
+  ],
+  timesheets: [
+    { id: 'ts1', user_id: 'u-maryam', task_id: null, minutes: 420, work_date: '2026-09-29', notes: 'تصميم شاشة الحجز' },
+    { id: 'ts2', user_id: 'u-maryam', task_id: null, minutes: 390, work_date: '2026-09-28', notes: 'مراجعة مكونات الواجهة' },
+    { id: 'ts3', user_id: 'u-maryam', task_id: null, minutes: 300, work_date: '2026-09-27', notes: null },
   ],
   owner_company_snapshot: {
     as_of: iso(0),

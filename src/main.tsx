@@ -33,7 +33,7 @@ import "./agents.css";
 import "./whatsapp-inbox.css";
 import "./reid-os.css";
 
-const EmployeeWorkspace=React.lazy(()=>import('./employee').then(module=>({default:module.EmployeeWorkspace})));
+const EmployeeWorkspace=React.lazy(()=>import('./people/people-page').then(module=>({default:module.EmployeeWorkspace})));
 const ProjectWorkspace=React.lazy(()=>import('./projects/projects-page').then(module=>({default:module.ProjectWorkspace})));
 const AgentCommand=React.lazy(()=>import('./agent-command').then(module=>({default:module.AgentCommand})));
 const AdminWorkspace=React.lazy(()=>import('./admin-workspace').then(module=>({default:module.AdminWorkspace})));
