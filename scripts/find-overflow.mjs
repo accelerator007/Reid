@@ -3,11 +3,12 @@
 // design preview. Usage: node scripts/find-overflow.mjs /today /assistant
 import { chromium } from 'playwright';
 const base = process.env.PREVIEW_URL || 'http://127.0.0.1:5173';
-const { respondForPreview, previewSession } = await import('./visual-preview-fixtures.mjs');
+const { respondForLocalApi, respondForPreview, previewSession } = await import('./visual-preview-fixtures.mjs');
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 await context.addInitScript(([key, value]) => localStorage.setItem(key, value), ['sb-mock-auth-token', JSON.stringify(previewSession)]);
 await context.route('https://mock.supabase.test/**', respondForPreview);
+await context.route(`${base}/api/**`, respondForLocalApi);
 const page = await context.newPage();
 for (const path of process.argv.slice(2)) {
   await page.goto(base + path, { waitUntil: 'networkidle' });

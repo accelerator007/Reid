@@ -6,6 +6,7 @@ import {
   pathFor,
   resolvePage,
   routes,
+  landingPage,
 } from "./routes";
 import type { Page } from "./routes";
 
@@ -97,5 +98,16 @@ describe("route manifest", () => {
     const response = await serve("/privacy.html");
     expect(response.status).toBe(301);
     expect(response.headers.get("location")).toBe("https://reidpro.com/privacy");
+  });
+});
+
+describe("where a signed-in person starts", () => {
+  it("sends the owners to the overview, staff to their day and a guest to the profile", () => {
+    expect(landingPage(["owner"])).toBe("owner");
+    expect(landingPage(["super_admin"])).toBe("owner");
+    expect(landingPage(["admin"])).toBe("today");
+    expect(landingPage(["employee"])).toBe("today");
+    expect(landingPage(["guest"])).toBe("profile");
+    expect(landingPage([])).toBe("profile");
   });
 });

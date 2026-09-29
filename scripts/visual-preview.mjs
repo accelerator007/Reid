@@ -10,7 +10,7 @@
 // (comma list, default a representative set), PREVIEW_ROLE (default owner).
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
-import { previewSession as session, respondForPreview as respond } from './visual-preview-fixtures.mjs';
+import { previewSession as session, respondForLocalApi, respondForPreview as respond } from './visual-preview-fixtures.mjs';
 
 const base = process.env.PREVIEW_URL || 'http://127.0.0.1:5173';
 const out = process.argv[2] || 'test-results/preview';
@@ -38,6 +38,7 @@ for (const variant of variants) {
         localStorage.setItem('reid-theme', scheme);
       }, [`sb-${supabaseHost.split('.')[0]}-auth-token`, JSON.stringify(session), lang, theme]);
       await context.route(`https://${supabaseHost}/**`, respond);
+      await context.route(`${base}/api/**`, respondForLocalApi);
       const page = await context.newPage();
       const problems = [];
       page.on('pageerror', error => problems.push(error.message));

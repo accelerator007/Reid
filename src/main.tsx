@@ -3,16 +3,14 @@ import { createRoot } from "react-dom/client";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { installIdleTimeout } from "./session";
-import { pathFor, resolvePage } from "./routes";
-import { firstError, list, messageFor, run, toAppError } from "./db";
+import { landingPage, pathFor, resolvePage } from "./routes";
 import {
-  Gate,
+  accessForPage,
   Guarded,
   SessionProvider,
   useNavigation,
   useSession,
 } from "./shell";
-import type { AppError } from "./db";
 import type { Page } from "./routes";
 import { PublicHome } from "./public-home";
 import { workspaceLabel, workspacePages } from "./workspace-navigation";
@@ -29,20 +27,18 @@ import "./brand.css";
 import "./auth.css";
 import "./profile.css";
 import "./workflow.css";
-import "./agents.css";
-import "./whatsapp-inbox.css";
 import "./reid-os.css";
 
 const EmployeeWorkspace=React.lazy(()=>import('./people/people-page').then(module=>({default:module.EmployeeWorkspace})));
 const ProjectWorkspace=React.lazy(()=>import('./projects/projects-page').then(module=>({default:module.ProjectWorkspace})));
-const AgentCommand=React.lazy(()=>import('./agent-command').then(module=>({default:module.AgentCommand})));
+const AgentManagement=React.lazy(()=>import('./agent-admin/agent-admin-page').then(module=>({default:module.AgentManagement})));
 const AdminWorkspace=React.lazy(()=>import('./admin-workspace').then(module=>({default:module.AdminWorkspace})));
 const OwnerOverview=React.lazy(()=>import('./owner-overview').then(module=>({default:module.OwnerOverview})));
 const Today=React.lazy(()=>import('./work/today-page').then(module=>({default:module.Today})));
 const Operations=React.lazy(()=>import('./work/operations-page').then(module=>({default:module.Operations})));
 const AssistantWorkspace=React.lazy(()=>import('./agent-team/agent-team-page').then(module=>({default:module.AgentTeamRoom})));
 const Connections=React.lazy(()=>import('./qr-workspace').then(module=>({default:module.Connections})));
-const QrInbox=React.lazy(()=>import('./qr-workspace').then(module=>({default:module.QrInbox})));
+const Inbox=React.lazy(()=>import('./inbox/inbox-page').then(module=>({default:module.Inbox})));
 const ResearchWorkspace=React.lazy(()=>import('./research').then(module=>({default:module.ResearchWorkspace})));
 const CrmWorkspace=React.lazy(()=>import('./clients/clients-page').then(module=>({default:module.CrmWorkspace})));
 const Workshops=React.lazy(()=>import('./workshops').then(module=>({default:module.Workshops})));
@@ -56,46 +52,6 @@ type ProfileData = {
   linkedin_url: string;
   github_url: string;
   bio: string;
-};
-type Application = {
-  id: string;
-  full_name: string;
-  email: string;
-  account_type: string;
-  organization: string;
-  phone: string;
-  title: string;
-  linkedin_url: string;
-  github_url: string | null;
-  project_or_research: string | null;
-  join_reason: string;
-  cover_letter: string;
-  cv_path: string | null;
-  created_at: string;
-  status: string;
-  invitation_status?: string;
-};
-type Notification = {
-  id: string;
-  title_ar: string;
-  title_en: string;
-  body_ar: string | null;
-  body_en: string | null;
-  read_at: string | null;
-  created_at: string;
-  entity_id: string | null;
-};
-type CompanyAccount = {
-  id: string;
-  full_name: string;
-  email: string;
-  department: string | null;
-  position: string | null;
-  user_roles: { role: string }[];
-  account_controls:
-    | { status: string; reason: string | null }[]
-    | { status: string; reason: string | null }
-    | null;
 };
 const tr = {
   ar: {
@@ -593,637 +549,6 @@ function Profile({
   );
 }
 
-function Dashboard({
-  lang,
-  user,
-  ready,
-  login,
-  profile,
-}: {
-  lang: Lang;
-  user: User | null;
-  ready: boolean;
-  login: () => void;
-  profile: () => void;
-}) {
-  const [apps, setApps] = React.useState<Application[]>([]),
-    [failedInvites, setFailedInvites] = React.useState<Application[]>([]),
-    [accounts, setAccounts] = React.useState<CompanyAccount[]>([]),
-    [notifications, setNotifications] = React.useState<Notification[]>([]),
-    [counts, setCounts] = React.useState([0, 0, 0, 0, 0]),
-    [message, setMessage] = React.useState(""),
-    [reviewing, setReviewing] = React.useState<Application | null>(null),
-    [suggestedDecision, setSuggestedDecision] = React.useState<
-      "approved" | "rejected" | null
-    >(null),
-    [rejectReason, setRejectReason] = React.useState(""),
-    [busyDecision, setBusyDecision] = React.useState(false),
-    [loadError, setLoadError] = React.useState<AppError | null>(null);
-  // Suspension, completion and roles are the shell's business; this component
-  // only asks whether it may show the company view.
-  const { roles } = useSession();
-  const allowed = roles.some((x) =>
-    ["owner", "super_admin", "admin", "hr"].includes(x),
-  );
-  const refresh = React.useCallback(async () => {
-    if (!supabase || !user || !allowed) return;
-    setLoadError(null);
-    const [
-      p,
-      failed,
-      projects,
-      tasks,
-      people,
-      leads,
-      notices,
-      companyProfiles,
-      companyRoles,
-      companyControls,
-    ] = await Promise.all([
-      supabase
-        .from("applications")
-        .select(
-          "id,full_name,email,phone,organization,title,linkedin_url,github_url,account_type,project_or_research,join_reason,cover_letter,cv_path,created_at,status",
-        )
-        .eq("status", "pending")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("applications")
-        .select(
-          "id,full_name,email,phone,organization,title,linkedin_url,github_url,account_type,project_or_research,join_reason,cover_letter,cv_path,created_at,status,invitation_status",
-        )
-        .eq("status", "approved")
-        .eq("invitation_status", "failed")
-        .order("created_at", { ascending: true }),
-      supabase.from("projects").select("*", { count: "exact", head: true }),
-      supabase.from("tasks").select("*", { count: "exact", head: true }),
-      supabase.from("profiles").select("*", { count: "exact", head: true }),
-      supabase.from("crm_contacts").select("*", { count: "exact", head: true }),
-      supabase
-        .from("notifications")
-        .select(
-          "id,title_ar,title_en,body_ar,body_en,read_at,created_at,entity_id",
-        )
-        .order("created_at", { ascending: false })
-        .limit(8),
-      supabase
-        .from("profiles")
-        .select("id,full_name,email,department,position")
-        .order("full_name"),
-      supabase.from("user_roles").select("user_id,role"),
-      supabase.from("account_controls").select("user_id,status,reason"),
-    ]);
-    // A panel that loads in parallel reports one outcome. Without this the
-    // first denied query rendered as an empty section with no explanation.
-    const failure = firstError([p, failed, notices, companyProfiles, companyRoles, companyControls]
-      .map((r) => (r.error ? { ok: false as const, error: toAppError(r.error) } : { ok: true as const, data: null })));
-    if (failure) setLoadError(failure);
-
-    setApps((p.data || []) as Application[]);
-    setFailedInvites((failed.data || []) as Application[]);
-    setNotifications((notices.data || []) as Notification[]);
-    const memberRoles = (companyRoles.data || []) as {
-      user_id: string;
-      role: string;
-    }[];
-    const controlRows = (companyControls.data || []) as {
-      user_id: string;
-      status: string;
-      reason: string | null;
-    }[];
-    setAccounts(
-      (companyProfiles.data || []).map((account) => ({
-        ...account,
-        user_roles: memberRoles
-          .filter(({ user_id }) => user_id === account.id)
-          .map(({ role }) => ({ role })),
-        account_controls:
-          controlRows.find(({ user_id }) => user_id === account.id) || null,
-      })) as CompanyAccount[],
-    );
-    setCounts([
-      projects.count || 0,
-      tasks.count || 0,
-      people.count || 0,
-      leads.count || 0,
-      p.data?.length || 0,
-    ]);
-  }, [user]);
-  React.useEffect(() => {
-    refresh();
-  }, [refresh]);
-  React.useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const requested = params.get("review");
-    if (!requested || reviewing) return;
-    const application = apps.find(({ id }) => id === requested);
-    if (application) {
-      const requestedDecision = params.get("decision");
-      setSuggestedDecision(
-        requestedDecision === "approved" || requestedDecision === "rejected"
-          ? requestedDecision
-          : null,
-      );
-      setReviewing(application);
-    }
-  }, [apps, reviewing]);
-  React.useEffect(() => {
-    if (!supabase || !user || !allowed) return;
-    const channel = supabase
-      .channel(`review-workspace:${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "applications" },
-        refresh,
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notifications" },
-        refresh,
-      )
-      .subscribe();
-    return () => {
-      void supabase?.removeChannel(channel);
-    };
-  }, [allowed, refresh, user]);
-  const decide = async (a: Application, d: "approved" | "rejected") => {
-    const reason = d === "rejected" ? rejectReason : null;
-    if (d === "rejected" && !reason?.trim()) return;
-    setBusyDecision(true);
-    setMessage("");
-    const { data, error } = await supabase!.functions.invoke(
-      "decide-application",
-      {
-        body: { applicationId: a.id, decision: d, rejectionReason: reason },
-      },
-    );
-    setMessage(
-      error?.message ||
-        (data?.invitationStatus === "failed"
-          ? lang === "ar"
-            ? "تم القبول لكن فشل إرسال الدعوة. ظهرت في قائمة إعادة المحاولة."
-            : "Approved, but invitation delivery failed. It is now in the retry list."
-          : lang === "ar"
-            ? "تم حفظ القرار."
-            : "Decision saved."),
-    );
-    if (!error) {
-      setReviewing(null);
-      setRejectReason("");
-      await refresh();
-    }
-    setBusyDecision(false);
-  };
-  const retryInvitation = async (application: Application) => {
-    setBusyDecision(true);
-    const { data, error } = await supabase!.functions.invoke(
-      "decide-application",
-      {
-        body: { applicationId: application.id, decision: "retry_invitation" },
-      },
-    );
-    setMessage(
-      error?.message ||
-        (data?.invitationStatus === "sent"
-          ? lang === "ar"
-            ? "تم إرسال الدعوة."
-            : "Invitation sent."
-          : lang === "ar"
-            ? "فشل إرسال الدعوة مرة أخرى."
-            : "Invitation delivery failed again."),
-    );
-    await refresh();
-    setBusyDecision(false);
-  };
-  const manageAccount = async (body: Record<string, unknown>) => {
-    setMessage("");
-    const { error } = await supabase!.functions.invoke("manage-account", {
-      body,
-    });
-    setMessage(
-      error?.message ||
-        (lang === "ar" ? "تم تحديث الحساب." : "Account updated."),
-    );
-    if (!error) await refresh();
-  };
-  const openCv = async (application: Application) => {
-    if (!application.cv_path || !supabase) return;
-    const { data, error } = await supabase.storage
-      .from("application-cvs")
-      .createSignedUrl(application.cv_path, 60);
-    if (error || !data?.signedUrl) {
-      setMessage(lang === "ar" ? "تعذر فتح ملف CV." : "Could not open CV.");
-      return;
-    }
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-  };
-  if (!user)
-    return (
-      <Gate
-        title={lang === "ar" ? "تسجيل الدخول مطلوب" : "Sign in required"}
-        action={login}
-        label={tr[lang].login}
-      />
-    );
-  if (!ready)
-    return (
-      <Gate
-        title={
-          lang === "ar" ? "أكمل LinkedIn أولًا" : "Complete LinkedIn first"
-        }
-        action={profile}
-        label={tr[lang].account}
-      />
-    );
-  if (!allowed)
-    return (
-      <Gate
-        title={
-          loadError
-            ? messageFor(loadError, lang)
-            : lang === "ar"
-              ? "لا توجد صلاحية"
-              : "Access denied"
-        }
-        action={loadError ? () => void refresh() : undefined}
-        label={loadError ? (lang === "ar" ? "أعد المحاولة" : "Try again") : undefined}
-      />
-    );
-  return (
-    <main className="dashboard">
-      <span>REID COMMAND CENTER</span>
-      <h1>{lang === "ar" ? "لوحة الشركة الحية" : "Live company dashboard"}</h1>
-      {loadError && (
-        <p className="load-error" role="alert" data-kind={loadError.kind}>
-          {messageFor(loadError, lang)}
-          <button type="button" onClick={() => void refresh()}>
-            {lang === "ar" ? "أعد المحاولة" : "Try again"}
-          </button>
-        </p>
-      )}
-      <section className="kpis">
-        {[
-          "Active Projects",
-          "Open Tasks",
-          "Employees",
-          "New Leads",
-          "Pending Approvals",
-        ].map((l, i) => (
-          <article key={l}>
-            <b>{counts[i]}</b>
-            <small>{l}</small>
-          </article>
-        ))}
-      </section>
-      {message && <p className="guard-message">{message}</p>}
-      <section className="review-overview">
-        <article>
-          <h2>{lang === "ar" ? "الإشعارات" : "Notifications"}</h2>
-          {notifications.length ? (
-            notifications.map((notice) => (
-              <div
-                className={notice.read_at ? "notice" : "notice unread"}
-                key={notice.id}
-              >
-                <b>{lang === "ar" ? notice.title_ar : notice.title_en}</b>
-                <p>{lang === "ar" ? notice.body_ar : notice.body_en}</p>
-                <small>
-                  {new Date(notice.created_at).toLocaleString(
-                    lang === "ar" ? "ar-OM" : "en-OM",
-                  )}
-                </small>
-                {notice.entity_id &&
-                  apps.some(({ id }) => id === notice.entity_id) && (
-                    <button
-                      onClick={() =>
-                        setReviewing(
-                          apps.find(({ id }) => id === notice.entity_id) ||
-                            null,
-                        )
-                      }
-                    >
-                      {lang === "ar" ? "مراجعة الطلب" : "Review application"}
-                    </button>
-                  )}
-              </div>
-            ))
-          ) : (
-            <p>{lang === "ar" ? "لا توجد إشعارات." : "No notifications."}</p>
-          )}
-        </article>
-      </section>
-      <h2>{lang === "ar" ? "طلبات معلقة" : "Pending applications"}</h2>
-      <section className="applications-list">
-        {apps.length ? (
-          apps.map((a) => (
-            <article key={a.id}>
-              <div>
-                <b>{a.full_name}</b>
-                <small>
-                  {a.email} · {a.organization} · {a.account_type}
-                </small>
-                <p>{a.join_reason}</p>
-              </div>
-              <div>
-                <button
-                  onClick={() => {
-                    setReviewing(a);
-                    setRejectReason("");
-                  }}
-                >
-                  {lang === "ar" ? "مراجعة" : "Review"}
-                </button>
-              </div>
-            </article>
-          ))
-        ) : (
-          <p>{lang === "ar" ? "لا توجد طلبات." : "No pending applications."}</p>
-        )}
-      </section>
-      {failedInvites.length > 0 && (
-        <>
-          <h2>
-            {lang === "ar"
-              ? "دعوات تحتاج إعادة إرسال"
-              : "Invitations needing retry"}
-          </h2>
-          <section className="applications-list failed-invitations">
-            {failedInvites.map((application) => (
-              <article key={application.id}>
-                <div>
-                  <b>{application.full_name}</b>
-                  <small>{application.email}</small>
-                </div>
-                <div>
-                  <button
-                    disabled={busyDecision}
-                    onClick={() => retryInvitation(application)}
-                  >
-                    {lang === "ar" ? "إعادة إرسال الدعوة" : "Retry invitation"}
-                  </button>
-                </div>
-              </article>
-            ))}
-          </section>
-        </>
-      )}
-      {(roles.includes("owner") || roles.includes("super_admin")) && (
-        <>
-          <h2>
-            {lang === "ar" ? "الحسابات والصلاحيات" : "Accounts and roles"}
-          </h2>
-          <section className="accounts-list">
-            {accounts.map((account) => {
-              const control = Array.isArray(account.account_controls)
-                ? account.account_controls[0]
-                : account.account_controls;
-              const status = control?.status || "active";
-              const roleNames =
-                account.user_roles?.map(({ role }) => role) || [];
-              const protectedAccount =
-                account.id === user.id || roleNames.includes("owner");
-              return (
-                <article key={account.id}>
-                  <div>
-                    <b>{account.full_name}</b>
-                    <small>{account.email}</small>
-                    <small>
-                      {account.department || "—"} · {account.position || "—"}
-                    </small>
-                  </div>
-                  <div className="account-roles">
-                    {roleNames.map((role) => (
-                      <button
-                        type="button"
-                        key={role}
-                        disabled={protectedAccount || role === "owner"}
-                        title={lang === "ar" ? "إزالة الصلاحية" : "Remove role"}
-                        onClick={() => void manageAccount({ action: "set_role", targetUserId: account.id, role, enabled: false })}
-                      >
-                        {role.replaceAll("_", " ")} {protectedAccount || role === "owner" ? "" : "×"}
-                      </button>
-                    ))}
-                  </div>
-                  <div className={`account-status ${status}`}>
-                    <b>{status}</b>
-                    {control?.reason && <small>{control.reason}</small>}
-                  </div>
-                  <div className="account-actions">
-                    <select
-                      aria-label={
-                        lang === "ar"
-                          ? `إضافة صلاحية ${account.full_name}`
-                          : `Add role for ${account.full_name}`
-                      }
-                      defaultValue=""
-                      disabled={protectedAccount}
-                      onChange={(event) => {
-                        if (!event.target.value) return;
-                        void manageAccount({
-                          action: "set_role",
-                          targetUserId: account.id,
-                          role: event.target.value,
-                          enabled: true,
-                        });
-                        event.target.value = "";
-                      }}
-                    >
-                      <option value="">
-                        {lang === "ar" ? "إضافة صلاحية" : "Add role"}
-                      </option>
-                      {[
-                        "super_admin",
-                        "admin",
-                        "hr",
-                        "sales",
-                        "employee",
-                        "project_member",
-                        "research_member",
-                        "guest",
-                      ]
-                        .filter((role) => !roleNames.includes(role))
-                        .map((role) => (
-                          <option value={role} key={role}>
-                            {role.replaceAll("_", " ")}
-                          </option>
-                        ))}
-                    </select>
-                    <button
-                      disabled={protectedAccount}
-                      onClick={() => {
-                        if (status === "active") {
-                          const reason = window.prompt(
-                            lang === "ar"
-                              ? "سبب إيقاف الحساب"
-                              : "Suspension reason",
-                          );
-                          if (reason?.trim())
-                            void manageAccount({
-                              action: "set_status",
-                              targetUserId: account.id,
-                              status: "suspended",
-                              reason,
-                            });
-                        } else {
-                          void manageAccount({
-                            action: "set_status",
-                            targetUserId: account.id,
-                            status: "active",
-                          });
-                        }
-                      }}
-                    >
-                      {status === "active"
-                        ? lang === "ar"
-                          ? "إيقاف"
-                          : "Suspend"
-                        : lang === "ar"
-                          ? "إعادة تفعيل"
-                          : "Reactivate"}
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </section>
-        </>
-      )}
-      {reviewing && (
-        <div
-          className="review-backdrop"
-          role="presentation"
-          onMouseDown={() => setReviewing(null)}
-        >
-          <section
-            className="review-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="review-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header>
-              <div>
-                <small>{reviewing.account_type.replaceAll("_", " ")}</small>
-                <h2 id="review-title">{reviewing.full_name}</h2>
-              </div>
-              <button
-                aria-label={lang === "ar" ? "إغلاق" : "Close"}
-                onClick={() => setReviewing(null)}
-              >
-                ×
-              </button>
-            </header>
-            {suggestedDecision && (
-              <p className="notice">
-                {lang === "ar"
-                  ? `فُتح هذا الطلب من رابط ${suggestedDecision === "approved" ? "القبول" : "الرفض"} في البريد. راجع البيانات ثم أكّد القرار يدويًا.`
-                  : `This request was opened from the email ${suggestedDecision === "approved" ? "approval" : "rejection"} link. Review it and confirm manually.`}
-              </p>
-            )}
-            <dl>
-              <div>
-                <dt>{lang === "ar" ? "البريد" : "Email"}</dt>
-                <dd>{reviewing.email}</dd>
-              </div>
-              <div>
-                <dt>{lang === "ar" ? "الهاتف" : "Phone"}</dt>
-                <dd>{reviewing.phone}</dd>
-              </div>
-              <div>
-                <dt>{lang === "ar" ? "الجهة" : "Organization"}</dt>
-                <dd>{reviewing.organization}</dd>
-              </div>
-              <div>
-                <dt>{lang === "ar" ? "المسمى" : "Title"}</dt>
-                <dd>{reviewing.title}</dd>
-              </div>
-              <div>
-                <dt>LinkedIn</dt>
-                <dd>
-                  <a
-                    href={reviewing.linkedin_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {reviewing.linkedin_url}
-                  </a>
-                </dd>
-              </div>
-              <div>
-                <dt>GitHub</dt>
-                <dd>
-                  {reviewing.github_url ? (
-                    <a
-                      href={reviewing.github_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {reviewing.github_url}
-                    </a>
-                  ) : (
-                    "—"
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>
-                  {lang === "ar" ? "المشروع / البحث" : "Project / research"}
-                </dt>
-                <dd>{reviewing.project_or_research || "—"}</dd>
-              </div>
-            </dl>
-            <article>
-              <b>{lang === "ar" ? "سبب الانضمام" : "Join reason"}</b>
-              <p>{reviewing.join_reason}</p>
-            </article>
-            <article>
-              <b>{lang === "ar" ? "الرسالة التعريفية" : "Cover letter"}</b>
-              <p>{reviewing.cover_letter}</p>
-            </article>
-            {reviewing.cv_path && (
-              <button onClick={() => openCv(reviewing)}>
-                {lang === "ar" ? "فتح CV بشكل آمن" : "Open CV securely"}
-              </button>
-            )}
-            <label>
-              {lang === "ar"
-                ? "سبب الرفض الداخلي"
-                : "Internal rejection reason"}
-              <textarea
-                value={rejectReason}
-                onChange={(event) => setRejectReason(event.target.value)}
-                placeholder={
-                  lang === "ar"
-                    ? "إجباري عند الرفض، ولا يُرسل للمتقدم"
-                    : "Required for rejection; never sent to applicant"
-                }
-              />
-            </label>
-            <footer>
-              <button
-                className="primary"
-                disabled={busyDecision}
-                onClick={() => decide(reviewing, "approved")}
-                data-email-suggestion={suggestedDecision === "approved"}
-              >
-                {lang === "ar" ? "قبول وإرسال الدعوة" : "Approve and invite"}
-              </button>
-              <button
-                disabled={busyDecision || !rejectReason.trim()}
-                onClick={() => decide(reviewing, "rejected")}
-                data-email-suggestion={suggestedDecision === "rejected"}
-              >
-                {lang === "ar" ? "رفض الطلب" : "Reject application"}
-              </button>
-            </footer>
-          </section>
-        </div>
-      )}
-      <AgentCommand lang={lang} />
-    </main>
-  );
-}
-
 function Chat({ lang }: { lang: Lang }) {
   type PublicMessage = { role: "user" | "model"; text: string };
   const [open, setOpen] = React.useState(false);
@@ -1381,8 +706,18 @@ function Chrome({ session }: { session: Session | null }) {
     }),
     t = tr[lang];
   // Roles, suspension and profile completion are resolved once by the shell.
-  const { reload: check, profileComplete: ready } = useSession();
+  const access = useSession();
+  const { reload: check } = access;
   const navigation = useNavigation();
+  // /dashboard is where sign-in returns. A join-application link goes on to
+  // People, and anyone agent management would refuse starts on their own page.
+  React.useEffect(() => {
+    if (page !== "dashboard") return;
+    const params = new URLSearchParams(location.search);
+    const redirect = (path: string) => { history.replaceState({}, "", path); dispatchEvent(new PopStateEvent("popstate")); };
+    if (params.has("review")) redirect(`/workspace?tab=applications&${params}`);
+    else if (accessForPage("dashboard", access) === "forbidden") redirect(pathFor(landingPage(access.roles)));
+  }, [page, access]);
   const internalPage = !!session && workspacePages.includes(page);
   React.useEffect(() => remember("reid-lang", lang), [lang]);
   React.useEffect(() => remember("reid-theme", dark ? "dark" : "light"), [dark]);
@@ -1408,7 +743,7 @@ function Chrome({ session }: { session: Session | null }) {
         <Guarded page={page} lang={lang} renderSignIn={() => <Login lang={lang} done={() => go(page)} apply={() => go("apply")} />} onProfile={() => go("profile")}>
           {page === "today" && <Today lang={lang} go={go} />}
           {page === "owner" && <OwnerOverview lang={lang} go={go} />}
-          {page === "inbox" && <QrInbox lang={lang} go={go} />}
+          {page === "inbox" && <Inbox lang={lang} go={go} />}
           {page === "connections" && <Connections lang={lang} go={go} />}
           {page === "operations" && <Operations lang={lang} />}
           {page === "assistant" && <AssistantWorkspace lang={lang} />}
@@ -1453,13 +788,7 @@ function Chrome({ session }: { session: Session | null }) {
           )}
           onProfile={() => go("profile")}
         >
-          <Dashboard
-            lang={lang}
-            user={session?.user || null}
-            ready={ready}
-            login={() => go("login")}
-            profile={() => go("profile")}
-          />
+          <AgentManagement lang={lang} go={go} />
         </Guarded>
       )}{" "}
       {page === "workspace" && (

@@ -159,12 +159,42 @@ const fixtures = {
     { id: 'n1', title_ar: 'تم إسناد مهمة جديدة لك', title_en: 'A new task was assigned to you', read_at: null, created_at: iso(-1) },
     { id: 'n2', title_ar: 'طلب انضمام جديد', title_en: 'New join application', read_at: null, created_at: iso(-3) },
   ],
-  agents: ['ceo', 'operations', 'marketing', 'sales', 'knowledge', 'analytics', 'content', 'competitor', 'support', 'hr'].map((id, index) => ({
-    id, name: id, status: 'idle', model: 'gemma4:12b', host: 'ai-lap', approval_level: 1, provider_id: 'ollama',
-    classification: index < 5 ? 'internal' : 'public', enabled: true, disabled_reason: null,
+  agents: [
+    ['ceo', 3, 'internal', ['crm.pipeline', 'projects.list', 'tasks.create', 'tasks.list']], ['operations', 1, 'internal', ['projects.list', 'tasks.create', 'tasks.list']],
+    ['marketing', 2, 'public', ['content.context', 'content.draft.create']], ['sales', 2, 'confidential', ['crm.follow_up.create', 'crm.pipeline']],
+    ['knowledge', 1, 'internal', ['knowledge.search', 'projects.list']], ['analytics', 1, 'internal', ['projects.list', 'tasks.list']],
+    ['content', 2, 'public', ['content.context', 'content.draft.create', 'content.publish']], ['competitor', 1, 'public', ['content.context']],
+    ['support', 2, 'internal', ['crm.follow_up.create', 'crm.pipeline', 'knowledge.search']], ['hr', 3, 'restricted', ['applications.list', 'onboarding.create', 'people.list']],
+    ['finance', 3, 'restricted', []],
+  ].map(([id, level, classification, permissions]) => ({
+    id, name: id, status: id === 'competitor' ? 'paused' : id === 'finance' ? 'disabled' : 'idle', model: 'gemma4:12b', host: 'ollama', approval_level: level,
+    provider_id: 'ollama', classification, enabled: id !== 'finance', disabled_reason: null, permissions,
   })),
-  llm_providers: [{ id: 'ollama', name: 'ai-lap', kind: 'local', chat_model: 'gemma4:12b', max_classification: 'restricted', retains_data: false, enabled: true }],
-  agent_runner_status: { id: 'ai-lap', status: 'online', version: '1.2.2', model: 'gemma4:12b', last_seen_at: iso(0) },
+  llm_providers: [
+    { id: 'ollama', name: 'Ollama على ai-lap', kind: 'local', chat_model: 'gemma4:12b', max_classification: 'restricted', retains_data: false, enabled: true },
+    { id: 'gemini', name: 'Google Gemini API', kind: 'external', chat_model: 'gemini-2.5-flash', max_classification: 'restricted', retains_data: true, enabled: false },
+  ],
+  agent_runner_status: { id: 'ai-lap', status: 'online', version: '1.2.2', model: 'gemma4:12b', gpu: 'NVIDIA RTX 4070', ping_ms: 38, cpu_percent: 24, memory_used_gb: 11.2, memory_total_gb: 32, gpu_utilization: 61, vram_used_mb: 9830, vram_total_mb: 12282, last_seen_at: iso(-0.005) },
+  agent_runs: [
+    { id: 'run-1', agent_id: 'content', provider_id: 'ollama', classification: 'public', run_state: 'pending_approval', approval_level: 2, approval_state: 'pending', latency_ms: null, token_usage: null, quality_score: null, quality_flags: [], revision_count: 0, output_preview: null, error: null, created_at: iso(-0.4), requested_by: 'u-ali' },
+    { id: 'run-2', agent_id: 'operations', provider_id: 'ollama', classification: 'internal', run_state: 'running', approval_level: 0, approval_state: 'not_required', latency_ms: null, token_usage: null, quality_score: null, quality_flags: [], revision_count: 0, output_preview: null, error: null, created_at: iso(-0.05), requested_by: user.id },
+    { id: 'run-3', agent_id: 'ceo', provider_id: 'ollama', classification: 'internal', run_state: 'succeeded', approval_level: 0, approval_state: 'not_required', latency_ms: 8420, token_usage: 912, quality_score: 92, quality_flags: [], revision_count: 1, output_preview: 'ملخص الأسبوع: مشروعان على المسار، ومشروع منصة الحجز يحتاج قرارًا في مراجعة العرض قبل الخميس. أقترح اجتماعًا قصيرًا مع علي لتحديد النطاق.', error: null, created_at: iso(-3), requested_by: user.id },
+    { id: 'run-4', agent_id: 'sales', provider_id: 'ollama', classification: 'confidential', run_state: 'failed', approval_level: 0, approval_state: 'not_required', latency_ms: 30000, token_usage: null, quality_score: null, quality_flags: [], revision_count: 0, output_preview: null, error: 'local_provider_offline', created_at: iso(-5), requested_by: user.id },
+    { id: 'run-5', agent_id: 'knowledge', provider_id: 'ollama', classification: 'internal', run_state: 'succeeded', approval_level: 0, approval_state: 'not_required', latency_ms: 5120, token_usage: 610, quality_score: 88, quality_flags: [], revision_count: 0, output_preview: 'وجدت ثلاث وثائق عن سياسة الإجازات؛ أحدثها معتمدة في أغسطس.', error: null, created_at: iso(-26), requested_by: 'u-ali' },
+  ],
+  agent_tools: [
+    ['projects.list', 'عرض المشاريع', 'List projects', 'read', 0, {}], ['tasks.list', 'عرض المهام', 'List tasks', 'read', 0, {}],
+    ['tasks.create', 'إنشاء مهمة', 'Create task', 'create', 1, { required: ['title'], properties: { title: { type: 'string' }, due_at: { type: 'string' }, priority: { type: 'integer' }, project_id: { type: 'string' }, assignee_id: { type: 'string' }, description: { type: 'string' } } }],
+    ['crm.pipeline', 'عرض مسار المبيعات', 'Sales pipeline', 'read', 0, {}],
+    ['content.context', 'سياق المحتوى', 'Content context', 'read', 0, {}],
+    ['content.draft.create', 'إنشاء مسودة', 'Create draft', 'create', 1, { required: ['title_ar', 'title_en', 'body_ar', 'body_en'] }],
+    ['content.publish', 'نشر محتوى', 'Publish content', 'publish', 2, { required: ['draft_id'], properties: { draft_id: { type: 'string' } } }],
+  ].map(([id, name_ar, name_en, operation, approval_level, input_schema]) => ({ id, name_ar, name_en, description: name_en, operation, approval_level, input_schema })),
+  applications: [
+    { id: 'app-1', full_name: 'هدى الشكيلية', email: 'huda@example.test', phone: '+968 9111 2233', organization: 'جامعة السلطان قابوس', title: 'باحثة ذكاء اصطناعي', account_type: 'research_member', linkedin_url: 'https://www.linkedin.com/in/example', github_url: null, project_or_research: 'تحليل اللهجات العمانية', join_reason: 'أرغب بالمشاركة في مشروع معالجة اللهجة العمانية وتقديم بيانات الأبحاث التي جمعتها خلال الماجستير.', cover_letter: 'أعمل منذ سنتين على نماذج لغوية للهجات الخليجية…', cv_path: 'app-1/cv.pdf', created_at: iso(-20), status: 'pending', invitation_status: null },
+    { id: 'app-2', full_name: 'Omar Al-Rawahi', email: 'omar@example.test', phone: '+968 9222 3344', organization: 'Freelance', title: 'Designer', account_type: 'guest', linkedin_url: 'https://www.linkedin.com/in/example2', github_url: 'https://github.com/example', project_or_research: null, join_reason: 'I would like to help with the booking platform interface.', cover_letter: '', cv_path: null, created_at: iso(-50), status: 'pending', invitation_status: null },
+    { id: 'app-3', full_name: 'ليلى الهنائية', email: 'laila@example.test', phone: '+968 9333 4455', organization: 'ريّد', title: 'محاسبة', account_type: 'employee', linkedin_url: '', github_url: null, project_or_research: null, join_reason: '—', cover_letter: '', cv_path: null, created_at: iso(-90), status: 'approved', invitation_status: 'failed' },
+  ],
   agent_rooms: { id: 'room-1', name: 'فريق ريّد', created_by: user.id, created_at: iso(-48), updated_at: iso(-1) },
   agent_room_messages: [
     { id: 'm1', room_id: 'room-1', sender_kind: 'user', sender_user_id: user.id, sender_agent_id: null, body: '@operations لخص لي وضع مشروع منصة الحجز', mentions: ['operations'], run_id: null, reply_to: null, state: 'completed', error: null, created_at: iso(-1), updated_at: iso(-1) },
@@ -207,3 +237,32 @@ export function respondForPreview(route) {
   return json(data, 200, { 'content-range': `0-${Math.max(0, count - 1)}/${count}` });
 }
 
+// The WhatsApp service on the Reid host (/api/*), answered the same way.
+const chats = [
+  { id: 'chat-1', jid: '96891234567@s.whatsapp.net', display_name: 'أحمد البلوشي', bot_mode: 'active', last_message: 'تمام، متى نقدر نبدأ؟', updated_at: iso(-0.2), summary: 'أحمد مدير مدرسة النور الخاصة. يسأل عن بوابة أولياء الأمور وسعر المرحلة الأولى، ويفضّل التواصل صباحًا. وُعد بعرض مفصل هذا الأسبوع.', mood: 'مستعجل', message_count: 14 },
+  { id: 'chat-2', jid: '96899887766@s.whatsapp.net', display_name: 'Fatma', bot_mode: 'human', last_message: 'Thanks, I will review the proposal tonight.', updated_at: iso(-3), summary: '', mood: 'محايد', message_count: 6 },
+  { id: 'chat-3', jid: '120363412585944970@g.us', display_name: 'مجموعة الملاك', bot_mode: 'active', last_message: 'ريد، لخص لنا اجتماع اليوم', updated_at: iso(-26), summary: '', mood: 'محايد', message_count: 40 },
+  { id: 'chat-4', jid: '96893334444@s.whatsapp.net', display_name: '', bot_mode: 'human', last_message: 'السلام عليكم', updated_at: iso(-80), summary: '', mood: 'محايد', message_count: 1 },
+];
+const threads = {
+  'chat-1': [
+    { id: 'w1', direction: 'inbound', body: 'السلام عليكم، شفت عرضكم عن بوابة أولياء الأمور. كم السعر للمرحلة الأولى؟', status: 'received', created_at: iso(-27) },
+    { id: 'w2', direction: 'outbound', body: 'وعليكم السلام أستاذ أحمد، حيّاك. المرحلة الأولى تشمل التسجيل والرسائل والتقارير الشهرية، وأرسل لك العرض المفصّل اليوم إن شاء الله.', status: 'sent', created_at: iso(-26.9), quality_score: 91 },
+    { id: 'w3', direction: 'inbound', body: 'أرسلت لكم تسجيل صوتي فيه ملاحظات المعلمين', status: 'received', media_kind: 'audio', created_at: iso(-0.5) },
+    { id: 'w4', direction: 'outbound', body: 'وصلت الملاحظات، شكرًا. أهمها: تنبيه عند الغياب، وتقرير أسبوعي بدل الشهري. نضيفها في العرض.', status: 'sent', created_at: iso(-0.45), quality_score: 88 },
+    { id: 'w5', direction: 'inbound', body: 'تمام، متى نقدر نبدأ؟', status: 'received', created_at: iso(-0.2) },
+  ],
+};
+export function respondForLocalApi(route) {
+  const url = new URL(route.request().url());
+  const path = url.pathname.replace(/^\/api\//, '');
+  const json = body => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  if (path === 'whatsapp/status') return json({ connection: 'connected', qr: null, number: '96890001111', lastError: null, transport: 'qr' });
+  if (path === 'whatsapp/conversations') return json(chats);
+  if (path === 'whatsapp/outbox') return json([]);
+  if (path === 'whatsapp/actions') return json([]);
+  if (path === 'ai/health') return json({ online: true, model: 'gemma4:12b' });
+  const thread = path.match(/^whatsapp\/conversations\/([^/]+)\/messages$/);
+  if (thread) return json([...(threads[thread[1]] ?? [])].reverse());
+  return json({ ok: true });
+}

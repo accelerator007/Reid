@@ -1,6 +1,6 @@
 // People data through db.ts. Row-level security decides whose onboarding,
 // documents, KPIs, reviews and hours each person can see.
-import { firstError, list, run, type AppError, type Result } from '../db';
+import { firstError, list, run, toAppError, type AppError, type Result } from '../db';
 import { supabase } from '../supabase';
 import type {
   Announcement, CalendarEvent, Department, EmployeeDocument, EmployeeKpi, Onboarding, Person, PersonTask, Review, Timesheet,
@@ -91,6 +91,65 @@ export async function uploadDocument(ownerId: string, by: string, file: File, fi
 /** A one-minute signed link: HR files never become publicly addressable. */
 export async function openDocument(path: string): Promise<Result<string | null>> {
   const signed = await run(db().storage.from('employee-documents').createSignedUrl(path, 60));
+  if (!signed.ok) return signed;
+  const url = (signed.data as { signedUrl?: string } | null)?.signedUrl ?? null;
+  if (url) window.open(url, '_blank', 'noopener,noreferrer');
+  return { ok: true, data: url };
+}
+
+// ---- join applications (owner, super_admin, admin, hr) ----------------------------
+
+export type Application = {
+  id: string; full_name: string; email: string; phone: string; organization: string; title: string; account_type: string;
+  linkedin_url: string; github_url: string | null; project_or_research: string | null; join_reason: string; cover_letter: string;
+  cv_path: string | null; created_at: string; status: string; invitation_status: string | null;
+};
+export type Applications = { pending: Application[]; failedInvites: Application[] };
+
+const applicationColumns = 'id,full_name,email,phone,organization,title,account_type,linkedin_url,github_url,project_or_research,join_reason,cover_letter,cv_path,created_at,status,invitation_status';
+
+export async function loadApplications(): Promise<{ data: Applications | null; error: AppError | null }> {
+  const client = db();
+  const [pending, failed] = await Promise.all([
+    list<Application>(client.from('applications').select(applicationColumns).eq('status', 'pending').order('created_at')),
+    list<Application>(client.from('applications').select(applicationColumns).eq('status', 'approved').eq('invitation_status', 'failed').order('created_at')),
+  ]);
+  const error = firstError([pending, failed]);
+  if (!pending.ok) return { data: null, error };
+  return { data: { pending: pending.data, failedInvites: failed.ok ? failed.data : [] }, error };
+}
+
+/** Pending requests only, for the tab badge before the tab is opened. */
+export async function countPendingApplications(): Promise<number> {
+  const { count } = await db().from('applications').select('id', { count: 'exact', head: true }).eq('status', 'pending');
+  return count ?? 0;
+}
+
+export function subscribeToApplications(onChange: () => void) {
+  const client = db();
+  const channel = client.channel('people-applications')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'applications' }, onChange);
+  channel.subscribe();
+  return () => { void client.removeChannel(channel); };
+}
+
+/**
+ * The decision goes through the decide-application function, which records it
+ * with the database rule and sends the invitation; invitationStatus says
+ * whether the email left.
+ */
+export async function decideApplication(id: string, decision: 'approved' | 'rejected' | 'retry_invitation', reason?: string): Promise<Result<{ invitationStatus?: string }>> {
+  const result = await run<{ invitationStatus?: string; error?: string }>(
+    db().functions.invoke('decide-application', { body: { applicationId: id, decision, rejectionReason: reason ?? null } }),
+  );
+  if (!result.ok) return result;
+  if (result.data?.error) return { ok: false, error: toAppError(new Error(result.data.error)) };
+  return { ok: true, data: { invitationStatus: result.data?.invitationStatus } };
+}
+
+/** A one-minute signed link to the applicant's CV. */
+export async function openCv(path: string): Promise<Result<string | null>> {
+  const signed = await run(db().storage.from('application-cvs').createSignedUrl(path, 60));
   if (!signed.ok) return signed;
   const url = (signed.data as { signedUrl?: string } | null)?.signedUrl ?? null;
   if (url) window.open(url, '_blank', 'noopener,noreferrer');

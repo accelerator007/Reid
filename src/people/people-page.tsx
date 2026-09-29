@@ -2,26 +2,33 @@
 // calendar and departments. Opening a person shows their records.
 import React from 'react';
 import type { User } from '@supabase/supabase-js';
-import { Building2, CalendarDays, Megaphone, Plus, Search, UsersRound, X } from 'lucide-react';
+import { Building2, CalendarDays, FileText, Megaphone, Plus, Search, UsersRound, X } from 'lucide-react';
 import { messageFor, type AppError, type Result } from '../db';
 import { useSession } from '../shell';
 import { Badge, Button, Card, EmptyState, InlineAlert, Skeleton, TabPanel, Tabs, type TabItem } from '../ui';
 import * as api from './api';
 import { employmentStatuses, departmentName, filterPeople, initials, isPeopleStaff, type Lang, type Person } from './model';
+import { Applications } from './applications';
 import { PeopleForms, type PeopleDialog } from './people-forms';
 import { PersonDetail } from './person-detail';
 import './people.css';
 
 const tr = (lang: Lang, ar: string, en: string) => (lang === 'ar' ? ar : en);
-type Tab = 'directory' | 'announcements' | 'calendar' | 'departments';
+type Tab = 'directory' | 'announcements' | 'calendar' | 'departments' | 'applications';
 const personFromUrl = () => new URLSearchParams(location.search).get('person');
+const tabFromUrl = (staff: boolean): Tab => {
+  const params = new URLSearchParams(location.search);
+  // Links to a join application (?review=) land on the applications tab.
+  return staff && (params.get('tab') === 'applications' || params.has('review')) ? 'applications' : 'directory';
+};
 
 export function EmployeeWorkspace({ lang, user }: { lang: Lang; user: User; profile?: () => void }) {
   const { roles } = useSession();
   const staff = isPeopleStaff(roles);
   const [data, setData] = React.useState<api.PeopleData | null>(null);
   const [error, setError] = React.useState<AppError | null>(null);
-  const [tab, setTab] = React.useState<Tab>('directory');
+  const [tab, setTab] = React.useState<Tab>(() => tabFromUrl(staff));
+  const [pendingApplications, setPendingApplications] = React.useState<number | undefined>(undefined);
   const [dialog, setDialog] = React.useState<PeopleDialog>(null);
   const [selected, setSelected] = React.useState<string | null>(personFromUrl);
 
@@ -31,6 +38,7 @@ export function EmployeeWorkspace({ lang, user }: { lang: Lang; user: User; prof
     setError(result.error);
   }, [staff]);
   React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => { if (staff) void api.countPendingApplications().then(setPendingApplications); }, [staff]);
   React.useEffect(() => {
     let timer: number | undefined;
     return api.subscribeToPeople(() => { window.clearTimeout(timer); timer = window.setTimeout(() => void load(), 400); });
@@ -60,6 +68,7 @@ export function EmployeeWorkspace({ lang, user }: { lang: Lang; user: User; prof
     { id: 'announcements', label: tr(lang, 'الإعلانات', 'Announcements'), icon: <Megaphone />, count: data?.announcements.length },
     { id: 'calendar', label: tr(lang, 'التقويم', 'Calendar'), icon: <CalendarDays />, count: data?.events.length },
     { id: 'departments', label: tr(lang, 'الأقسام', 'Departments'), icon: <Building2 />, count: data?.departments.length },
+    ...(staff ? [{ id: 'applications' as const, label: tr(lang, 'طلبات الانضمام', 'Join requests'), icon: <FileText />, count: pendingApplications }] : []),
   ];
   const action: Partial<Record<Tab, Exclude<PeopleDialog, null>>> = staff
     ? { announcements: 'announcement', calendar: 'event', departments: 'department' }
@@ -86,7 +95,8 @@ export function EmployeeWorkspace({ lang, user }: { lang: Lang; user: User; prof
 
       <Tabs items={tabs} value={tab} onChange={setTab} label={tr(lang, 'أقسام الفريق', 'People sections')} dir={lang === 'ar' ? 'rtl' : 'ltr'} />
       <TabPanel id={tab}>
-        {!data && !error && <Skeleton lines={6} />}
+        {!data && !error && tab !== 'applications' && <Skeleton lines={6} />}
+        {staff && tab === 'applications' && <Applications lang={lang} onCount={setPendingApplications} />}
         {data && tab === 'directory' && <Directory lang={lang} data={data} open={open} />}
         {data && tab === 'announcements' && (
           data.announcements.length ? (

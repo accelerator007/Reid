@@ -10,7 +10,9 @@ const agent = (over: Partial<AgentRow>): AgentRow => ({ id: 'hr', name: 'HR', st
 const localPrimaryMigration=readFileSync(new URL('../supabase/migrations/202609060005_ollama_primary_gemini_fallback.sql',import.meta.url),'utf8');
 const localRunner=readFileSync(new URL('../supabase/functions/ai-lap-runner/index.ts',import.meta.url),'utf8');
 const gateway=readFileSync(new URL('../supabase/functions/llm-gateway/index.ts',import.meta.url),'utf8');
-const commandCenter=readFileSync(new URL('./agent-command.tsx',import.meta.url),'utf8');
+const agentPage=readFileSync(new URL('./agent-admin/agent-admin-page.tsx',import.meta.url),'utf8');
+const agentApi=readFileSync(new URL('./agent-admin/api.ts',import.meta.url),'utf8');
+const agentDetail=readFileSync(new URL('./agent-admin/agent-detail.tsx',import.meta.url),'utf8');
 const telemetryMigration=readFileSync(new URL('../supabase/migrations/202609070002_owner_command_center_metrics.sql',import.meta.url),'utf8');
 const hostRunner=readFileSync(new URL('../infra/ai-lap/reid_agent_runner.py',import.meta.url),'utf8');
 
@@ -91,15 +93,20 @@ describe('ai-lap primary runtime contract', () => {
     expect(localRunner).toContain('gpu_utilization');
     expect(telemetryMigration).toContain("agent_runner_status");
     expect(telemetryMigration).toContain("supabase_realtime");
-    expect(commandCenter).toContain("owner && <SystemOverview");
-    expect(commandCenter).toContain("postgres_changes");
+    // ai-lap telemetry is shown to those who manage agents (is_admin), never to HR.
+    expect(agentPage).toContain("{manage && (");
+    expect(agentPage).toContain("<RunnerCard");
+    expect(agentApi).toContain("postgres_changes");
+    expect(agentApi).toContain("table: 'agent_runner_status'");
   });
 
   it('uses the compact operating roster without the experimental 3D world',()=>{
-    expect(commandCenter).toContain('className="agent-roster-grid"');
-    expect(commandCenter).toContain('className="agent-inspector"');
-    expect(commandCenter).not.toContain('AgentWorld');
-    expect(commandCenter).not.toContain('agent-world');
+    expect(agentPage).toContain('className="agents-grid"');
+    expect(agentDetail).toContain('className="agent-page"');
+    for (const source of [agentPage, agentDetail]) {
+      expect(source).not.toContain('AgentWorld');
+      expect(source).not.toContain('agent-world');
+    }
   });
 });
 

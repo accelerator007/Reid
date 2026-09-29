@@ -1,5 +1,5 @@
 import React from 'react';
-import { QrCode, Smartphone, RefreshCw, CheckCircle2, MessageCircle, Send, Bot, UserRound, Search, Wifi, ArrowUpRight, ShieldCheck, ReceiptText } from 'lucide-react';
+import { QrCode, Smartphone, CheckCircle2, MessageCircle, Bot, ArrowUpRight, ShieldCheck, ReceiptText } from 'lucide-react';
 import { localApi, localError } from './local-api';
 import type { Page } from './routes';
 import { supabase } from './supabase';
@@ -7,9 +7,6 @@ import { useSession } from './shell';
 
 type Lang = 'ar'|'en';
 type Status={connection:string;qr:string|null;number:string|null;lastError:string|null};
-type Conversation={id:string;jid:string;display_name:string;bot_mode:'active'|'human';last_message:string;updated_at:string};
-type Message={id:string;direction:'inbound'|'outbound';body:string;status:string;created_at:string};
-type Outbox={id:string;conversation_id:string;status:string;error:string|null;created_at:string};
 type AdminPerson={id:string;full_name:string;email:string;role:string};
 type AdminLink={user_id:string;phone_e164:string;enabled:boolean;memory_enabled:boolean;style_learning_enabled:boolean;style_profile:Record<string,unknown>;sample_count:number;outbound_scope:'none'|'company'|'any';artifacts_enabled:boolean;workshops_enabled:boolean;notes_enabled:boolean;proactive_enabled:boolean};
 type GroupLink={jid:string;display_name:string;enabled:boolean};
@@ -53,36 +50,5 @@ export function Connections({lang,go}:{lang:Lang;go:(page:Page)=>void}) {
       <p className="os-muted">{choose(lang,'يحذف ريّد رموز التحقق وكلمات المرور ومفاتيح الوصول قبل إدخال النص في الذاكرة أو السياق.','Reid redacts verification codes, passwords and access keys before text enters memory or context.')}</p>
     </section>
     <section className="os-panel os-spaced"><div className="os-section-title"><div><h2><ReceiptText/> {choose(lang,'الطلبات والإيصالات','Requests & receipts')}</h2><p>{choose(lang,'سجل واضح لكل موافقة وإرسال، من طلب التنفيذ حتى النتيجة الفعلية.','A clear log from approval through the actual delivery result.')}</p></div><ShieldCheck/></div><div className="os-action-log">{actions.length?actions.slice(0,30).map(action=>{const requester=people.find(item=>item.id===action.requester_id);return <article key={action.id}><div><b>{action.preview}</b><small>{requester?.full_name||requester?.email||action.requester_id} · {new Date(action.created_at).toLocaleString(lang==='ar'?'ar-OM':'en-GB')}</small></div><span className={`os-status ${action.status==='completed'?'good':''}`}>{action.status}</span><small dir="ltr">#{action.id.slice(0,8)}</small>{action.error_code&&<small className="os-action-error">{action.error_code}</small>}</article>}):<p className="os-muted">{choose(lang,'لا توجد طلبات بعد. ستظهر أوامر واتساب المؤكدة هنا.','No requests yet. Confirmed WhatsApp actions will appear here.')}</p>}</div></section>
-  </main>;
-}
-
-export function QrInbox({lang,go}:{lang:Lang;go:(page:Page)=>void}) {
-  const [chats,setChats]=React.useState<Conversation[]>([]),[selected,setSelected]=React.useState(''),[messages,setMessages]=React.useState<Message[]>([]);
-  const [text,setText]=React.useState(''),[search,setSearch]=React.useState(''),[error,setError]=React.useState(''),[busy,setBusy]=React.useState(false),[status,setStatus]=React.useState<Status|null>(null);
-  const [outbox,setOutbox]=React.useState<Outbox[]>([]);
-  const requestId=React.useRef<string>(crypto.randomUUID());
-  const active=chats.find(x=>x.id===selected);
-  React.useEffect(()=>{
-    let alive=true;
-    const load=async()=>{try{const [rows,state,queue]=await Promise.all([localApi<Conversation[]>('whatsapp/conversations'),localApi<Status>('whatsapp/status'),localApi<Outbox[]>('whatsapp/outbox')]);if(alive){setChats(rows);setStatus(state);setOutbox(queue);setSelected(value=>value||rows[0]?.id||'');setError('');}}catch(e){if(alive)setError(localError(e,lang));}};
-    void load();const timer=setInterval(()=>void load(),5000);return()=>{alive=false;clearInterval(timer);};
-  },[lang]);
-  React.useEffect(()=>{
-    setMessages([]);if(!selected)return;let alive=true;
-    const load=async()=>{try{const rows=await localApi<Message[]>(`whatsapp/conversations/${selected}/messages`);if(alive)setMessages(rows.reverse());}catch(e){if(alive)setError(localError(e,lang));}};
-    void load();const timer=setInterval(()=>void load(),3000);return()=>{alive=false;clearInterval(timer);};
-  },[selected,lang]);
-  const send=async(e:React.FormEvent)=>{e.preventDefault();if(!selected||!text.trim()||busy)return;setBusy(true);setError('');try{await localApi(`whatsapp/conversations/${selected}/send`,{text,requestId:requestId.current});setText('');requestId.current=crypto.randomUUID();setChats(rows=>rows.map(x=>x.id===selected?{...x,bot_mode:'human'}:x));}catch(e){setError(localError(e,lang));}finally{setBusy(false);}};
-  const toggle=async()=>{if(!active||busy)return;setBusy(true);try{const mode=active.bot_mode==='active'?'human':'active';await localApi(`whatsapp/conversations/${active.id}/mode`,{mode});setChats(rows=>rows.map(x=>x.id===active.id?{...x,bot_mode:mode}:x));}catch(e){setError(localError(e,lang));}finally{setBusy(false);}};
-  return <main className="os-page"><div className="os-page-heading"><div><span className="os-eyebrow">REID / INBOX</span><h1>{choose(lang,'كل محادثة، بداية فرصة.','Every conversation starts something.')}</h1><p>{choose(lang,'رسائل الشركة، والسياق الذي يساعدك ترد أفضل.','Company conversations, with the context to reply better.')}</p></div><button className="os-secondary" onClick={()=>go('connections')}><Wifi/>{choose(lang,'إدارة الاتصال','Connection')}</button></div>
-    {error&&<p role="alert" className="os-alert">{error}</p>}
-    {status?.connection!=='connected'&&<div className="os-notice"><QrCode/><span>{choose(lang,'اربط رقم ريّد لبدء استقبال الرسائل.','Link the Reid number to receive messages.')}</span><button onClick={()=>go('connections')}>{choose(lang,'ربط الهاتف','Link phone')}</button></div>}
-    <div className="os-inbox"><aside className="os-conversation-list"><label className="os-search"><Search/><input aria-label={choose(lang,'بحث المحادثات','Search conversations')} value={search} onChange={e=>setSearch(e.target.value)} placeholder={choose(lang,'ابحث عن محادثة…','Search conversations…')}/></label>
-      {chats.filter(x=>`${x.display_name} ${x.jid}`.includes(search)).map(chat=><button key={chat.id} className={chat.id===selected?'selected':''} onClick={()=>{setSelected(chat.id);setText('');requestId.current=crypto.randomUUID();}}><span className="os-avatar">{chat.display_name.slice(0,1)||<UserRound/>}</span><span><b>{chat.display_name}</b><small>{chat.last_message||choose(lang,'محادثة جديدة','New conversation')}</small></span>{chat.bot_mode==='active'&&<Bot size={15}/>}</button>)}
-      {!chats.length&&<div className="os-empty"><MessageCircle/><p>{choose(lang,'ستظهر رسائلك الجديدة هنا بعد الربط.','New messages will appear here once linked.')}</p></div>}
-    </aside><section className="os-thread">{active?<><div className="os-thread-heading"><div><b>{active.display_name}</b><small>{active.bot_mode==='active'?choose(lang,'المساعد يرد على هذه المحادثة','Assistant replies enabled'):choose(lang,'الرد بواسطة الفريق','Human replies')}</small></div><button className="os-secondary" disabled={busy} onClick={()=>void toggle()}>{active.bot_mode==='active'?<UserRound/>:<Bot/>}{active.bot_mode==='active'?choose(lang,'استلام المحادثة','Take over'):choose(lang,'تفعيل المساعد','Enable assistant')}</button></div>
-      <div className="os-message-list" aria-live="polite">{messages.map(msg=><article className={`os-message ${msg.direction}`} key={msg.id}><p>{msg.body}</p><small>{new Date(msg.created_at).toLocaleTimeString(lang==='ar'?'ar-OM':'en-GB',{hour:'2-digit',minute:'2-digit'})} · {msg.status==='sent'?choose(lang,'أُرسلت','Sent'):choose(lang,'واردة','Received')}</small></article>)}</div>
-      {outbox.filter(x=>x.conversation_id===selected&&['queued','sending','uncertain','failed'].includes(x.status)).map(x=><p className="os-notice" key={x.id}>{['uncertain','failed'].includes(x.status)?choose(lang,'تعذر تأكيد إرسال رسالة. تحقق من الهاتف قبل إعادة إرسالها.','A delivery could not be confirmed. Check your phone before resending.'):choose(lang,'رسالة بانتظار تأكيد الإرسال…','Message awaiting delivery confirmation…')}</p>)}
-      <form className="os-composer" onSubmit={e=>void send(e)}><textarea aria-label={choose(lang,'نص الرسالة','Message')} placeholder={choose(lang,'اكتب ردًا باسم ريّد…','Reply as Reid…')} value={text} maxLength={8000} onChange={e=>setText(e.target.value)}/><button className="os-primary" disabled={busy||!text.trim()||status?.connection!=='connected'}><Send/>{choose(lang,'إرسال','Send')}</button></form></>:<div className="os-empty os-thread-empty"><MessageCircle size={42}/><h2>{choose(lang,'مساحة أقرب لعملائك','A closer connection to your customers')}</h2><p>{choose(lang,'اختر محادثة لتقرأ وترد وتتابع.','Choose a conversation to read, reply and follow up.')}</p></div>}</section></div>
   </main>;
 }

@@ -47,6 +47,14 @@ export const kpiStatuses: Record<string, { label: Label; tone: Tone }> = {
 };
 
 const has = (roles: readonly Role[], ...wanted: Role[]) => wanted.some(role => roles.includes(role));
+/** What an applicant asked to join as (the apply form's account types). */
+export const accountTypes: Record<string, Label> = {
+  employee: { ar: 'موظف', en: 'Employee' },
+  project_member: { ar: 'عضو مشروع', en: 'Project member' },
+  research_member: { ar: 'عضو أبحاث', en: 'Research member' },
+  guest: { ar: 'متعاون خارجي', en: 'External collaborator' },
+};
+
 export const isPeopleStaff = (roles: readonly Role[]) => has(roles, 'owner', 'super_admin', 'admin', 'hr');
 
 /** Staff, or the manager of the person's department, may manage their records. */

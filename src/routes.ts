@@ -126,6 +126,20 @@ export function navigableRoutes(
   );
 }
 
+/**
+ * Where a signed-in person starts: the owners' overview, otherwise their own
+ * day, otherwise the profile while they have no company seat yet. Sign-in
+ * returns to /dashboard (an allowed redirect URL), and anyone that page would
+ * refuse is sent here instead of to a refusal.
+ */
+export function landingPage(roles: readonly Role[]): Page {
+  for (const page of ["owner", "today"] as const) {
+    const route = routeFor(page);
+    if (route && canOpen(route, roles)) return page;
+  }
+  return "profile";
+}
+
 export function routeFor(page: Page): Route | undefined {
   return routes.find(route => route.page === page);
 }

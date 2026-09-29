@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
-const component = readFileSync(new URL("./whatsapp-inbox.tsx", import.meta.url), "utf8");
+// The owner inbox on /inbox reads the linked-phone (QR) service, not the Cloud API function.
+const component = readFileSync(new URL("./inbox/inbox-page.tsx", import.meta.url), "utf8");
 const endpoint = readFileSync(new URL("../supabase/functions/whatsapp-inbox/index.ts", import.meta.url), "utf8");
 const webhook = readFileSync(new URL("../supabase/functions/whatsapp-webhook/index.ts", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../supabase/migrations/202609060004_whatsapp_owner_inbox.sql", import.meta.url), "utf8");
@@ -32,10 +33,9 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(endpoint).toContain("request.method === 'OPTIONS'");
   });
 
-  it("shows safe localized failures instead of raw Edge Function errors", () => {
-    expect(component).toContain("messageForRaw");
-    expect(component).toContain("whatsapp_inbox_request_failed");
-    expect(component).not.toContain('error==="outside_24h_window"');
+  it("shows safe localized failures instead of raw service errors", () => {
+    expect(component).toContain("localError(thrown, lang)");
+    expect(component).not.toContain(".message}");
   });
 
   it("ships RLS for both normalized inbox tables", () => {
