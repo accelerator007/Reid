@@ -2,7 +2,15 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
-## 2026-09-29 agent team room and projects rebuilt (phase 3 start) — built, not deployed
+## 2026-09-29 Tasks & requests, My day, Clients and People rebuilt
+
+- `/operations` and `/today` render `src/work/`; `/crm` renders `src/clients/`; `/workspace` renders `src/people/`. Retired: `os-workspace.tsx`, `crm.tsx`, `crm.css`, `employee.tsx`, `employee.css` (the single `.workspace-message` rule research needs moved to `research.css`).
+- Each module has a tested model (labels in both languages, permission mirrors of `work_record_access`, the leave guard and the department-manager rule, Muscat-day grouping, the Saturday–Friday work week) and reads/writes only through `db.ts`. The People page previously subscribed to every table in `public`; it now follows its own nine tables. Stage and status values that showed as raw English are translated, and Arabic counts agree with their numbers.
+- People writes were checked against the old payloads: onboarding uses `assigned_by`, KPIs `set_by`, and company calendar events have no `user_id`.
+- Verification: 290/290 tests across 19 files, clean `tsc -b`, production build (main JS 85.5 KB gzip; route chunks 3–13 KB gzip). Preview captures of every tab in Arabic/English × light/dark × desktop/phone, and `scripts/find-overflow.mjs` reports no phone overflow on `/owner`, `/today`, `/assistant`, `/operations`, `/projects`, `/projects/:id`, `/crm`, `/workspace`, a person page, `/research`, `/dashboard`, `/admin` and `/profile`.
+- Not yet rebuilt: research, workshops, admin/accounts, agent management (`/dashboard`), WhatsApp inbox, connections, profile, sign-in/apply and the public home (all already on the new palette, fonts and shell).
+
+## 2026-09-29 agent team room and projects rebuilt (phase 3 start)
 
 - `/assistant` now renders `src/agent-team/` and `/projects` renders `src/projects/`; the old single-line `AssistantWorkspace` and the 1,100-line `projects.tsx` are removed (`projects.css` stays because `research.tsx` still imports it).
 - Agent room: the team turn is `src/agent-team/orchestration.ts` with injected dependencies and tests (one answer per agent, explicit handoffs only, at most three, failures reported while others continue, queued local runs awaited). The conversation scrolls inside its panel and opens on the latest message; majority-script direction and `<bdi>` mentions fix Arabic messages that began with an @mention.
