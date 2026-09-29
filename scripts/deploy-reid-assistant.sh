@@ -46,10 +46,11 @@ pending_outbox="$(supabase db query --linked \
   "select count(*) as n from public.qr_outbox where status in ('queued','sending','uncertain')" 2>/dev/null \
   | python3 -c 'import sys,json; print(json.load(sys.stdin)["rows"][0]["n"])')"
 [ "$pending_outbox" = "0" ] || fail "WhatsApp outbox has $pending_outbox pending item(s); wait or check the phone first"
-pending_migrations="$(supabase db push --linked --dry-run 2>/dev/null | grep -c '•' || true)"
-supabase db push --linked --dry-run 2>/dev/null | grep -q '202609280002_reid_assistant_emergency.sql' \
-  || fail "migration 202609280002 is not the pending migration (already applied?)"
-[ "$pending_migrations" = "1" ] || fail "expected exactly one pending migration, found $pending_migrations"
+# The CLI prints its human-readable list on stderr and a JSON summary on stdout.
+pending_migrations="$(supabase db push --linked --dry-run 2>/dev/null \
+  | python3 -c 'import sys,json; print(",".join(json.load(sys.stdin)["migrations"]))')"
+[ "$pending_migrations" = "202609280002_reid_assistant_emergency.sql" ] \
+  || fail "expected only 202609280002 pending, found: ${pending_migrations:-none}"
 echo "outbox empty; one pending migration; candidate images present"
 
 say "2. Migration 202609280002"
