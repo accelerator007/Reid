@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deploy Reid Assistant to Production in dry-run mode (no real calls or messages).
+# Deploy the redesigned website and Reid Assistant to Production. The assistant
+# starts in dry-run mode (no real calls or messages).
 #
 # Run on the Reid host from the Reid-web repository root, as the `reid` user:
 #   scripts/deploy-reid-assistant.sh
@@ -16,11 +17,14 @@
 #
 # Candidates are built and tested beforehand:
 #   reid-services:candidate-assistant  (repo server/, 195/195 tests inside the image)
-#   reid-web:candidate-assistant       (running reid-web:local + new nginx.conf only)
+#   reid-web:candidate-redesign        (new design + fonts + nginx routes; override with
+#                                       WEB_CANDIDATE=reid-web:candidate-assistant to ship
+#                                       only the nginx routes on the current site)
 #   reid-assistant:local               (../reid-assistant)
 set -euo pipefail
 
 CONFIG=/home/reid/.config/reid-os
+WEB_CANDIDATE="${WEB_CANDIDATE:-reid-web:candidate-redesign}"
 STAMP="$(date -u +%Y%m%d%H%M)"
 cd "$(dirname "$0")/.."
 
@@ -35,7 +39,7 @@ healthy() {
 }
 
 say "1. Pre-flight"
-for image in reid-services:candidate-assistant reid-web:candidate-assistant reid-assistant:local; do
+for image in reid-services:candidate-assistant "$WEB_CANDIDATE" reid-assistant:local; do
   docker image inspect "$image" >/dev/null 2>&1 || fail "missing image $image"
 done
 pending_outbox="$(supabase db query --linked \
@@ -86,7 +90,7 @@ say "4. Rollback tags and promotion"
 docker tag reid-services:local "reid-services:pre-assistant-$STAMP"
 docker tag reid-web:local "reid-web:pre-assistant-$STAMP"
 docker tag reid-services:candidate-assistant reid-services:local
-docker tag reid-web:candidate-assistant reid-web:local
+docker tag "$WEB_CANDIDATE" reid-web:local
 echo "rollback images: reid-services:pre-assistant-$STAMP reid-web:pre-assistant-$STAMP"
 
 say "5. Recreate api, web and start the assistant"
@@ -105,6 +109,8 @@ check 200 https://reidpro.com/assistant
 check 401 https://reidpro.com/api/operations/status
 check 401 https://reidpro.com/assistant-api/v1/me
 check 403 -X POST https://reidpro.com/voice/turn -d Digits=1
+font="$(docker exec reid-web sh -c 'ls /usr/share/nginx/html/assets' | grep -m1 'woff2$' || true)"
+[ -z "$font" ] || check 200 "https://reidpro.com/assets/$font"
 docker exec reid-assistant python -c "
 import urllib.request, os
 request = urllib.request.Request('http://api:8090/internal/operations/status',
