@@ -154,3 +154,5 @@ export function InlineAlert({ tone = 'danger', children, action }: { tone?: Tone
 export function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="ui-kbd">{children}</kbd>;
 }
+
+export { Checkbox, Dialog, Field, FormGrid, Select, TabPanel, Tabs, TextArea, TextInput, type TabItem } from './forms';

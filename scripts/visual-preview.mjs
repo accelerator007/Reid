@@ -48,6 +48,17 @@ for (const variant of variants) {
         const file = `${out}/${variant.name}-${theme}-${lang}${path === '/' ? '-home' : path.replaceAll('/', '-')}.png`;
         await page.screenshot({ path: file, fullPage: variant.name === 'desktop' });
         console.log(`${file}${overflow > 1 ? `  ⚠ horizontal overflow ${overflow}px` : ''}`);
+        // PREVIEW_TABS=2,3 also captures those tabs (1-based) on pages that have tabs.
+        for (const index of (process.env.PREVIEW_TABS || '').split(',').filter(Boolean)) {
+          const tab = page.getByRole('tab').nth(Number(index) - 1);
+          if (!(await tab.count())) continue;
+          await tab.click();
+          await page.waitForTimeout(300);
+          const tabFile = file.replace(/\.png$/, `-tab${index}.png`);
+          await page.screenshot({ path: tabFile, fullPage: variant.name === 'desktop' });
+          const tabOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+          console.log(`${tabFile}${tabOverflow > 1 ? `  ⚠ horizontal overflow ${tabOverflow}px` : ''}`);
+        }
       }
       if (problems.length) console.log(`page errors (${variant.name}/${theme}/${lang}):`, [...new Set(problems)].join(' | '));
       await context.close();
