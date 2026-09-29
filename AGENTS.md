@@ -2,6 +2,15 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-09-29 agent team room and projects rebuilt (phase 3 start) — built, not deployed
+
+- `/assistant` now renders `src/agent-team/` and `/projects` renders `src/projects/`; the old single-line `AssistantWorkspace` and the 1,100-line `projects.tsx` are removed (`projects.css` stays because `research.tsx` still imports it).
+- Agent room: the team turn is `src/agent-team/orchestration.ts` with injected dependencies and tests (one answer per agent, explicit handoffs only, at most three, failures reported while others continue, queued local runs awaited). The conversation scrolls inside its panel and opens on the latest message; majority-script direction and `<bdi>` mentions fix Arabic messages that began with an @mention.
+- Projects: every read/write goes through `db.ts`; live updates follow only the open project's tables (previously every table in `public`); stored enum values are translated; forms are stable dialogs with their own errors; activity uses gender-neutral verbal nouns.
+- UI kit gained an accessible `Dialog`, form fields and keyboard `Tabs`.
+- Verification: 274/274 tests, clean `tsc -b`, production build (main JS 85.2 KB gzip; projects chunk 13.2 KB, room chunk 8.7 KB). 64 preview captures of `/projects` and `/projects/:id` (every tab) in Arabic/English × light/dark × desktop/phone with no horizontal overflow, plus the room in all variants.
+- `scripts/deploy-web.sh` publishes only the web container from a clean commit, with build checks, a rollback tag and a public bundle check.
+
 ## 2026-09-29 Production release: redesign + Reid Assistant (dry run)
 
 - At the Owner's instruction, `scripts/deploy-reid-assistant.sh` ran on the Reid host at 05:17 UTC from branch `feature/reid-2-foundation` (commit `807c2f9`). Migration `202609280002_reid_assistant_emergency.sql` is applied to `cfxntjnewkmlvkogfxyu` (3 `emergency_*` tables with RLS). `reid-web:local` is now the redesign candidate, `reid-services:local` carries `/internal/operations/status`, and `reid-assistant` runs from compose profile `assistant` with `REID_ASSISTANT_DRY_RUN=1` and telephony disabled (the dry run records simulated calls and queues no WhatsApp message). New secrets live only in `/home/reid/.config/reid-os/` (`assistant.env`, and `REID_OPS_STATUS_TOKEN` appended to `service.env` after a timestamped backup).
