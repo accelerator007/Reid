@@ -1,126 +1,301 @@
-/* Reid's design tokens: the only file in the application that names a colour.
+/* Reid design tokens (v2): the only file in the application that names a colour.
  *
- * Before this existed there were six variables and eighty-five hard-coded
- * hexes: roughly seventeen shades of purple doing the work of three, plus six
- * greens, five reds and two ambers. Worse, the dark theme was defined in one
- * file, so every one of those eighty-five literals stayed frozen at its light
- * value when the theme flipped.
+ * Three layers:
+ *   1. Ramps — raw colour, derived from the Reid logo. Only this layer holds
+ *      literals, and every ramp step is redefined for the dark theme.
+ *   2. Semantics — what a colour is for (surface, text, primary action, state).
+ *      Components use these.
+ *   3. Legacy aliases — the names older stylesheets use, pointed at the
+ *      semantics so every existing page adopts the new palette at once.
  *
- * Two rules keep it that way, and tokens.test.ts enforces the first:
- *   1. No component stylesheet writes a colour literal. It uses a token.
- *   2. Every token defined here has a dark counterpart below.
+ * Rules enforced by tokens.test.ts:
+ *   - No component stylesheet writes a colour literal; it uses a token.
+ *   - Every literal token has a dark counterpart.
+ *   - Text/surface pairs meet WCAG AA (4.5:1 text, 3:1 for strong borders).
  *
- * The brand ramp is built around #55418b, the value already in the
- * `theme-color` meta tag, so the browser chrome and the interface agree.
+ * The logo is four gradient bars: blush #f2e7ee→#dac7d2, rose #ead9dc→#b49399,
+ * mauve #b69cac→#816680 and purple #7056a5→#49337f. Purple is the brand,
+ * mauve/rose the quiet accent, and the neutrals carry a trace of the same hue
+ * so greys and brand never clash.
  */
 
 :root {
-  /* ---- brand ramp: one hue, seven steps, no near-duplicates ------------ */
-  --brand-700: #483172;
-  /* Canonical Reid purple. Mirrored by the `theme-color` meta tag in
-     index.html, so the browser chrome matches the interface. */
-  --brand-600: #55418b;
-  --brand-500: #6b51a8;
-  --brand-400: #8069bd;
-  --brand-300: #8d76d0;
+  color-scheme: light;
 
-  /* Kept: the original variable name, now pointing at the ramp. */
-  --purple: var(--brand-500);
+  /* ---- 1. ramps ------------------------------------------------------- */
+  /* Neutral: grey with a mauve undertone. 1 = page, 12 = strongest text. */
+  --neutral-1: #fdfcfe;
+  --neutral-2: #f9f8fb;
+  --neutral-3: #f2eff5;
+  --neutral-4: #eae6ee;
+  --neutral-5: #e2dde7;
+  --neutral-6: #d7d1de;
+  --neutral-7: #c8c1d1;
+  --neutral-8: #8a8397;
+  --neutral-9: #7b7488;
+  --neutral-10: #6b6578;
+  --neutral-11: #5f5a6b;
+  --neutral-12: #1f1b26;
+  /* The base surface: white in light, a deep aubergine grey in dark. */
+  --base: #ffffff;
 
-  /* ---- surfaces and text ---------------------------------------------- */
-  --bg: #f7f8fa;
-  --card: #ffffff;
-  --ink: #22232b;
-  --muted: #727583;
-  --line: #e9eaf0;
-  --art-bg: #f0edf7;
-  --shadow-os: 0 2px 5px #24213804;
-  --line-strong: #55418b40;
-  /* A brand-tinted wash for selected rows and highlighted panels. */
-  --brand-fill: #55418b14;
+  /* Brand: the logo's purple bar. 9 is the solid action colour. */
+  --brand-1: #fcfbff;
+  --brand-2: #f7f4fd;
+  --brand-3: #efeafb;
+  --brand-4: #e5ddf7;
+  --brand-5: #d9cef2;
+  --brand-6: #c9bae9;
+  --brand-7: #b3a0dc;
+  --brand-8: #9480c9;
+  --brand-9: #5b4499;
+  --brand-10: #4d3886;
+  --brand-11: #5a449a;
+  --brand-12: #2b1f4d;
 
-  /* ---- semantic state, deliberately separate from the brand ----------- */
-  /* Brand purple says "Reid". These say "this went well" or "look here".
-     Mixing them makes a warning and a button indistinguishable. */
-  --good: #237a51;
-  --good-strong: #2f8a5e;
-  --good-line: #42bd8255;
-  --good-fill: #42bd8214;
+  /* Accent: the logo's mauve and rose bars. */
+  --accent-3: #f7eff3;
+  --accent-4: #f0e3ea;
+  --accent-6: #dfc9d5;
+  --accent-9: #8a6b86;
+  --accent-11: #7a5a76;
 
-  --warn: #8a5f12;
-  --warn-line: #b4882a66;
-  --warn-fill: #b4882a1f;
-
-  --risk: #a52f2f;
-  --risk-strong: #b74d5c;
-  --risk-line: #b74d5c55;
-  --risk-fill: #b74d5c14;
-
-  /* ---- elevation ------------------------------------------------------- */
-  --shadow-sm: 0 15px 35px #3d276522;
-  --shadow-md: 0 25px 80px #21152f2b;
-  --shadow-lg: 0 30px 90px #39265f18;
-
-  /* The 500 and 700 steps are fills that carry --on-brand white text, so they
-     stay deep in both themes. Only the foreground steps, 300 and 400, lift on
-     a dark ground; tokens.test.ts holds them to that. */
-
-  /* ---- gradients: one definition, used everywhere --------------------- */
-  --brand-gradient: linear-gradient(135deg, var(--brand-300), var(--brand-700));
-  /* Text on a brand-filled surface stays light in both themes: the fill is
-     dark purple either way, so this does not flip. */
-  --on-brand: #ffffff;
-  --scrim: #160f2c99;
-  /* Structural surfaces: the ambient page glow and the sticky header. */
-  --glow: #e1d6f2;
-  --header-bg: #f7f4f6bd;
-
-  /* ---- radii: twelve values collapsed onto six ------------------------ */
-  --radius-xs: 10px;
-  --radius-sm: 12px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 22px;
-  --radius-pill: 999px;
+  /* State colours stay apart from the brand: a warning must never look like a button. */
+  --green-3: #e9f6ee;
+  --green-6: #b5dfc4;
+  --green-9: #2f8a5e;
+  --green-11: #1e6b43;
+  --amber-3: #fdf3e1;
+  --amber-6: #efd29a;
+  --amber-9: #c98a14;
+  --amber-11: #8a5a06;
+  --red-3: #fcebed;
+  --red-6: #f1bcc3;
+  --red-9: #c93a4f;
+  --red-11: #a3283a;
+  --blue-3: #e8f1fd;
+  --blue-6: #b7d1f5;
+  --blue-9: #2f6fd1;
+  --blue-11: #1f5fae;
 }
 
-/* The dark theme is a class on the application root, seeded in src/main.tsx
- * from the reader's system preference and then owned by the toggle. One
- * mechanism, not two, so the toggle and the OS can never disagree. */
+/* Layers 2 and 3, plus the scales, declared on both ":root" and ".dark".
+ * A custom property resolves var() where it is declared and descendants
+ * inherit the result. The theme class sits on the app root below :root, so
+ * declaring semantics on :root alone would freeze them at their light values;
+ * declaring them on .dark too makes that element recompute them from its own
+ * dark ramps. */
+:root,
 .dark {
-  --bg: #110d19;
-  --card: #1c1924;
-  --art-bg: #211c30;
-  --shadow-os: 0 2px 5px #00000020;
-  --ink: #f5f0fb;
-  --muted: #b9afc4;
-  --line: #bba7ef24;
-  --line-strong: #bba7ef45;
-  --brand-fill: #a48ede1f;
+  /* ---- 2. semantics --------------------------------------------------- */
+  --surface-app: var(--neutral-2);
+  --surface: var(--base);
+  --surface-raised: var(--base);
+  --surface-sunken: var(--neutral-3);
+  --surface-hover: var(--neutral-3);
+  --surface-active: var(--neutral-4);
+  --surface-inverse: var(--neutral-12);
 
-  /* The accent lifts on a dark ground; the deep steps would vanish. */
-  --brand-400: #a48ede;
-  --brand-300: #b9a6ea;
-  --purple: var(--brand-300);
+  --text: var(--neutral-12);
+  --text-muted: var(--neutral-11);
+  --text-subtle: var(--neutral-8);
+  --text-inverse: var(--neutral-1);
 
-  --good: #6cc79a;
-  --good-strong: #42bd82;
-  --good-line: #42bd8266;
-  --good-fill: #42bd821f;
+  --border-subtle: var(--neutral-4);
+  --border: var(--neutral-6);
+  --border-strong: var(--neutral-8);
 
-  --warn: #dfae5f;
-  --warn-line: #dfae5f66;
-  --warn-fill: #dfae5f1f;
+  --primary: var(--brand-9);
+  --primary-hover: var(--brand-10);
+  --on-primary: #ffffff;
+  --primary-soft: var(--brand-3);
+  --primary-soft-hover: var(--brand-4);
+  --primary-border: var(--brand-6);
+  --primary-text: var(--brand-11);
+  --focus-ring: var(--brand-8);
 
-  --risk: #e59a9a;
-  --risk-strong: #d47f7f;
-  --risk-line: #d47f7f66;
-  --risk-fill: #d47f7f1f;
+  --accent-soft: var(--accent-3);
+  --accent-soft-hover: var(--accent-4);
+  --accent-border: var(--accent-6);
+  --accent-text: var(--accent-11);
+  --accent-solid: var(--accent-9);
 
-  --glow: #2c2046;
-  --header-bg: #110d19c9;
+  --success-soft: var(--green-3);
+  --success-border: var(--green-6);
+  --success-solid: var(--green-9);
+  --success-text: var(--green-11);
+  --warning-soft: var(--amber-3);
+  --warning-border: var(--amber-6);
+  --warning-solid: var(--amber-9);
+  --warning-text: var(--amber-11);
+  --danger-soft: var(--red-3);
+  --danger-border: var(--red-6);
+  --danger-solid: var(--red-9);
+  --danger-text: var(--red-11);
+  --info-soft: var(--blue-3);
+  --info-border: var(--blue-6);
+  --info-solid: var(--blue-9);
+  --info-text: var(--blue-11);
 
-  --shadow-sm: 0 15px 35px #00000066;
-  --shadow-md: 0 25px 80px #00000073;
-  --shadow-lg: 0 30px 90px #0000008c;
+  /* The logo's own sweep, for the few places that carry the brand mark. */
+  --brand-sweep: linear-gradient(135deg, var(--brand-9), var(--brand-10));
+  --brand-aurora: radial-gradient(120% 90% at 100% 0%, var(--brand-3), transparent 55%),
+    radial-gradient(90% 80% at 0% 100%, var(--accent-3), transparent 60%);
+
+  /* ---- typography ----------------------------------------------------- */
+  --font-sans: p, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: a, p, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+  --leading-tight: 1.3;
+  --leading-normal: 1.6;
+  /* Arabic needs more room between lines than Latin at the same size. */
+  --leading-arabic: 1.75;
+
+  /* ---- space, shape, depth, motion ----------------------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  --shadow-1: 0 1px 2px color-mix(in srgb, var(--neutral-12) 6%, transparent);
+  --shadow-2: 0 1px 2px color-mix(in srgb, var(--neutral-12) 5%, transparent),
+    0 8px 24px color-mix(in srgb, var(--brand-12) 7%, transparent);
+  --shadow-3: 0 2px 6px color-mix(in srgb, var(--neutral-12) 6%, transparent),
+    0 24px 60px color-mix(in srgb, var(--brand-12) 16%, transparent);
+  --scrim: color-mix(in srgb, var(--brand-12) 45%, transparent);
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+
+  --shell-sidebar: 256px;
+  --shell-sidebar-collapsed: 76px;
+  --shell-topbar: 64px;
+  --content-max: 1280px;
+
+  /* ---- 3. legacy aliases (older stylesheets) -------------------------- */
+  --bg: var(--surface-app);
+  --card: var(--surface);
+  --ink: var(--text);
+  --muted: var(--text-muted);
+  --line: var(--border-subtle);
+  --line-strong: var(--primary-border);
+  --art-bg: var(--primary-soft);
+  --brand-fill: var(--primary-soft);
+  --purple: var(--primary-text);
+  --brand-700: var(--brand-10);
+  --brand-600: var(--brand-9);
+  --brand-500: var(--brand-9);
+  --brand-400: var(--primary-text);
+  --brand-300: var(--primary-text);
+  --brand-gradient: var(--brand-sweep);
+  --on-brand: var(--on-primary);
+  --good: var(--success-text);
+  --good-strong: var(--success-solid);
+  --good-line: var(--success-border);
+  --good-fill: var(--success-soft);
+  --warn: var(--warning-text);
+  --warn-line: var(--warning-border);
+  --warn-fill: var(--warning-soft);
+  --risk: var(--danger-text);
+  --risk-strong: var(--danger-solid);
+  --risk-line: var(--danger-border);
+  --risk-fill: var(--danger-soft);
+  --shadow-os: var(--shadow-1);
+  --shadow-sm: var(--shadow-2);
+  --shadow-md: var(--shadow-3);
+  --shadow-lg: var(--shadow-3);
+  --glow: var(--brand-3);
+  --header-bg: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+
+/* The dark theme is a class on the application root, seeded from the reader's
+ * system preference and then owned by the toggle. It redefines the ramps and a
+ * few dark-only semantics; everything else is recomputed by the shared block.
+ * This block must stay last so its adjustments win over the shared block. */
+.dark {
+  color-scheme: dark;
+
+  --neutral-1: #131117;
+  --neutral-2: #19171e;
+  --neutral-3: #221f28;
+  --neutral-4: #29262f;
+  --neutral-5: #302c37;
+  --neutral-6: #3a3642;
+  --neutral-7: #48434f;
+  --neutral-8: #77718a;
+  --neutral-9: #837e8d;
+  --neutral-10: #9c97a6;
+  --neutral-11: #b8b3c2;
+  --neutral-12: #efedf3;
+  --base: #1e1b24;
+
+  --brand-1: #16121f;
+  --brand-2: #1c1729;
+  --brand-3: #271e40;
+  --brand-4: #302552;
+  --brand-5: #392d61;
+  --brand-6: #443770;
+  --brand-7: #534486;
+  --brand-8: #8a74d6;
+  --brand-9: #6a52c0;
+  --brand-10: #7a63cf;
+  --brand-11: #c3b3f2;
+  --brand-12: #ece6ff;
+
+  --accent-3: #2a1f28;
+  --accent-4: #33262f;
+  --accent-6: #4e3a49;
+  --accent-9: #a3829e;
+  --accent-11: #d7b9cf;
+
+  --green-3: #15291f;
+  --green-6: #28533b;
+  --green-9: #3f9f6d;
+  --green-11: #7fd3a3;
+  --amber-3: #2e2412;
+  --amber-6: #5e4719;
+  --amber-9: #d59a2a;
+  --amber-11: #f0c26b;
+  --red-3: #331a1f;
+  --red-6: #6b2c37;
+  --red-9: #d9546a;
+  --red-11: #f39aa7;
+  --blue-3: #16233a;
+  --blue-6: #2c4a78;
+  --blue-9: #4f86d9;
+  --blue-11: #93bdf5;
+
+  --surface-app: var(--neutral-1);
+  --surface: var(--neutral-2);
+  --surface-raised: var(--neutral-3);
+  --on-primary: #ffffff;
+  --shadow-1: 0 1px 2px #00000040;
+  --shadow-2: 0 1px 2px #00000040, 0 10px 28px #00000059;
+  --shadow-3: 0 2px 6px #0000004d, 0 26px 64px #0000008c;
+  --scrim: color-mix(in srgb, #000000 62%, transparent);
 }

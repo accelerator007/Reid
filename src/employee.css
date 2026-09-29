@@ -229,7 +229,7 @@
   }
   .workspace-grid,
   .performance-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns:minmax(0,1fr);
   }
   .workspace-admin-form {
     grid-column: auto;
@@ -238,7 +238,7 @@
     top: 70px;
   }
   .employee-form {
-    grid-template-columns: 1fr;
+    grid-template-columns:minmax(0,1fr);
   }
 }
 @media (max-width: 560px) {
@@ -250,13 +250,13 @@
     flex-direction: column;
   }
   .employee-overview {
-    grid-template-columns: 1fr;
+    grid-template-columns:minmax(0,1fr);
   }
   .overview-feed {
     grid-column: auto;
   }
   .employee-detail dl {
-    grid-template-columns: 1fr;
+    grid-template-columns:minmax(0,1fr);
   }
   .module-list > header,
   .module-list > article {

@@ -15,12 +15,14 @@ import {
 import type { AppError } from "./db";
 import type { Page } from "./routes";
 import { PublicHome } from "./public-home";
-import { workspaceLabel, workspaceNavGroups, mobilePrimaryPages } from "./workspace-navigation";
+import { workspaceLabel, workspacePages } from "./workspace-navigation";
+import { AppShell } from "./app-shell/app-shell";
 import { Building2, Crown, FolderKanban, FlaskConical, GraduationCap, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X, CalendarDays, Settings2, BriefcaseBusiness, Search, ShieldCheck, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 // Imported rather than written as a literal URL. The assets directory sits
 // outside Vite's public directory, so a hard-coded path is never emitted to
 // dist and the header mark 404s in production while still resolving in dev.
 import reidLogo from "../assets/img/reid-logo.svg";
+import "./fonts.css";
 import "./tokens.css";
 import "./style.css";
 import "./brand.css";
@@ -31,9 +33,6 @@ import "./agents.css";
 import "./crm.css";
 import "./whatsapp-inbox.css";
 import "./reid-os.css";
-// The authenticated shell intentionally loads last: it owns navigation width,
-// responsive drawers and workspace offsets across every legacy page stylesheet.
-import "./workspace-shell.css";
 
 const EmployeeWorkspace=React.lazy(()=>import('./employee').then(module=>({default:module.EmployeeWorkspace})));
 const ProjectWorkspace=React.lazy(()=>import('./projects').then(module=>({default:module.ProjectWorkspace})));
@@ -1352,42 +1351,6 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
   }
 }
 
-const workspaceIcons: Partial<Record<Page, React.ReactNode>> = {
-  today: <CalendarDays />, inbox: <MessageCircle />, connections: <Settings2 />,
-  operations: <BriefcaseBusiness />, assistant: <UsersRound />,
-  workshops: <GraduationCap />,
-  admin: <ShieldCheck />,
-  owner: <Crown />,
-  dashboard: <LayoutDashboard />, workspace: <UsersRound />, projects: <FolderKanban />,
-  research: <FlaskConical />, crm: <Handshake />, profile: <UserRound />,
-};
-
-function WorkspaceSidebar({ lang, page, navigation, open, collapsed, go, toggleCollapsed, signout }: { lang: Lang; page: Page; navigation: ReturnType<typeof useNavigation>; open: boolean; collapsed:boolean; go: (page: Page) => void; toggleCollapsed:()=>void; signout: () => void }) {
-  const t = tr[lang];
-  const navRef=React.useRef<HTMLElement>(null);
-  React.useEffect(()=>{navRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({block:'nearest'});},[page,open]);
-  return <aside className="workspace-sidebar" data-open={open} aria-label={lang === "ar" ? "تنقل نظام الشركة" : "Company system navigation"}>
-    <div className="workspace-sidebar-heading"><div><small>REID OS</small><b>{lang === "ar" ? "مساحة الشركة" : "Company workspace"}</b></div><button type="button" className="workspace-collapse" onClick={toggleCollapsed} aria-label={collapsed?(lang==='ar'?'توسيع القائمة':'Expand navigation'):(lang==='ar'?'تصغير القائمة':'Collapse navigation')}>{collapsed?<PanelLeftOpen/>:<PanelLeftClose/>}</button></div>
-    <nav ref={navRef}>{workspaceNavGroups.map(group=>{const destinations=group.pages.flatMap(target=>navigation.filter(route=>route.page===target));return destinations.length?<section className={`workspace-nav-group workspace-nav-${group.id}`} key={group.id}><small className="os-nav-group">{group.label[lang]}</small>{destinations.map(route => <button className={route.page==='assistant'?'workspace-agent-destination':''} title={navLabel(route.page,lang,t)} key={route.page} type="button" aria-current={page === route.page ? "page" : undefined} onClick={() => go(route.page)}>{workspaceIcons[route.page]}<span>{navLabel(route.page, lang, t)}</span>{route.page==='assistant'&&<i>{lang==='ar'?'ابدأ':'Open'}</i>}</button>)}</section>:null;})}</nav>
-    <footer><button type="button" onClick={signout} title={lang==='ar'?'تسجيل الخروج':'Sign out'}><LogOut /><span>{lang === "ar" ? "تسجيل الخروج" : "Sign out"}</span></button></footer>
-  </aside>;
-}
-
-function WorkspaceLauncher({lang,page,navigation,open,close,go}:{lang:Lang;page:Page;navigation:ReturnType<typeof useNavigation>;open:boolean;close:()=>void;go:(page:Page)=>void}){
-  const [query,setQuery]=React.useState('');
-  React.useEffect(()=>{if(open)setQuery('');},[open]);
-  if(!open)return null;
-  const allowed=new Set<Page>(navigation.map(route=>route.page));
-  const destinations=workspaceNavGroups.flatMap(group=>group.pages.map(target=>({target,group:group.label[lang]}))).filter(item=>allowed.has(item.target)).filter(item=>`${navLabel(item.target,lang,tr[lang])} ${item.group}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
-  return <div className="workspace-launcher-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)close();}}><section className="workspace-launcher" role="dialog" aria-modal="true" aria-label={lang==='ar'?'الانتقال السريع':'Quick navigation'}><label><Search/><input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder={lang==='ar'?'ابحث عن صفحة أو مساحة…':'Find a page or workspace…'} onKeyDown={event=>{if(event.key==='Escape')close();}}/><kbd>ESC</kbd></label><div>{destinations.map(item=><button key={item.target} aria-current={page===item.target?'page':undefined} onClick={()=>{close();go(item.target);}}><span>{workspaceIcons[item.target]}</span><div><b>{navLabel(item.target,lang,tr[lang])}</b><small>{item.group}</small></div></button>)}{!destinations.length&&<p>{lang==='ar'?'لا توجد نتيجة مطابقة.':'No matching destination.'}</p>}</div></section></div>;
-}
-
-function WorkspaceMobileNav({lang,page,navigation,go,more}:{lang:Lang;page:Page;navigation:ReturnType<typeof useNavigation>;go:(page:Page)=>void;more:()=>void}){
-  const allowed=new Set<Page>(navigation.map(route=>route.page));
-  const pages=mobilePrimaryPages.filter(target=>allowed.has(target));
-  return <nav className="workspace-mobile-nav" aria-label={lang==='ar'?'التنقل السريع':'Quick navigation'}>{pages.map(target=><button key={target} aria-current={page===target?'page':undefined} onClick={()=>go(target)}>{workspaceIcons[target]}<span>{target==='assistant'?(lang==='ar'?'الوكلاء':'Agents'):navLabel(target,lang,tr[lang])}</span></button>)}<button onClick={more}><Menu/><span>{lang==='ar'?'المزيد':'More'}</span></button></nav>;
-}
-
 function App() {
   const [session, setSession] = React.useState<Session | null>(null);
   React.useEffect(() => {
@@ -1404,26 +1367,30 @@ function App() {
   );
 }
 
+// Language and theme are per-viewer conveniences: remembered in this browser
+// when storage is available, and harmless when it is not.
+const remembered = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
+const remember = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch { /* optional */ } };
+
 function Chrome({ session }: { session: Session | null }) {
   const [page, go] = useRoute(),
-    [lang, setLang] = React.useState<Lang>("ar"),
-    [dark, setDark] = React.useState(
-      () =>
-        typeof matchMedia === "function" &&
-        matchMedia("(prefers-color-scheme: dark)").matches,
-    ),
+    [lang, setLang] = React.useState<Lang>(() => (remembered("reid-lang") === "en" ? "en" : "ar")),
+    [dark, setDark] = React.useState(() => {
+      const saved = remembered("reid-theme");
+      if (saved) return saved === "dark";
+      return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+    }),
     t = tr[lang];
   // Roles, suspension and profile completion are resolved once by the shell.
-  const { roles: sessionRoles, profileComplete: ready, reload: check } =
-    useSession();
-  const canManageCompany = sessionRoles.some((role) =>
-    ["owner", "super_admin", "admin", "hr"].includes(role),
-  );
+  const { reload: check, profileComplete: ready } = useSession();
   const navigation = useNavigation();
-  const [menuOpen, setMenuOpen] = React.useState(false);
-  const [launcherOpen,setLauncherOpen]=React.useState(false);
-  const [navCollapsed,setNavCollapsed]=React.useState(()=>typeof localStorage!=='undefined'&&localStorage.getItem('reid-nav-collapsed')==='1');
-  const internalPage = session && ["owner", "today", "inbox", "connections", "operations", "assistant", "admin", "dashboard", "workspace", "projects", "research", "workshops", "crm", "profile"].includes(page);
+  const internalPage = !!session && workspacePages.includes(page);
+  React.useEffect(() => remember("reid-lang", lang), [lang]);
+  React.useEffect(() => remember("reid-theme", dark ? "dark" : "light"), [dark]);
+  React.useEffect(() => {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  }, [lang]);
   React.useEffect(() => {
     const client = supabase;
     if (!session || !client) return;
@@ -1432,56 +1399,9 @@ function Chrome({ session }: { session: Session | null }) {
       go("home");
     });
   }, [session]);
-  React.useEffect(()=>{setMenuOpen(false);setLauncherOpen(false);},[page]);
-  React.useEffect(()=>{if(typeof localStorage!=='undefined')localStorage.setItem('reid-nav-collapsed',navCollapsed?'1':'0');},[navCollapsed]);
-  React.useEffect(()=>{const shortcut=(event:KeyboardEvent)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLocaleLowerCase()==='k'&&internalPage){event.preventDefault();setLauncherOpen(value=>!value);}if(event.key==='Escape'){setMenuOpen(false);setLauncherOpen(false);}};addEventListener('keydown',shortcut);return()=>removeEventListener('keydown',shortcut);},[internalPage]);
-  const canOpenAgents=navigation.some(route=>route.page==='assistant');
-  return (
-    <div
-      className={`${dark ? "app dark" : "app"}${internalPage ? " workspace-mode" : ""}`}
-      data-nav-collapsed={internalPage&&navCollapsed?'true':'false'}
-      dir={lang === "ar" ? "rtl" : "ltr"}
-    >
-      <header className={internalPage ? "workspace-topbar" : "public-topbar"}>
-        <button className="brand" onClick={() => go("home")}>
-          <img src={reidLogo} alt="" aria-hidden="true" />
-          <strong>{t.brand}</strong>
-        </button>
-        {!internalPage && <nav>
-          {/* Derived from src/routes.ts, so the navigation can never offer a
-              destination the gate would then refuse. */}
-          {navigation
-            .filter(({ page: target }) => ["home", "workshops", "apply", "today"].includes(target))
-            .map(({ page: target }) => (
-              <button
-                key={target}
-                onClick={() => go(target)}
-                aria-current={page === target ? "page" : undefined}
-              >
-                {navLabel(target, lang, t)}
-              </button>
-            ))}
-          <button
-            className="pill"
-            onClick={() => go(session ? "profile" : "login")}
-          >
-            {session ? t.account : t.login}
-          </button>
-        </nav>}
-        {internalPage && <div className="workspace-topbar-context"><Building2 /><span>{lang === "ar" ? "مساحة ريّد" : "Reid workspace"} / <b>{navLabel(page,lang,t)}</b></span></div>}
-        {internalPage&&<div className="workspace-topbar-tools"><button className="workspace-command-button" onClick={()=>setLauncherOpen(true)}><Search/><span>{lang==='ar'?'انتقال سريع…':'Quick find…'}</span><kbd>{navigator.platform?.includes('Mac')?'⌘':'Ctrl'} K</kbd></button>{canOpenAgents&&<button className="workspace-agent-button" onClick={()=>go('assistant')} aria-current={page==='assistant'?'page':undefined}><UsersRound/><span>{lang==='ar'?'فريق الوكلاء':'Agent team'}</span></button>}</div>}
-        <aside>
-          {internalPage && <button className="mobile-menu" aria-label="Menu" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>}
-          <button onClick={() => setDark(!dark)}>{dark ? "☀" : "☾"}</button>
-          <button onClick={() => setLang(lang === "ar" ? "en" : "ar")}>
-            {lang === "ar" ? "EN" : "ع"}
-          </button>
-        </aside>
-      </header>
-      {internalPage&&menuOpen&&<button className="workspace-nav-backdrop" aria-label={lang==='ar'?'إغلاق القائمة':'Close navigation'} onClick={()=>setMenuOpen(false)}/>}
-      {internalPage && <WorkspaceSidebar lang={lang} page={page} navigation={navigation} open={menuOpen} collapsed={navCollapsed} toggleCollapsed={()=>setNavCollapsed(value=>!value)} go={(target) => { setMenuOpen(false); go(target); }} signout={async () => { await supabase?.auth.signOut(); go("home"); }} />}
-      {internalPage&&<WorkspaceLauncher lang={lang} page={page} navigation={navigation} open={launcherOpen} close={()=>setLauncherOpen(false)} go={go}/>}
-      {internalPage&&<WorkspaceMobileNav lang={lang} page={page} navigation={navigation} go={go} more={()=>setMenuOpen(true)}/>}
+  const signOut = async () => { await supabase?.auth.signOut(); go("home"); };
+  const userName = String(session?.user?.user_metadata?.full_name || session?.user?.email || (lang === "ar" ? "حسابي" : "My account"));
+  const content = (
       <React.Suspense fallback={<main className="workspace-page-loading"><LoaderCircle/><span>{lang==='ar'?'جارٍ فتح المساحة…':'Opening workspace…'}</span></main>}>
       {page === "home" && <><PublicHome lang={lang} go={go} /><Chat lang={lang} /></>}
       {page === "workshops" && <Workshops lang={lang} go={go} />}
@@ -1637,6 +1557,57 @@ function Chrome({ session }: { session: Session | null }) {
         </main>
       )}
       </React.Suspense>
+  );
+  const appClass = `${dark ? "app dark" : "app"}${internalPage ? " workspace-mode" : ""}`;
+  if (internalPage) {
+    return (
+      <div className={appClass} dir={lang === "ar" ? "rtl" : "ltr"}>
+        <AppShell
+          lang={lang} page={page} navigation={navigation} userName={userName} dark={dark} logo={reidLogo} go={go}
+          toggleDark={() => setDark(value => !value)} toggleLang={() => setLang(value => (value === "ar" ? "en" : "ar"))}
+          signOut={signOut}
+        >
+          {content}
+        </AppShell>
+      </div>
+    );
+  }
+  return (
+    <div className={appClass} dir={lang === "ar" ? "rtl" : "ltr"}>
+      <header className="public-topbar">
+        <button className="brand" onClick={() => go("home")}>
+          <img src={reidLogo} alt="" aria-hidden="true" />
+          <strong>{t.brand}</strong>
+        </button>
+        <nav>
+          {/* Derived from src/routes.ts, so the navigation can never offer a
+              destination the gate would then refuse. */}
+          {navigation
+            .filter(({ page: target }) => ["home", "workshops", "apply", "today"].includes(target))
+            .map(({ page: target }) => (
+              <button
+                key={target}
+                onClick={() => go(target)}
+                aria-current={page === target ? "page" : undefined}
+              >
+                {navLabel(target, lang, t)}
+              </button>
+            ))}
+          <button
+            className="pill"
+            onClick={() => go(session ? "profile" : "login")}
+          >
+            {session ? t.account : t.login}
+          </button>
+        </nav>
+        <aside>
+          <button onClick={() => setDark(!dark)} aria-label={dark ? "Light mode" : "Dark mode"}>{dark ? "☀" : "☾"}</button>
+          <button onClick={() => setLang(lang === "ar" ? "en" : "ar")}>
+            {lang === "ar" ? "EN" : "ع"}
+          </button>
+        </aside>
+      </header>
+      {content}
       <footer>
         <button className="text-link" onClick={() => go("privacy")}>
           {lang === "ar" ? "الخصوصية" : "Privacy"}

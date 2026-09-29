@@ -166,7 +166,7 @@
 }
 @media (max-width: 700px) {
   .review-dialog dl {
-    grid-template-columns: 1fr;
+    grid-template-columns:minmax(0,1fr);
   }
   .review-dialog footer {
     flex-direction: column;
@@ -230,7 +230,7 @@
 }
 @media (max-width: 900px) {
   .accounts-list > article {
-    grid-template-columns: 1fr;
+    grid-template-columns:minmax(0,1fr);
   }
   .account-actions > * {
     flex: 1;
