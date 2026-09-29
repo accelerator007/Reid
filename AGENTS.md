@@ -2,6 +2,12 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-09-29 Workshop forms (admins only) — built, NOT deployed
+
+- `/forms` (owner, super_admin, admin) and public `/f/:id` from `src/forms/`; migration `202609290001_workshop_forms.sql` (forms, form_collaborators, form_responses, `public_form`, `submit_form_response` with server-side validation, `form_overview`, buckets `form-uploads` private and `form-media` public). **Migration not applied to production; web not deployed.**
+- Checks: `rls_forms.sql` 64/64 (all RLS suites pass; harness `test_sign_out` now sets anon claims like PostgREST), vitest 351/351, tsc clean, `scripts/forms-preview.mjs` 17 screens × 8 widths no overflow, QR decodes at 3 sizes.
+- Left: review remaining screenshots (dialogs, responses, respond page on phones), dark-mode pass, `npm run build`, then apply the migration and `scripts/deploy-web.sh` with the owner's approval. Agent management + inbox (commit 3548c6c) are also not deployed yet.
+
 ## 2026-09-29 Agent management and WhatsApp inbox rebuilt
 
 - `/dashboard` renders `src/agent-admin/` (agent management only): ai-lap health card, state summary, and tabs for the roster (one grid, domain on each card), approvals (decide dialog with a note), the run log (all / in progress / failed) and providers (ceiling, retention, and a warning for an external provider cleared above public data, including a disabled one such as the Gemini row). `?agent=id` opens one agent: why it is blocked, facts, a manual run, its tools as generated forms (from `agent_tools.input_schema`, replacing the `window.prompt` JSON), pause (admins), enable/disable with a reason (owner), and recent runs. HR (`can_approve_level(3)` but not `is_admin`) sees the approvals only. Retired: `agent-command.tsx`, `agents.css`.

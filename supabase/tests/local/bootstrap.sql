@@ -81,8 +81,10 @@ create or replace function public.test_sign_in(actor uuid) returns void language
   perform set_config('request.jwt.claims', json_build_object('sub', actor, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';
 end $$;
+-- PostgREST gives an anonymous request the anon key's claims, so auth.uid() is
+-- null rather than an unreadable setting.
 create or replace function public.test_sign_out() returns void language plpgsql as $$ begin
-  perform set_config('request.jwt.claims', '', true);
+  perform set_config('request.jwt.claims', '{"role":"anon"}', true);
   execute 'set local role anon';
 end $$;
 

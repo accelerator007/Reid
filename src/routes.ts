@@ -29,6 +29,8 @@ export type Page =
   | "workshops"
   | "crm"
   | "dashboard"
+  | "forms"
+  | "respond"
   | "privacy"
   | "terms"
   | "data-deletion"
@@ -90,6 +92,10 @@ export const routes: readonly Route[] = [
   { page: "research", path: "/research", deepLinks: true, authenticated: true, allow: staff },
   { page: "crm", path: "/crm", authenticated: true, allow: ["owner", "super_admin", "admin", "hr", "sales"] },
   { page: "dashboard", path: "/dashboard", authenticated: true, allow: administrators },
+  // Workshop forms: built by administrators (is_admin in the database)...
+  { page: "forms", path: "/forms", deepLinks: true, authenticated: true, allow: ["owner", "super_admin", "admin"] },
+  // ...and answered by anyone holding the link, signed in or not.
+  { page: "respond", path: "/f", deepLinks: true },
 ];
 
 /** Where the in-app 404 lives. It is never served by the edge. */

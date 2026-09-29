@@ -3,7 +3,7 @@
 // it unchanged, and permissions still come from routes.ts via useNavigation.
 import React from 'react';
 import {
-  Bot, CalendarCheck, CircleUserRound, FlaskConical, FolderKanban, GraduationCap, Handshake, House, ListChecks,
+  Bot, CalendarCheck, CircleUserRound, ClipboardList, FlaskConical, FolderKanban, GraduationCap, Handshake, House, ListChecks,
   LogOut, Menu, MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plug, Search,
   ShieldCheck, Sparkles, Sun, UsersRound, X,
 } from 'lucide-react';
@@ -23,7 +23,7 @@ export const pageIcons: Partial<Record<Page, React.ReactNode>> = {
   owner: <House />, today: <CalendarCheck />, assistant: <Sparkles />,
   operations: <ListChecks />, projects: <FolderKanban />, crm: <Handshake />, research: <FlaskConical />,
   workshops: <GraduationCap />, workspace: <UsersRound />, inbox: <MessageCircle />,
-  dashboard: <Bot />, admin: <ShieldCheck />, connections: <Plug />, profile: <CircleUserRound />,
+  dashboard: <Bot />, forms: <ClipboardList />, admin: <ShieldCheck />, connections: <Plug />, profile: <CircleUserRound />,
 };
 
 const COLLAPSE_KEY = 'reid-nav-collapsed';

@@ -14,7 +14,7 @@ export const workspaceNavGroups: readonly WorkspaceNavGroup[] = [
   { id: 'center', label: { ar: 'الرئيسية', en: 'Home' }, pages: ['owner', 'today', 'assistant'] },
   { id: 'work', label: { ar: 'العمل', en: 'Work' }, pages: ['operations', 'projects', 'crm', 'research', 'workshops'] },
   { id: 'company', label: { ar: 'الشركة', en: 'Company' }, pages: ['workspace', 'inbox'] },
-  { id: 'administration', label: { ar: 'الإدارة', en: 'Administration' }, pages: ['dashboard', 'admin', 'connections'] },
+  { id: 'administration', label: { ar: 'الإدارة', en: 'Administration' }, pages: ['dashboard', 'forms', 'admin', 'connections'] },
 ] as const;
 
 /** Pinned below the groups, next to sign-out. */
@@ -35,6 +35,7 @@ const labels: Partial<Record<Page, { ar: string; en: string }>> = {
   workspace: { ar: 'الفريق', en: 'People' },
   inbox: { ar: 'محادثات واتساب', en: 'WhatsApp inbox' },
   dashboard: { ar: 'إدارة الوكلاء', en: 'Agent management' },
+  forms: { ar: 'النماذج', en: 'Forms' },
   admin: { ar: 'الحسابات والصلاحيات', en: 'Accounts & access' },
   connections: { ar: 'الاتصالات', en: 'Connections' },
   profile: { ar: 'حسابي', en: 'My account' },

@@ -13,9 +13,10 @@ const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: user.id, role: 
 export const previewSession = { access_token: token, refresh_token: 'preview', token_type: 'bearer', expires_in: 86400, expires_at: exp, user };
 
 const now = Date.now();
+const F1 = '5aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', F2 = '5bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', F3 = '5ccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const iso = hours => new Date(now + hours * 3600_000).toISOString();
 const fixtures = {
-  user_roles: [{ role }],
+  user_roles: [{ user_id: user.id, role }, { user_id: 'u-ali', role: 'admin' }, { user_id: 'u-said', role: 'admin' }],
   account_controls: { status: 'active' },
   profiles: [
     { id: user.id, full_name: 'شيخة المعمري', email: 'owner@reid.test', phone: '+968 9000 0001', position: 'المؤسسة والمديرة التنفيذية', department: null, department_id: 'dep-mgmt', hire_date: '2025-01-05', employment_status: 'active', linkedin_url: 'https://linkedin.com/in/reid-preview' },
@@ -190,6 +191,35 @@ const fixtures = {
     ['content.draft.create', 'إنشاء مسودة', 'Create draft', 'create', 1, { required: ['title_ar', 'title_en', 'body_ar', 'body_en'] }],
     ['content.publish', 'نشر محتوى', 'Publish content', 'publish', 2, { required: ['draft_id'], properties: { draft_id: { type: 'string' } } }],
   ].map(([id, name_ar, name_en, operation, approval_level, input_schema]) => ({ id, name_ar, name_en, description: name_en, operation, approval_level, input_schema })),
+  forms: [
+    { id: F1, owner_id: user.id, title: 'تقييم ورشة التصميم بالذكاء الاصطناعي', description: 'رأيك يساعدنا نطوّر الورش القادمة. التقييم يأخذ دقيقة.', cover_url: null, theme: 'brand',
+      workshop: { number: '3', name: 'التصميم بالذكاء الاصطناعي', date: '2026-10-02', presenter: 'مريم البلوشية', location: 'مسقط — مكتب ريّد' }, workshop_id: null,
+      accepting: true, one_per_device: true, confirm_message: 'شكرًا لك! نراك في الورشة القادمة.', close_at: null, created_at: iso(-80), updated_at: iso(-1), questions: [
+        { id: 'q1', type: 'short', title: 'الاسم الكامل', required: true },
+        { id: 'q2', type: 'rating', title: 'تقييمك العام للورشة', required: true, max: 5 },
+        { id: 'q3', type: 'scale', title: 'إلى أي حد كان المحتوى مفيدًا لعملك؟', required: true, min: 0, max: 10, minLabel: 'غير مفيد', maxLabel: 'مفيد جدًا' },
+        { id: 'q4', type: 'choice', title: 'هل كانت مدة الورشة مناسبة؟', options: [{ id: 'o1', label: 'قصيرة' }, { id: 'o2', label: 'مناسبة' }, { id: 'o3', label: 'طويلة' }], other: true },
+        { id: 's1', type: 'section', title: 'ملاحظاتك', description: 'اختياري، لكن يهمنا.' },
+        { id: 'q5', type: 'checkbox', title: 'أي الأجزاء أعجبتك؟', options: [{ id: 'c1', label: 'الأمثلة العملية' }, { id: 'c2', label: 'الأدوات' }, { id: 'c3', label: 'النقاش' }] },
+        { id: 'q6', type: 'paragraph', title: 'ماذا نحسّن؟' },
+        { id: 'q7', type: 'file', title: 'صورة من عملك في الورشة (اختياري)', accept: ['image', 'pdf'] },
+      ] },
+    { id: F2, owner_id: user.id, title: 'التسجيل في ورشة البيانات', description: '', cover_url: null, theme: 'green', workshop: { number: '4', name: 'تحليل البيانات للمبتدئين' }, workshop_id: null,
+      accepting: false, one_per_device: false, confirm_message: '', close_at: null, created_at: iso(-200), updated_at: iso(-30), questions: [{ id: 'a', type: 'short', title: 'الاسم', required: true }, { id: 'b', type: 'email', title: 'البريد', required: true }] },
+    { id: F3, owner_id: 'u-ali', title: 'التصويت على شعار الفعالية', description: 'صوت واحد لكل جهاز.', cover_url: null, theme: 'amber', workshop: {}, workshop_id: null,
+      accepting: true, one_per_device: true, confirm_message: '', close_at: null, created_at: iso(-20), updated_at: iso(-3), questions: [{ id: 'v', type: 'image_choice', title: 'أي شعار تختار؟', required: true, options: [{ id: 'i1', label: 'الأول' }, { id: 'i2', label: 'الثاني' }] }] },
+  ],
+  form_overview: [
+    { form_id: F1, responses: 3, last_response_at: iso(-0.4), rating_avg: 4.33 },
+    { form_id: F2, responses: 12, last_response_at: iso(-26), rating_avg: null },
+    { form_id: F3, responses: 0, last_response_at: null, rating_avg: null },
+  ],
+  form_collaborators: [{ form_id: F3, user_id: user.id, role: 'editor' }, { form_id: F1, user_id: 'u-ali', role: 'viewer' }],
+  form_responses: [
+    { id: 'fr1', form_id: F1, created_at: iso(-30), answers: { q1: 'سالم الهنائي', q2: 5, q3: 9, q4: 'مناسبة', q5: ['الأمثلة العملية', 'الأدوات'], q6: 'أتمنى وقتًا أطول للتطبيق.' } },
+    { id: 'fr2', form_id: F1, created_at: iso(-5), answers: { q1: 'Reem Al-Kindi', q2: 4, q3: 7, q4: 'قصيرة', q5: ['النقاش'], q7: [{ path: `${F1}/a.jpg`, name: 'work.jpg', size: 204800, mime: 'image/jpeg' }] } },
+    { id: 'fr3', form_id: F1, created_at: iso(-0.4), answers: { q1: 'ليلى', q2: 4, q3: 10, q4: 'ساعتين كفاية', q5: ['الأمثلة العملية'] } },
+  ],
   applications: [
     { id: 'app-1', full_name: 'هدى الشكيلية', email: 'huda@example.test', phone: '+968 9111 2233', organization: 'جامعة السلطان قابوس', title: 'باحثة ذكاء اصطناعي', account_type: 'research_member', linkedin_url: 'https://www.linkedin.com/in/example', github_url: null, project_or_research: 'تحليل اللهجات العمانية', join_reason: 'أرغب بالمشاركة في مشروع معالجة اللهجة العمانية وتقديم بيانات الأبحاث التي جمعتها خلال الماجستير.', cover_letter: 'أعمل منذ سنتين على نماذج لغوية للهجات الخليجية…', cv_path: 'app-1/cv.pdf', created_at: iso(-20), status: 'pending', invitation_status: null },
     { id: 'app-2', full_name: 'Omar Al-Rawahi', email: 'omar@example.test', phone: '+968 9222 3344', organization: 'Freelance', title: 'Designer', account_type: 'guest', linkedin_url: 'https://www.linkedin.com/in/example2', github_url: 'https://github.com/example', project_or_research: null, join_reason: 'I would like to help with the booking platform interface.', cover_letter: '', cv_path: null, created_at: iso(-50), status: 'pending', invitation_status: null },
@@ -205,6 +235,11 @@ const fixtures = {
   ],
 };
 
+const publicForm = id => {
+  const form = fixtures.forms.find(item => item.id === id);
+  return form ? { ...form, open: form.accepting, can_manage: true } : null;
+};
+
 export function respondForPreview(route) {
   const request = route.request();
   const url = new URL(request.url());
@@ -217,6 +252,7 @@ export function respondForPreview(route) {
   if (url.pathname.startsWith('/auth/v1/')) return json(previewSession);
   if (url.pathname.startsWith('/functions/v1/')) return json({});
   const name = url.pathname.replace('/rest/v1/', '').replace('rpc/', '');
+  if (name === 'public_form') return json(publicForm(JSON.parse(request.postData() || '{}').p_id));
   const wantsObject = (request.headers()['accept'] || '').includes('vnd.pgrst.object');
   let data = fixtures[name];
   if (data === undefined) data = wantsObject ? null : [];
