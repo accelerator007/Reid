@@ -4,6 +4,8 @@ This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers
 
 ## 2026-09-29 Tasks & requests, My day, Clients and People rebuilt
 
+- **Live since 07:03 UTC** via `scripts/deploy-web.sh` from commit `a0648a7` (web container only; API, WhatsApp and the assistant untouched and healthy). The public site serves the new entry bundle and the rebuilt route chunks (`people-page`, `clients-page`, `today-page`, `operations-page`, `projects-page`, `agent-team-page`) with 200; `/crm`, `/workspace`, `/operations`, `/research` and `/dashboard` return 200. The agent room and projects rebuild shipped in the same release. Rollback: `docker tag reid-web:pre-web-202609290703 reid-web:local && docker compose up -d --no-deps web`.
+
 - `/operations` and `/today` render `src/work/`; `/crm` renders `src/clients/`; `/workspace` renders `src/people/`. Retired: `os-workspace.tsx`, `crm.tsx`, `crm.css`, `employee.tsx`, `employee.css` (the single `.workspace-message` rule research needs moved to `research.css`).
 - Each module has a tested model (labels in both languages, permission mirrors of `work_record_access`, the leave guard and the department-manager rule, Muscat-day grouping, the Saturday–Friday work week) and reads/writes only through `db.ts`. The People page previously subscribed to every table in `public`; it now follows its own nine tables. Stage and status values that showed as raw English are translated, and Arabic counts agree with their numbers.
 - People writes were checked against the old payloads: onboarding uses `assigned_by`, KPIs `set_by`, and company calendar events have no `user_id`.
