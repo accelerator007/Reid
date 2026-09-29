@@ -42,6 +42,18 @@ const fixtures = {
     { id: 't6', title: 'تحليل متطلبات الحجز', description: null, status: 'done', priority: 2, due_at: iso(-300), project_id: 'p1', assignee_id: 'u-maryam' },
     { id: 't7', title: 'نموذج أولي لمساعد ريد', description: null, status: 'done', priority: 2, due_at: iso(-50), project_id: 'p2', assignee_id: user.id },
     { id: 't8', title: 'اعتماد تصميم الصفحة الرئيسية', description: null, status: 'in_progress', priority: 2, due_at: iso(6), project_id: 'p2', assignee_id: user.id },
+    { id: 't9', title: 'توقيع عقد شركة الأمل', description: null, status: 'todo', priority: 1, due_at: iso(-30), project_id: 'p1', assignee_id: user.id },
+    { id: 't10', title: 'مراجعة خطة المحتوى الأسبوعية', description: null, status: 'todo', priority: 3, due_at: iso(50), project_id: null, assignee_id: user.id },
+    { id: 't11', title: 'قراءة تقرير رصد المنافسين', description: null, status: 'todo', priority: 3, due_at: null, project_id: null, assignee_id: user.id },
+  ],
+  work_records: [
+    { id: 'w1', kind: 'ticket', title: 'الطابعة في مكتب مسقط لا تعمل', description: 'تظهر رسالة خطأ في الورق منذ الصباح.', status: 'open', owner_id: 'u-said', assigned_to: null, due_date: null, created_at: iso(-3) },
+    { id: 'w2', kind: 'ticket', title: 'صلاحية دخول لمستودع GitHub الجديد', description: 'للمطورة مريم على مشروع منصة الحجز.', status: 'in_progress', owner_id: 'u-maryam', assigned_to: 'u-ali', due_date: '2026-09-27', created_at: iso(-40) },
+    { id: 'w3', kind: 'ticket', title: 'تحديث نظام التشغيل لأجهزة الفريق', description: '', status: 'done', owner_id: 'u-ali', assigned_to: null, due_date: '2026-09-20', created_at: iso(-200) },
+    { id: 'w4', kind: 'leave', title: 'إجازة سنوية — أسبوع', description: 'من 12 إلى 19 أكتوبر، يغطيني سعيد.', status: 'open', owner_id: 'u-maryam', assigned_to: null, due_date: '2026-10-12', created_at: iso(-10) },
+    { id: 'w5', kind: 'goal', title: 'إطلاق منصة الحجز قبل منتصف أكتوبر', description: 'مع اختبار الدفع الكامل.', status: 'in_progress', owner_id: user.id, assigned_to: 'u-ali', due_date: '2026-10-15', created_at: iso(-300) },
+    { id: 'w6', kind: 'decision', title: 'اعتماد Tavily للبحث في الويب', description: 'بحدود 60 بحثًا يوميًا.', status: 'done', owner_id: user.id, assigned_to: null, due_date: null, created_at: iso(-30) },
+    { id: 'w7', kind: 'contract', title: 'تجديد عقد الاستضافة', description: '', status: 'review', owner_id: user.id, assigned_to: null, due_date: '2026-10-01', created_at: iso(-80) },
   ],
   projects: [
     { id: 'p1', name: 'منصة الحجز — شركة الأمل', type: 'client', description: 'منصة حجز ودفع إلكتروني لعيادات شركة الأمل في مسقط وصحار.', manager_id: 'u-ali', client_name: 'شركة الأمل', status: 'active', github_repo: 'https://github.com/reid/booking', start_date: '2026-08-01', target_date: '2026-10-15', archived_at: null, updated_at: iso(-2) },
