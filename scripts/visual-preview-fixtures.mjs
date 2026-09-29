@@ -52,6 +52,9 @@ const fixtures = {
   agent_room_messages: [
     { id: 'm1', room_id: 'room-1', sender_kind: 'user', sender_user_id: user.id, sender_agent_id: null, body: '@operations لخص لي وضع مشروع منصة الحجز', mentions: ['operations'], run_id: null, reply_to: null, state: 'completed', error: null, created_at: iso(-1), updated_at: iso(-1) },
     { id: 'm2', room_id: 'room-1', sender_kind: 'agent', sender_user_id: null, sender_agent_id: 'operations', body: 'المشروع على المسار عمومًا: 12 مهمة منجزة من 18، ومهمتان متأخرتان تخصان مراجعة العرض والاختبارات. أقترح تثبيت موعد المراجعة يوم الأحد.', mentions: [], run_id: 'r1', reply_to: 'm1', state: 'completed', error: null, created_at: iso(-0.9), updated_at: iso(-0.9) },
+    { id: 'm3', room_id: 'room-1', sender_kind: 'user', sender_user_id: user.id, sender_agent_id: null, body: '@ceo جهّز لي موجز الأسبوع مع الأرقام', mentions: ['ceo'], run_id: null, reply_to: null, state: 'completed', error: null, created_at: iso(-0.2), updated_at: iso(-0.2) },
+    { id: 'm4', room_id: 'room-1', sender_kind: 'agent', sender_user_id: null, sender_agent_id: 'ceo', body: 'الأسبوع هادئ عمومًا: مشروعان على المسار وواحد يحتاج قرارًا في المراجعة. سأطلب الأرقام التفصيلية.\n[HANDOFF:@analytics] جهّز مؤشرات الأسبوع للمشاريع الثلاثة', mentions: [], run_id: 'r2', reply_to: 'm3', state: 'completed', error: null, created_at: iso(-0.15), updated_at: iso(-0.15) },
+    { id: 'm5', room_id: 'room-1', sender_kind: 'agent', sender_user_id: null, sender_agent_id: 'analytics', body: '…', mentions: [], run_id: 'r3', reply_to: 'm4', state: 'running', error: null, created_at: iso(-0.1), updated_at: iso(-0.1) },
   ],
 };
 

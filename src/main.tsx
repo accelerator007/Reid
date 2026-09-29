@@ -41,7 +41,7 @@ const AdminWorkspace=React.lazy(()=>import('./admin-workspace').then(module=>({d
 const OwnerOverview=React.lazy(()=>import('./owner-overview').then(module=>({default:module.OwnerOverview})));
 const Today=React.lazy(()=>import('./os-workspace').then(module=>({default:module.Today})));
 const Operations=React.lazy(()=>import('./os-workspace').then(module=>({default:module.Operations})));
-const AssistantWorkspace=React.lazy(()=>import('./os-workspace').then(module=>({default:module.AssistantWorkspace})));
+const AssistantWorkspace=React.lazy(()=>import('./agent-team/agent-team-page').then(module=>({default:module.AgentTeamRoom})));
 const Connections=React.lazy(()=>import('./qr-workspace').then(module=>({default:module.Connections})));
 const QrInbox=React.lazy(()=>import('./qr-workspace').then(module=>({default:module.QrInbox})));
 const ResearchWorkspace=React.lazy(()=>import('./research').then(module=>({default:module.ResearchWorkspace})));

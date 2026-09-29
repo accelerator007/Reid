@@ -73,11 +73,12 @@ describe("the dark theme covers what the light theme defines", () => {
 });
 
 describe("every token referenced actually exists", () => {
-  const defined = new Set(Array.from(tokens.matchAll(DEFINED), m => m[1]));
+  // Tokens come from tokens.css; component-scoped variables such as the UI
+  // kit's --tone-* are defined in their own sheet and shared from there.
+  const defined = new Set(sheets.flatMap(name => Array.from(read(name).matchAll(DEFINED), m => m[1])));
   it.each(sheets)("%s references only defined tokens", name => {
-    const local = new Set(Array.from(read(name).matchAll(DEFINED), m => m[1]));
     const used = new Set(Array.from(read(name).matchAll(USED), m => m[1]));
-    const missing = Array.from(used).filter(token => !defined.has(token) && !local.has(token));
+    const missing = Array.from(used).filter(token => !defined.has(token));
     expect(missing, `${name} uses undefined token(s): ${missing.join(", ")}`).toEqual([]);
   });
 });
