@@ -80,12 +80,16 @@ select public.t_true('assistant_learning','Initiative stays opt-in for every lin
 select public.t_true('assistant_learning','Both web tools are read-only and need no approval',
   $$select count(*)=2 from public.agent_tools
      where id in ('web.search','web.read') and operation='read' and approval_level=0 and enabled$$);
-select public.t_true('assistant_learning','Web tools are granted only to research-facing agents',
+select public.t_true('assistant_learning','Every enabled specialist receives both governed web tools',
   $$select not exists(
-      select 1 from public.agent_tool_assignments
-       where tool_id in ('web.search','web.read')
-         and agent_id not in ('knowledge','competitor','marketing','content','support'))
-     and exists(select 1 from public.agent_tool_assignments where tool_id='web.search')$$);
+      select a.id
+        from public.agents a
+       where a.enabled and a.id <> 'finance'
+         and (select count(*) from public.agent_tool_assignments x
+               where x.agent_id=a.id and x.tool_id in ('web.search','web.read')) <> 2)
+     and not exists(
+      select 1 from public.agent_tool_assignments x
+       where x.tool_id in ('web.search','web.read') and x.agent_id='finance')$$);
 
 -- ----------------------------------------------------------------- anonymous
 select public.test_sign_out();

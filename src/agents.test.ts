@@ -15,6 +15,7 @@ const agentApi=readFileSync(new URL('./agent-admin/api.ts',import.meta.url),'utf
 const agentDetail=readFileSync(new URL('./agent-admin/agent-detail.tsx',import.meta.url),'utf8');
 const telemetryMigration=readFileSync(new URL('../supabase/migrations/202609070002_owner_command_center_metrics.sql',import.meta.url),'utf8');
 const hostRunner=readFileSync(new URL('../infra/ai-lap/reid_agent_runner.py',import.meta.url),'utf8');
+const cleanupAndWeb=readFileSync(new URL('../supabase/migrations/202609300001_cleanup_synthetic_data_and_enable_agent_web.sql',import.meta.url),'utf8');
 
 describe('agent gateway policy', () => {
   it('orders classifications from public to restricted', () => {
@@ -122,5 +123,26 @@ describe('agent team room runtime contract',()=>{
     expect(localRunner).toContain("from('agent_room_messages').update");
     expect(localRunner).toContain('patch.body=body.slice(0,12000)');
     expect(localRunner).toContain("updateAgentRoomMessage(admin,run.data.id,'completed',output,null)");
+  });
+});
+
+describe('governed web tools',()=>{
+  it('implements both registered web tools with bounded Tavily output',()=>{
+    expect(gateway).toContain("case 'web.search'");
+    expect(gateway).toContain("case 'web.read'");
+    expect(gateway).toContain("Math.min(8");
+    expect(gateway).toContain("text(row?.raw_content, 8000)");
+    expect(gateway).toContain("consume_web_search_quota");
+  });
+
+  it('blocks local or credentialed URLs before extraction',()=>{
+    expect(gateway).toContain("url.protocol !== 'https:'");
+    expect(gateway).toContain("host === 'localhost'");
+    expect(gateway).toContain("url.username || url.password");
+  });
+
+  it('restores search and read assignments for every active specialist',()=>{
+    expect(cleanupAndWeb).toContain("('web.search'),('web.read')");
+    expect(cleanupAndWeb).toContain("where a.enabled and a.id <> 'finance'");
   });
 });

@@ -53,6 +53,11 @@ type AgentTool = {
   enabled: boolean;
 };
 
+// This function deliberately uses dynamic table names for the governed tool
+// catalogue. There is no generated Database type in the Edge bundle, so keep
+// the client untyped instead of letting supabase-js infer every table as never.
+type DbClient = any;
+
 const rank: Record<string, number> = { public: 0, internal: 1, confidential: 2, restricted: 3 };
 const secureEqual = (left: string, right: string) => {
   const a = new TextEncoder().encode(left), b = new TextEncoder().encode(right);
@@ -67,6 +72,51 @@ const secureEqual = (left: string, right: string) => {
 async function hash(value: string) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+const webKey = () => Deno.env.get('TAVILY_API_KEY') || Deno.env.get('REID_WEB_SEARCH_KEY');
+
+function publicHttpsUrl(value: unknown) {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value.trim());
+    const host = url.hostname.toLowerCase();
+    const literalV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    const privateV4 = literalV4 && (() => {
+      const [a,b,c,d] = literalV4.slice(1).map(Number);
+      if ([a,b,c,d].some(part => part > 255)) return true;
+      return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && b === 254)
+        || (a === 172 && b >= 16 && b <= 31) || (a === 192 && (b === 168 || b === 0))
+        || (a === 100 && b >= 64 && b <= 127) || (a === 198 && (b === 18 || b === 19));
+    })();
+    if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')
+      || !host || host === 'localhost' || host.endsWith('.local') || host.includes(':') || privateV4) return null;
+    return url.toString();
+  } catch { return null; }
+}
+
+async function tavily(path: 'search'|'extract', body: Record<string, unknown>) {
+  const key = webKey();
+  if (!key) throw new Error('web_search_key_missing');
+  const response = await fetch(`https://api.tavily.com/${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    signal: AbortSignal.timeout(path === 'search' ? 15_000 : 20_000),
+    body: JSON.stringify({ api_key:key, ...body }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`web_${path}_${response.status}`);
+  return payload as Record<string, unknown>;
+}
+
+async function governedWeb<T>(admin: DbClient, call: () => Promise<T>) {
+  const quota = await admin.rpc('consume_web_search_quota', { daily_limit:60 });
+  if (quota.error || quota.data !== true) throw new Error('web_search_quota_exhausted');
+  try { return await call(); }
+  catch (error) {
+    await admin.rpc('release_web_search_quota');
+    throw error;
+  }
 }
 
 async function callGemini(provider: Provider, systemPrompt: string | null, input: string, googleSearch = false) {
@@ -154,7 +204,7 @@ async function embed(provider: Provider, input: string) {
   return payload?.embedding?.values as number[];
 }
 
-async function rows(admin: ReturnType<typeof createClient>, table: string, columns: string, order = 'created_at') {
+async function rows(admin: DbClient, table: string, columns: string, order = 'created_at') {
   const query = admin.from(table).select(columns).order(order, { ascending: false }).limit(30);
   const { data, error } = await query;
   if (error) throw new Error(`tool_${table}_failed`);
@@ -164,7 +214,7 @@ async function rows(admin: ReturnType<typeof createClient>, table: string, colum
 // Real, bounded company tools. The model never receives a database credential
 // and cannot choose arbitrary tables or columns: each agent has a fixed server-
 // side allow-list. Write actions remain behind the existing L2/L3 approval path.
-async function scopedMemories(admin: ReturnType<typeof createClient>, agentId: string, requesterId: string, args: Record<string, unknown> = {}) {
+async function scopedMemories(admin: DbClient, agentId: string, requesterId: string, args: Record<string, unknown> = {}) {
   const allowed = new Map<string, Set<string>>([
     ['agent', new Set([agentId])], ['company', new Set(['reid'])], ['user', new Set([requesterId])],
   ]);
@@ -173,10 +223,10 @@ async function scopedMemories(admin: ReturnType<typeof createClient>, agentId: s
   const { data, error } = await admin.from('memories')
     .select('scope,scope_id,title,content,classification,created_at').order('created_at', { ascending: false }).limit(120);
   if (error) throw new Error('tool_memories_failed');
-  return (data || []).filter(memory => allowed.get(memory.scope)?.has(memory.scope_id)).slice(0, 24);
+  return (data || []).filter((memory: { scope:string; scope_id:string }) => allowed.get(memory.scope)?.has(memory.scope_id)).slice(0, 24);
 }
 
-async function buildAgentContext(admin: ReturnType<typeof createClient>, agentId: string, requesterId: string, args: Record<string, unknown> = {}) {
+async function buildAgentContext(admin: DbClient, agentId: string, requesterId: string, args: Record<string, unknown> = {}) {
   const now = new Date();
   // A model has no clock; without an explicit local time it quotes stale times
   // from memory. This value is the only authority for "now".
@@ -214,7 +264,7 @@ function requireArguments(tool: AgentTool, args: Record<string, unknown>) {
   }
 }
 
-async function executeTool(admin: ReturnType<typeof createClient>, tool: AgentTool, args: Record<string, unknown>, requesterId: string) {
+async function executeTool(admin: DbClient, tool: AgentTool, args: Record<string, unknown>, requesterId: string) {
   requireArguments(tool, args);
   const text = (value: unknown, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : null;
   const uuid = (value: unknown) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value) ? value : null;
@@ -283,11 +333,44 @@ async function executeTool(admin: ReturnType<typeof createClient>, tool: AgentTo
       await admin.from('content_drafts').update({status:'published',published_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',draft.data.id);
       return published.data;
     }
+    case 'web.search': {
+      const query = text(args.query, 400);
+      if (!query || query.length < 2) throw new Error('tool_argument_missing:query');
+      const count = Math.max(1, Math.min(8, Math.trunc(Number(args.count ?? 5)) || 5));
+      return governedWeb(admin, async () => {
+        const payload = await tavily('search', { query, max_results:count, search_depth:'basic', include_answer:false, include_raw_content:false });
+        const seen = new Set<string>();
+        const results = (Array.isArray(payload.results) ? payload.results : []).flatMap((item: unknown) => {
+          const row = item as Record<string, unknown>;
+          const url = publicHttpsUrl(row.url);
+          if (!url || seen.has(url)) return [];
+          seen.add(url);
+          return [{
+            title:text(row.title,160) || new URL(url).hostname,
+            url,
+            snippet:text(row.content,800) || '',
+            score:typeof row.score === 'number' ? row.score : null,
+          }];
+        }).slice(0,count);
+        return { query, results, request_id:text(payload.request_id,100) };
+      });
+    }
+    case 'web.read': {
+      const url = publicHttpsUrl(args.url);
+      if (!url) throw new Error('web_url_not_allowed');
+      return governedWeb(admin, async () => {
+        const payload = await tavily('extract', { urls:[url], extract_depth:'basic', format:'markdown', include_images:false });
+        const row = Array.isArray(payload.results) ? payload.results[0] as Record<string, unknown> | undefined : undefined;
+        const content = text(row?.raw_content, 8000);
+        if (!row || !content) throw new Error('web_page_empty');
+        return { url:publicHttpsUrl(row.url) || url, content, request_id:text(payload.request_id,100) };
+      });
+    }
     default: throw new Error('tool_not_implemented');
   }
 }
 
-async function executeRun(admin: ReturnType<typeof createClient>, run: Run, agent: Agent, provider: Provider, action: string, input: string) {
+async function executeRun(admin: DbClient, run: Run, agent: Agent, provider: Provider, action: string, input: string) {
   const startedAt = Date.now();
   await admin.from('agent_runs').update({
     run_state: 'running', status: 'running', started_at: new Date().toISOString(), error: null,
@@ -340,7 +423,7 @@ async function executeRun(admin: ReturnType<typeof createClient>, run: Run, agen
   return { runId: run.id, output: result.text, latencyMs: latency, tokenUsage: result.tokens, provider: provider.id, quality };
 }
 
-async function updateTeamRoomMessage(admin:ReturnType<typeof createClient>,runId:string,state:'queued'|'running'|'completed'|'failed'|'cancelled',body?:string,error?:string|null) {
+async function updateTeamRoomMessage(admin:DbClient,runId:string,state:'queued'|'running'|'completed'|'failed'|'cancelled',body?:string,error?:string|null) {
   const patch:Record<string,unknown>={state,updated_at:new Date().toISOString()};
   if(body) patch.body=body.slice(0,12000);
   if(error!==undefined) patch.error=error?.slice(0,500)||null;
@@ -362,7 +445,7 @@ Deno.serve(async (request) => {
     const authorization = request.headers.get('Authorization');
     let requesterId = '';
     let requesterRoles: string[] = [];
-    let caller: ReturnType<typeof createClient> | null = null;
+    let caller: DbClient | null = null;
     if (internal) {
       requesterId = typeof body.requesterId === 'string' ? body.requesterId : (Deno.env.get('WHATSAPP_OWNER_USER_ID') || '');
       if (!requesterId) throw new Error('whatsapp_owner_not_configured');
