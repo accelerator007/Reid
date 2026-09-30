@@ -6,6 +6,12 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, CircleAlert, X } from 'lucide-react';
 
+/**
+ * Where overlays mount: inside the app root, which carries the theme class
+ * (.dark) and the reading direction, rather than bare <body>.
+ */
+export const overlayRoot = () => document.querySelector<HTMLElement>('.app') ?? document.body;
+
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export function Switch({ checked, onChange, label, description, disabled }: {
@@ -196,7 +202,7 @@ export function Menu({ label, trigger, items, dir }: { label: string; trigger: R
             ))}
           </div>
         </div>,
-        document.body,
+        overlayRoot(),
       )}
     </>
   );
@@ -230,7 +236,7 @@ export function ToastProvider({ children, closeLabel }: { children: React.ReactN
             </div>
           ))}
         </div>,
-        document.body,
+        overlayRoot(),
       )}
     </ToastContext.Provider>
   );

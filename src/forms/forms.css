@@ -11,7 +11,9 @@
 [data-theme="red"] { --form: var(--red-9); --form-soft: var(--red-3); --form-text: var(--red-11); --form-line: var(--red-6); }
 [data-theme="neutral"] { --form: var(--neutral-11); --form-soft: var(--neutral-3); --form-text: var(--neutral-12); --form-line: var(--neutral-6); }
 
-.forms-view { animation: fx-page var(--duration-slow) var(--ease) both; }
+/* No fill mode: a transform left in place by an animation would become the
+ * containing block for fixed children (dialogs, the floating button). */
+.forms-view { animation: fx-page var(--duration-slow) var(--ease); }
 @keyframes fx-page { from { opacity: 0; transform: translateY(8px); } }
 
 .forms-home, .form-editor {
@@ -303,7 +305,7 @@
 }
 [dir="rtl"] .form-tabs__pill { transform: translateX(calc(-100% * var(--at))); }
 [dir="ltr"] .form-tabs__pill { transform: translateX(calc(100% * var(--at))); }
-.form-panel { min-width: 0; animation: fx-slide 320ms var(--ease) both; }
+.form-panel { min-width: 0; animation: fx-slide 320ms var(--ease); }
 @keyframes fx-slide { from { opacity: 0; transform: translateY(10px); } }
 .form-loading { padding: var(--space-6) 0; }
 
@@ -463,7 +465,7 @@
 .responses-views button { display: inline-flex; align-items: center; gap: var(--space-2); min-block-size: 38px; padding: 0 var(--space-4); border: 0; border-radius: var(--radius-pill); background: none; color: var(--text-muted); cursor: pointer; font: 600 var(--text-sm)/1 var(--font-sans); }
 .responses-views button svg { inline-size: 16px; block-size: 16px; }
 .responses-views button[aria-selected="true"] { background: var(--surface); color: var(--form-text); box-shadow: var(--shadow-1); }
-.responses-panel { animation: fx-slide 300ms var(--ease) both; }
+.responses-panel { animation: fx-slide 300ms var(--ease); }
 
 .summary { display: grid; gap: var(--space-3); }
 .summary-card { display: grid; gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface); }

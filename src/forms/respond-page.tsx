@@ -333,7 +333,8 @@ function Rating({ lang, question, value, titleId, onChange }: { lang: Lang; ques
     if ([back, 'ArrowDown'].includes(event.key)) { event.preventDefault(); choose(Math.max(1, (value ?? 2) - 1)); }
   };
   return (
-    <div className="respond-rating" style={{ '--stars': max } as React.CSSProperties}>
+    <div className="respond-rating">
+      <div className="respond-rating__scale">
       <div className="respond-rating__stars" role="radiogroup" aria-labelledby={titleId} onKeyDown={keys} onMouseLeave={() => setHover(null)}>
         {Array.from({ length: max }, (_, index) => index + 1).map(n => (
           <button key={n} type="button" role="radio" aria-checked={value === n} tabIndex={value ? (value === n ? 0 : -1) : n === 1 ? 0 : -1}
@@ -344,6 +345,7 @@ function Rating({ lang, question, value, titleId, onChange }: { lang: Lang; ques
         ))}
       </div>
       <div className="respond-rating__ends" aria-hidden="true"><span>{ratingWord(1, max, lang)}</span><span>{ratingWord(max, max, lang)}</span></div>
+      </div>
       <p className="respond-rating__live" aria-live="polite">{value ? ratingLine(value, max, lang) : tr(lang, 'اختر من 1 إلى ' + max, `Choose 1 to ${max}`)}</p>
     </div>
   );

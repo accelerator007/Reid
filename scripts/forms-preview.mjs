@@ -13,6 +13,7 @@ const base = process.env.PREVIEW_URL || 'http://127.0.0.1:5173';
 const out = process.argv[2] || 'test-results/forms';
 const widths = (process.env.FORMS_WIDTHS || '320,360,375,414,768,1024,1280,1440').split(',').map(Number);
 const shots = new Set((process.env.FORMS_SHOTS || '360,1440').split(',').map(Number));
+const theme = process.env.FORMS_THEME === 'dark' ? 'dark' : 'light';
 const F1 = '5aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', F2 = '5bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const visible = locator => locator.filter({ visible: true }).first();
 
@@ -53,12 +54,12 @@ const browser = await chromium.launch();
 let problems = 0;
 for (const width of widths) {
   const mobile = width <= 414;
-  const context = await browser.newContext({ viewport: { width, height: 860 }, isMobile: mobile, hasTouch: mobile, locale: 'ar-OM', deviceScaleFactor: 1 });
-  await context.addInitScript(([key, value]) => {
+  const context = await browser.newContext({ viewport: { width, height: 860 }, isMobile: mobile, hasTouch: mobile, locale: 'ar-OM', deviceScaleFactor: 1, colorScheme: theme });
+  await context.addInitScript(([key, value, scheme]) => {
     localStorage.setItem(key, value);
     localStorage.setItem('reid-lang', 'ar');
-    localStorage.setItem('reid-theme', 'light');
-  }, ['sb-mock-auth-token', JSON.stringify(previewSession)]);
+    localStorage.setItem('reid-theme', scheme);
+  }, ['sb-mock-auth-token', JSON.stringify(previewSession), theme]);
   await context.route('https://mock.supabase.test/**', respondForPreview);
   await context.route(`${base}/api/**`, respondForLocalApi);
   const page = await context.newPage();
@@ -71,7 +72,7 @@ for (const width of widths) {
     await page.waitForTimeout(450);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     if (overflow > 1) { problems += 1; console.log(`⚠ ${width} ${name}: horizontal overflow ${overflow}px`); }
-    if (shots.has(width)) await page.screenshot({ path: `${out}/${width}-${name}.png`, fullPage: !['templates', 'share', 'access', 'menu', 'add-question'].includes(name) });
+    if (shots.has(width)) await page.screenshot({ path: `${out}/${theme}-${width}-${name}.png`, fullPage: !['templates', 'share', 'access', 'menu', 'add-question'].includes(name) });
     if (name === 'share' && width === 1440) {
       await page.waitForTimeout(600);
       const image = await page.evaluate(() => {
