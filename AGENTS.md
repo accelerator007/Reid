@@ -2,7 +2,16 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
-## 2026-09-29 Workshop forms (admins only) — built, NOT deployed
+## 2026-09-30 Production cleanup, forms and governed agent web tools — live
+
+- Workshop forms are fully active in Production. Migration `202609290001_workshop_forms.sql` is applied, `/forms` and public `/f/:id` are deployed from commit `5eb4971`, both storage buckets exist, and the empty state is real: there are currently no forms, responses or workshops. Public and authenticated form paths, server-side validation, themes, QR and XLSX export passed the release checks.
+- Migration `202609300001_cleanup_synthetic_data_and_enable_agent_web.sql` removed the thirteen exact QA Auth identities and their dependent application, research, employee, task, notification, agent-memory and QR test records. It deliberately uses UUID allow-lists rather than name/email wildcards. Production now has two real Auth accounts, zero applications, zero research rows, zero employee documents, and no projects/forms/workshops yet. The remaining single KPI, performance review and timesheet belong to real data and were preserved.
+- Every one of the ten enabled non-finance agents now has `web.search` and `web.read`. `llm-gateway` version 5 executes them through Tavily with an explicit-input-only request, daily shared quota, strict public-HTTPS URL checks, timeouts and bounded/deduplicated output. `TAVILY_API_KEY` is stored as an Edge secret. Finance remains intentionally disabled under the no-money product decision.
+- Production verification: Tavily returned 200 with a request ID; `llm-gateway` is ACTIVE; ai-lap runner 1.2.2 has a fresh online heartbeat; there are exactly 20 web-tool assignments; `/`, `/healthz`, `/workshops`, `/forms`, `/assistant` and `/dashboard` return 200. The migration list is synchronized through `202609300001`.
+- Verification log: clean TypeScript/Vite production build; 354/354 frontend tests across 23 files; Deno type check for `llm-gateway`; complete throwaway PostgreSQL migration/RLS harness, including forms 64/64 and workshops 17/17. The first Production migration attempt hit the research-delete activity-trigger defect and rolled back atomically; the migration was corrected, rerun through the full harness and then applied successfully.
+- Remaining redesign work: research, workshops catalogue, accounts/admin, connections, profile, sign-in/join and public home still use legacy page composition even though they inherit the new tokens, fonts and shell. Rebuild them one module at a time without changing their database contracts. Keep forms and workshops; they are production features, not demo content.
+
+## 2026-09-29 Workshop forms (admins only) — historical pre-deployment state
 
 - `/forms` (owner, super_admin, admin) and public `/f/:id` from `src/forms/`; migration `202609290001_workshop_forms.sql` (forms, form_collaborators, form_responses, `public_form`, `submit_form_response` with server-side validation, `form_overview`, buckets `form-uploads` private and `form-media` public). **Migration not applied to production; web not deployed.**
 - Checks: `rls_forms.sql` 64/64 (all RLS suites pass; harness `test_sign_out` now sets anon claims like PostgREST), vitest 351/351, tsc clean, `scripts/forms-preview.mjs` 17 screens × 8 widths no overflow, QR decodes at 3 sizes.
