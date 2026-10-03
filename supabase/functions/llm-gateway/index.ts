@@ -95,6 +95,25 @@ function publicHttpsUrl(value: unknown) {
   } catch { return null; }
 }
 
+function approvalSummary(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const summary: Record<string, string | number | boolean | null> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>).slice(0, 12)) {
+    if (/password|secret|token|credential|authorization|otp|api[_-]?key/i.test(key)) {
+      summary[key] = '[REDACTED]';
+      continue;
+    }
+    if (raw === null || typeof raw === 'number' || typeof raw === 'boolean') summary[key] = raw;
+    else if (typeof raw === 'string') {
+      if (/^https?:\/\//i.test(raw)) {
+        try { const url = new URL(raw); url.search = ''; url.hash = ''; summary[key] = url.toString().slice(0, 240); }
+        catch { summary[key] = raw.slice(0, 240); }
+      } else summary[key] = raw.slice(0, 240);
+    } else summary[key] = JSON.stringify(raw).slice(0, 240);
+  }
+  return summary;
+}
+
 async function tavily(path: 'search'|'extract', body: Record<string, unknown>) {
   const key = webKey();
   if (!key) throw new Error('web_search_key_missing');
@@ -650,6 +669,8 @@ Deno.serve(async (request) => {
     }
     const promptHash = await hash(`${agent.id}:${input}:${JSON.stringify(normalizeHistory(body.history))}`);
     const needsApproval = effectiveApproval >= 2;
+    const requestedTool = action === 'tool' ? body.toolName?.toString() || null : null;
+    const requestSummary = action === 'tool' ? approvalSummary(body.arguments) : {};
     const { data: created, error: createError } = await admin
       .from('agent_runs')
       .insert({
@@ -663,9 +684,12 @@ Deno.serve(async (request) => {
         run_state: needsApproval ? 'pending_approval' : 'running',
         status: needsApproval ? 'pending_approval' : 'running',
         prompt_hash: promptHash,
+        requested_tool: requestedTool,
+        request_summary: requestSummary,
         replay_of: body.replayOf || null,
         started_at: needsApproval ? null : new Date().toISOString(),
-        logs: [{ at: new Date().toISOString(), event: 'accepted', provider: provider.id, kind: provider.kind, classification }],
+        logs: [{ at: new Date().toISOString(), event: 'accepted', provider: provider.id, kind: provider.kind, classification,
+          ...(requestedTool ? { requested_tool:requestedTool, argument_fields:Object.keys(requestSummary) } : {}) }],
       })
       .select()
       .single();

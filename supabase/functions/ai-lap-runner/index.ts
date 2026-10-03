@@ -245,7 +245,7 @@ Deno.serve(async request => {
         version: String(body.version || 'unknown').slice(0, 40),
         model: String(body.model || 'gemma4:12b').slice(0, 80),
         gpu: String(body.gpu || '').slice(0, 120) || null,
-        ping_ms:numberOrNull(body.pingMs),cpu_percent:numberOrNull(body.cpuPercent),
+        ping_ms:numberOrNull(body.pingMs),adapter_latency_ms:numberOrNull(body.adapterLatencyMs),cpu_percent:numberOrNull(body.cpuPercent),
         memory_used_gb:numberOrNull(body.memoryUsedGb),memory_total_gb:numberOrNull(body.memoryTotalGb),
         gpu_utilization:numberOrNull(body.gpuUtilization),vram_used_mb:numberOrNull(body.vramUsedMb),
         vram_total_mb:numberOrNull(body.vramTotalMb),

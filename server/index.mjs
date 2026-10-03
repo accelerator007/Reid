@@ -115,8 +115,8 @@ async function queueMedia(chat,{artifact,fileName,caption='',actionId=null,dedup
 
 // Decoding is chosen per job. Extraction stays deterministic; conversation does
 // not, because one fixed temperature is what made every answer identical.
-async function aiChat(system,input,{profile='report',json=false,timeoutMs=120000}={}) {
-  const response=await fetch(`${env.AI_URL}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json','x-reid-origin-token':env.AI_TOKEN},body:JSON.stringify({messages:[{role:'system',content:system},{role:'user',content:String(input).slice(0,16000)}],think:false,profile,...(json?{format:'json'}:{})}),signal:AbortSignal.timeout(timeoutMs)});
+async function aiChat(system,input,{profile='report',json=false,timeoutMs=120000,options=null}={}) {
+  const response=await fetch(`${env.AI_URL}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json','x-reid-origin-token':env.AI_TOKEN},body:JSON.stringify({messages:[{role:'system',content:system},{role:'user',content:String(input).slice(0,16000)}],think:false,profile,...(json?{format:'json'}:{}),...(options?{options}:{})}),signal:AbortSignal.timeout(timeoutMs)});
   if(!response.ok)throw new Error(`ai_${response.status}`);
   const content=String((await response.json())?.message?.content||'').trim();
   if(!content)throw new Error('ai_empty');
@@ -298,8 +298,13 @@ app.post('/api/whatsapp/conversations/:id/send',async(req,res)=>{
 app.get('/api/whatsapp/outbox',async(_req,res)=>res.json(await check(admin.from('qr_outbox').select('id,conversation_id,status,origin,error,created_at').order('created_at',{ascending:false}).limit(30))));
 app.get('/api/whatsapp/actions',async(_req,res)=>res.json(await check(admin.from('whatsapp_actions').select('id,requester_id,kind,preview,status,recipient_name,recipient_phone,output_summary,error_code,created_at,updated_at,completed_at').order('created_at',{ascending:false}).limit(100))));
 app.get('/api/ai/health',async(_req,res)=>{
-  try {const response=await fetch(`${env.AI_URL}/health`,{headers:{'x-reid-origin-token':env.AI_TOKEN},signal:AbortSignal.timeout(8000)});res.json({online:response.ok,model:'gemma4:12b'});}
-  catch{res.json({online:false,model:'gemma4:12b'});}
+  const started=performance.now();
+  try {
+    const response=await fetch(`${env.AI_URL}/health`,{headers:{'x-reid-origin-token':env.AI_TOKEN},signal:AbortSignal.timeout(8000)});
+    const upstream=await response.json().catch(()=>({}));
+    res.json({online:response.ok,model:upstream.chat||'gemma4:12b',embedding:upstream.embedding||null,latencyMs:Math.round(performance.now()-started),capabilities:upstream.capabilities||[]});
+  }
+  catch{res.json({online:false,model:'gemma4:12b',embedding:null,latencyMs:null,capabilities:[]});}
 });
 app.use((error,_req,res,_next)=>{console.error(JSON.stringify({event:'request_failed',kind:error.message?.startsWith('database_')?error.message:'internal'}));res.status(500).json({error:'request_failed'});});
 

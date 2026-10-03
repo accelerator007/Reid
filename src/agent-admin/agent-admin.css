@@ -68,8 +68,16 @@
 .approval__icon svg { width: 18px; height: 18px; }
 .approval__body { display: grid; flex: 1 1 220px; gap: 2px; min-width: 0; }
 .approval__body strong { color: var(--text); }
+.approval__action { width: fit-content; color: var(--brand-700); font-size: var(--text-sm); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .approval__body span { color: var(--text-muted); font-size: var(--text-sm); }
 .approval__body small { color: var(--text-subtle); font-size: var(--text-xs); }
+.decide__request { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-sunken); }
+.decide__request > div { display: grid; gap: 4px; }
+.decide__request small, .decide__request dt { color: var(--text-muted); font-size: var(--text-xs); }
+.decide__request dl { display: grid; gap: 0; margin: 0; border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; }
+.decide__request dl div { display: grid; grid-template-columns: minmax(110px, .4fr) minmax(0, 1fr); gap: var(--space-3); padding: 10px 12px; }
+.decide__request dl div + div { border-top: 1px solid var(--line); }
+.decide__request dt, .decide__request dd { margin: 0; overflow-wrap: anywhere; }
 .decide__explain { margin: 0 0 var(--space-3); color: var(--text-muted); font-size: var(--text-sm); line-height: var(--leading-arabic); }
 .decide__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
 

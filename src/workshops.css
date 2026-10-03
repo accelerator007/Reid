@@ -1,0 +1,7 @@
+.os-workshops .os-page-heading { padding: clamp(22px, 3vw, 34px); border: 1px solid var(--line); border-radius: var(--radius-xl); background: radial-gradient(circle at 85% 0, var(--brand-fill), transparent 42%), var(--card); box-shadow: var(--shadow-os); }
+.os-workshops .os-workshop-card { position: relative; overflow: hidden; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.os-workshops .os-workshop-card::before { content: ""; position: absolute; inset-inline: 0; top: 0; height: 3px; background: var(--brand-gradient); opacity: .7; }
+.os-workshops .os-workshop-card:hover { transform: translateY(-2px); border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
+.os-workshops .os-empty { min-height: 300px; display: grid; place-items: center; align-content: center; border-style: dashed; }
+.os-workshops .os-modal-wide { width: min(880px, 100%); }
+@media (prefers-reduced-motion: reduce) { .os-workshops .os-workshop-card { transition: none; } }

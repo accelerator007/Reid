@@ -336,7 +336,10 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     if(!found.results.length)return {handled:true,text:'ما لقيت نتائج واضحة لهذا السؤال على الويب.'};
     const context=found.results.map(item=>wrapUntrusted(item.url,`${item.title}\n${item.snippet}`)).join('\n');
     let answer;
-    try{answer=await aiChat(webAnswerPrompt,`سؤال المستخدم: ${clean(userText).slice(0,500)}\n${context}`,{profile:'report'});}
+    // Search answers are short synthesis jobs. The report profile can spend its
+    // full long-form token budget and hit the adapter timeout before WhatsApp
+    // receives anything; the deterministic intent profile is bounded to 512.
+    try{answer=await aiChat(webAnswerPrompt,`سؤال المستخدم: ${clean(userText).slice(0,500)}\n${context}`,{profile:'intent',timeoutMs:35000,options:{num_predict:192}});}
     catch{
       const direct=found.results.slice(0,3).map((item,index)=>`${index+1}. ${item.title}${item.snippet?`\n${item.snippet}`:''}`).join('\n\n');
       return {handled:true,text:`تعذر التلخيص الآلي الآن، لكن هذه مقتطفات نتائج البحث الخارجية كما وردت:\n${direct}\n\nالمصادر:\n${sourcesLine(found.results)}`};

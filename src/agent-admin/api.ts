@@ -22,7 +22,7 @@ export type AgentAdminData = {
   names: Map<string, string>;
 };
 
-const runColumns = 'id,agent_id,provider_id,classification,run_state,approval_level,approval_state,latency_ms,token_usage,quality_score,quality_flags,revision_count,output_preview,error,created_at,requested_by';
+const runColumns = 'id,agent_id,provider_id,classification,run_state,approval_level,approval_state,latency_ms,token_usage,quality_score,quality_flags,revision_count,output_preview,error,requested_tool,request_summary,created_at,requested_by';
 
 export async function loadAgentAdmin(manage: boolean): Promise<{ data: AgentAdminData | null; error: AppError | null }> {
   const db = client();
@@ -32,7 +32,7 @@ export async function loadAgentAdmin(manage: boolean): Promise<{ data: AgentAdmi
     list<RunWithRequester>(db.from('agent_runs').select(runColumns).order('created_at', { ascending: false }).limit(60)),
     list<RunWithRequester>(db.from('agent_runs').select(runColumns).eq('approval_state', 'pending').order('created_at')),
     manage ? list<AgentToolRow>(db.from('agent_tools').select('id,name_ar,name_en,description,operation,approval_level,input_schema').eq('enabled', true).order('id')) : Promise.resolve({ ok: true as const, data: [] }),
-    manage ? run<RunnerStatusRow>(db.from('agent_runner_status').select('id,status,version,model,gpu,ping_ms,cpu_percent,memory_used_gb,memory_total_gb,gpu_utilization,vram_used_mb,vram_total_mb,last_seen_at').eq('id', 'ai-lap').maybeSingle()) : Promise.resolve({ ok: true as const, data: null }),
+    manage ? run<RunnerStatusRow>(db.from('agent_runner_status').select('id,status,version,model,gpu,ping_ms,adapter_latency_ms,cpu_percent,memory_used_gb,memory_total_gb,gpu_utilization,vram_used_mb,vram_total_mb,last_seen_at').eq('id', 'ai-lap').maybeSingle()) : Promise.resolve({ ok: true as const, data: null }),
     list<{ id: string; full_name: string | null; email: string | null }>(db.from('profiles').select('id,full_name,email')),
   ]);
   const error = firstError([agents, providers, runs, pending, tools, runner, people]);

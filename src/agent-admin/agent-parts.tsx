@@ -6,7 +6,7 @@ import { decideRun } from '../agents';
 import { messageForRaw } from '../db';
 import { Badge, Button, Dialog, Field, InlineAlert, TextArea } from '../ui';
 import type { RunWithRequester } from './api';
-import { levelLabel, runStates, type Lang } from './model';
+import { fieldLabel, levelLabel, runStates, type Lang } from './model';
 
 const tr = (lang: Lang, ar: string, en: string) => (lang === 'ar' ? ar : en);
 
@@ -37,6 +37,12 @@ export function DecideDialog({ lang, run, agentLabel, onClose, onDone }: {
           'هذا التشغيل متوقف حتى تقرر. عند الاعتماد ينفّذه الوكيل مباشرة؛ عند الرفض يُغلق ولا يُنفّذ شيء.',
           'This run is on hold until you decide. Approving lets the agent carry it out; rejecting closes it with nothing done.')}
       </p>
+      <section className="decide__request" aria-label={tr(lang, 'تفاصيل الإجراء', 'Action details')}>
+        <div><small>{tr(lang, 'العملية المطلوبة', 'Requested action')}</small><strong dir="ltr">{run.requested_tool || tr(lang, 'تشغيل محادثة', 'Conversation run')}</strong></div>
+        {Object.keys(run.request_summary || {}).length > 0 && <dl>
+          {Object.entries(run.request_summary).map(([key, value]) => <div key={key}><dt>{fieldLabel(key, lang)}</dt><dd dir={typeof value === 'string' && /^[\x00-\x7F]*$/.test(value) ? 'ltr' : undefined}>{String(value ?? '—')}</dd></div>)}
+        </dl>}
+      </section>
       <Field label={tr(lang, 'ملاحظة للسجل (اختياري)', 'Note for the record (optional)')} wide>
         <TextArea value={note} onChange={event => setNote(event.target.value)} maxLength={500} />
       </Field>

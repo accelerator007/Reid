@@ -84,12 +84,14 @@ export type RunRow = {
   revision_count: number;
   output_preview: string | null;
   error: string | null;
+  requested_tool: string | null;
+  request_summary: Record<string, string | number | boolean | null>;
   created_at: string;
 };
 
 export type RunnerStatusRow = {
   id:string; status:'online'|'offline'|'degraded'; version:string|null; model:string|null; gpu:string|null;
-  ping_ms:number|null; cpu_percent:number|null; memory_used_gb:number|null; memory_total_gb:number|null;
+  ping_ms:number|null; adapter_latency_ms:number|null; cpu_percent:number|null; memory_used_gb:number|null; memory_total_gb:number|null;
   gpu_utilization:number|null; vram_used_mb:number|null; vram_total_mb:number|null; last_seen_at:string;
 };
 
@@ -165,9 +167,9 @@ export async function loadAgentControl() {
   const [agents, providers, runs, tools, runner, activeProjects, openTasks, employees, pendingApprovals, failedRuns, queuedRuns] = await Promise.all([
     supabase.from('agents').select('id,name,status,model,host,approval_level,provider_id,classification,enabled,disabled_reason,permissions').order('name'),
     supabase.from('llm_providers').select('id,name,kind,chat_model,max_classification,retains_data,enabled'),
-    supabase.from('agent_runs').select('id,agent_id,provider_id,classification,run_state,approval_level,approval_state,latency_ms,token_usage,quality_score,quality_flags,revision_count,output_preview,error,created_at').order('created_at', { ascending: false }).limit(20),
+    supabase.from('agent_runs').select('id,agent_id,provider_id,classification,run_state,approval_level,approval_state,latency_ms,token_usage,quality_score,quality_flags,revision_count,output_preview,error,requested_tool,request_summary,created_at').order('created_at', { ascending: false }).limit(20),
     supabase.from('agent_tools').select('id,name_ar,name_en,description,operation,approval_level,input_schema').eq('enabled', true).order('id'),
-    supabase.from('agent_runner_status').select('id,status,version,model,gpu,ping_ms,cpu_percent,memory_used_gb,memory_total_gb,gpu_utilization,vram_used_mb,vram_total_mb,last_seen_at').eq('id','ai-lap').maybeSingle(),
+    supabase.from('agent_runner_status').select('id,status,version,model,gpu,ping_ms,adapter_latency_ms,cpu_percent,memory_used_gb,memory_total_gb,gpu_utilization,vram_used_mb,vram_total_mb,last_seen_at').eq('id','ai-lap').maybeSingle(),
     supabase.from('projects').select('id',{count:'exact',head:true}).eq('status','active').is('archived_at',null),
     supabase.from('tasks').select('id',{count:'exact',head:true}).not('status','in','("done","completed")'),
     supabase.from('user_roles').select('user_id',{count:'exact',head:true}).eq('role','employee'),

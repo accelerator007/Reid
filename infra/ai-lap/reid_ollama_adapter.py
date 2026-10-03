@@ -8,6 +8,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -23,6 +24,8 @@ MAX_BODY = 24 * 1024 * 1024
 TIMEOUT = 120
 MAX_AUDIO = 16 * 1024 * 1024
 TRANSCRIBE_MODEL = os.environ.get("REID_TRANSCRIBE_MODEL", "small")
+VERSION = "1.3.0"
+CAPABILITIES = ["chat", "json", "vision", "embeddings", "transcription", "images"]
 _transcriber = None
 _transcriber_lock = threading.Lock()
 
@@ -103,11 +106,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorized():
             return self.reply(401, {"error": "unauthorized"})
         try:
+            started = time.monotonic()
             with urllib.request.urlopen(f"{OLLAMA}/api/tags", timeout=5) as response:
                 tags = json.load(response)
             names = {row.get("name") for row in tags.get("models", [])}
             ready = CHAT_MODEL in names and any(name in names for name in (EMBED_MODEL, EMBED_MODEL.removesuffix(":latest")))
-            return self.reply(200 if ready else 503, {"ok": ready, "chat": CHAT_MODEL, "embedding": EMBED_MODEL})
+            return self.reply(200 if ready else 503, {"ok": ready, "version": VERSION, "chat": CHAT_MODEL, "embedding": EMBED_MODEL, "ollama_latency_ms": round((time.monotonic() - started) * 1000), "capabilities": CAPABILITIES})
         except Exception:
             return self.reply(503, {"ok": False, "error": "ollama_unavailable"})
 

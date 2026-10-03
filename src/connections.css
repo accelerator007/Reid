@@ -1,0 +1,9 @@
+.os-connections .os-page-heading { padding: clamp(22px, 3vw, 34px); border: 1px solid var(--line); border-radius: var(--radius-xl); background: radial-gradient(circle at 90% 0, var(--brand-fill), transparent 42%), var(--card); box-shadow: var(--shadow-os); }
+.os-connections .os-qr-card { overflow: hidden; }
+.os-connections .os-qr-card .os-panel-title { margin: -24px -24px 22px; padding: 22px 24px; background: color-mix(in srgb, var(--brand-fill) 54%, var(--card)); }
+.os-connections .os-qr-success { min-height: 350px; }
+.os-connections .os-admin-links article { transition: border-color .16s ease, background .16s ease; }
+.os-connections .os-admin-links article:hover { border-color: var(--line-strong); background: color-mix(in srgb, var(--brand-fill) 28%, var(--card)); }
+.os-connections .os-assistant-permissions label { min-height: 32px; padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--bg); }
+.os-connections .os-action-log article { border-inline-start: 3px solid var(--brand-400); }
+@media (max-width: 840px) { .os-connections .os-qr-card .os-panel-title { margin: -18px -18px 20px; padding: 18px; } }

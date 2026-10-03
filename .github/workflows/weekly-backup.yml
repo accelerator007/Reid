@@ -10,7 +10,9 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:16
+        # Match the linked project's Supabase Postgres build so extensions such
+        # as vector and vault are present during the restore proof.
+        image: supabase/postgres:17.6.1.166
         env: {POSTGRES_PASSWORD: postgres}
         ports: ['55433:5432']
         options: >-
@@ -19,21 +21,40 @@ jobs:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
       - name: Require backup credentials
-        run: test -n "$SUPABASE_DB_URL" && test -n "$BACKUP_ENCRYPTION_KEY"
+        run: |
+          python3 - <<'PY'
+          import os
+          if not os.environ.get('SUPABASE_ACCESS_TOKEN'):
+              raise SystemExit('SUPABASE_ACCESS_TOKEN is missing')
+          if not os.environ.get('BACKUP_ENCRYPTION_KEY'):
+              raise SystemExit('BACKUP_ENCRYPTION_KEY is missing')
+          print('Backup credentials are present.')
+          PY
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
       - name: Dump schema and data
         run: |
           mkdir -p backup
-          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql
-          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --data-only --use-copy
+          supabase db dump --project-ref cfxntjnewkmlvkogfxyu --schema public -f backup/schema.sql
+          supabase db dump --project-ref cfxntjnewkmlvkogfxyu --schema public -f backup/data.sql --data-only --use-copy
           test -s backup/schema.sql
           test -s backup/data.sql
-        env: {SUPABASE_DB_URL: "${{ secrets.SUPABASE_DB_URL }}"}
+        env: {SUPABASE_ACCESS_TOKEN: "${{ secrets.SUPABASE_ACCESS_TOKEN }}"}
       - name: Prove the backup restores
         run: |
           export PGPASSWORD=postgres
+          psql -h 127.0.0.1 -p 55433 -U supabase_admin -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          create schema if not exists extensions;
+          create schema if not exists vault;
+          do $$
+          declare item record;
+          begin
+            for item in select evtname from pg_event_trigger loop
+              execute format('alter event trigger %I disable', item.evtname);
+            end loop;
+          end $$;
+          SQL
           psql -h 127.0.0.1 -p 55433 -U postgres -v ON_ERROR_STOP=1 -f backup/schema.sql
           psql -h 127.0.0.1 -p 55433 -U postgres -v ON_ERROR_STOP=1 -f backup/data.sql
           psql -h 127.0.0.1 -p 55433 -U postgres -v ON_ERROR_STOP=1 -c "select count(*) as restored_public_tables from pg_tables where schemaname='public';"

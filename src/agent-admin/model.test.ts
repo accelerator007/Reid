@@ -14,7 +14,7 @@ const gemini: ProviderRow = { id: 'gemini', name: 'Google Gemini API', kind: 'ex
 const run = (over: Partial<RunRow>): RunRow => ({
   id: 'r', agent_id: 'operations', provider_id: 'ollama', classification: 'internal', run_state: 'succeeded', approval_level: 0,
   approval_state: 'not_required', latency_ms: null, token_usage: null, quality_score: null, quality_flags: [], revision_count: 0,
-  output_preview: null, error: null, created_at: '2026-09-29T08:00:00Z', ...over,
+  output_preview: null, error: null, requested_tool: null, request_summary: {}, created_at: '2026-09-29T08:00:00Z', ...over,
 });
 
 describe('who manages agents', () => {
@@ -69,7 +69,7 @@ describe('provider risk', () => {
 
 describe('ai-lap health', () => {
   const runner: RunnerStatusRow = {
-    id: 'ai-lap', status: 'online', version: '1.2.2', model: 'gemma4:12b', gpu: 'RTX', ping_ms: 40, cpu_percent: 20,
+    id: 'ai-lap', status: 'online', version: '1.3.0', model: 'gemma4:12b', gpu: 'RTX', ping_ms: 40, adapter_latency_ms: 85, cpu_percent: 20,
     memory_used_gb: 8, memory_total_gb: 32, gpu_utilization: 50, vram_used_mb: 9000, vram_total_mb: 12000, last_seen_at: '2026-09-29T08:00:00Z',
   };
   const at = (seconds: number) => new Date('2026-09-29T08:00:00Z').getTime() + seconds * 1000;

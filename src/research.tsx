@@ -459,7 +459,7 @@ export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
 
   if (!item)
     return (
-      <main className="projects-page">
+      <main className="projects-page research-page">
         <header className="projects-heading">
           <div>
             <span>REID RESEARCH</span>
@@ -613,7 +613,7 @@ export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
   const approvedEthics = ethics.filter((e) => e.status === "approved").length;
 
   return (
-    <main className="project-dashboard">
+    <main className="project-dashboard research-page research-detail">
       <button className="project-back" onClick={back}>
         ← {t.back}
       </button>

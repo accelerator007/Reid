@@ -16,6 +16,11 @@ class AdapterContract(unittest.TestCase):
         self.assertEqual(adapter.CHAT_MODEL, "gemma4:12b")
         self.assertEqual(adapter.EMBED_MODEL, "nomic-embed-text:latest")
 
+    def test_health_advertises_supported_media_capabilities(self):
+        self.assertIn("vision", adapter.CAPABILITIES)
+        self.assertIn("transcription", adapter.CAPABILITIES)
+        self.assertIn("images", adapter.CAPABILITIES)
+
     def test_bounded_body(self):
         self.assertEqual(adapter.MAX_BODY, 24 * 1024 * 1024)
 

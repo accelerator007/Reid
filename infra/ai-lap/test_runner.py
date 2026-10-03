@@ -23,13 +23,15 @@ class RemoteTelemetryTests(unittest.TestCase):
         response.status = 200
         response.__enter__.return_value = response
         with patch.object(runner.urllib.request, 'urlopen', return_value=response) as request:
-            self.assertTrue(runner.adapter_available())
+            available, latency = runner.adapter_available()
+            self.assertTrue(available)
+            self.assertIsInstance(latency, int)
             sent = request.call_args.args[0]
             self.assertEqual(sent.full_url, 'http://127.0.0.1:11436/health')
             self.assertEqual(sent.get_header('X-reid-origin-token'), 'test')
 
         with patch.object(runner.urllib.request, 'urlopen', side_effect=TimeoutError):
-            self.assertFalse(runner.adapter_available())
+            self.assertEqual(runner.adapter_available(), (False, None))
 
 
 if __name__ == '__main__':

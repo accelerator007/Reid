@@ -17,6 +17,7 @@ import { supabase } from "./supabase";
 import { firstError, list, messageFor, run } from "./db";
 import { useSession } from "./shell";
 import type { Page } from "./routes";
+import "./workshops.css";
 
 type Lang = "ar" | "en";
 type WorkshopStatus = "draft" | "published" | "completed" | "cancelled";

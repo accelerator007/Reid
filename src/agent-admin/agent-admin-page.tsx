@@ -119,7 +119,8 @@ function RunnerCard({ lang, data, now }: { lang: Lang; data: api.AgentAdminData 
   const runner = data?.runner ?? null;
   const health = runnerHealth(runner, now);
   const meters: Array<[React.ReactNode, string, string, number | null]> = [
-    [<Wifi key="p" />, tr(lang, 'الاستجابة', 'Ping'), runner?.ping_ms != null ? `${runner.ping_ms} ms` : '—', runner?.ping_ms != null ? Math.min(100, runner.ping_ms / 4) : null],
+    [<Wifi key="p" />, tr(lang, 'زمن النموذج', 'Model latency'), runner?.adapter_latency_ms != null ? `${runner.adapter_latency_ms} ms` : '—', runner?.adapter_latency_ms != null ? Math.min(100, runner.adapter_latency_ms / 4) : null],
+    [<Wifi key="n" />, tr(lang, 'اتصال السحابة', 'Cloud ping'), runner?.ping_ms != null ? `${runner.ping_ms} ms` : '—', runner?.ping_ms != null ? Math.min(100, runner.ping_ms / 4) : null],
     [<Cpu key="c" />, tr(lang, 'المعالج', 'CPU'), runner?.cpu_percent != null ? `${runner.cpu_percent}%` : '—', runner?.cpu_percent ?? null],
     [<HardDrive key="m" />, tr(lang, 'الذاكرة', 'Memory'), runner?.memory_used_gb != null ? `${runner.memory_used_gb} / ${runner.memory_total_gb} GB` : '—', health.memory],
     [<Gauge key="g" />, tr(lang, 'كرت الشاشة', 'GPU'), runner?.gpu_utilization != null ? `${runner.gpu_utilization}%` : '—', runner?.gpu_utilization ?? null],
@@ -196,6 +197,7 @@ function Approvals({ lang, data, reload, manage }: { lang: Lang; data: api.Agent
             <span className="approval__icon" aria-hidden="true"><Clock3 /></span>
             <div className="approval__body">
               <strong>{label(item.agent_id)}</strong>
+              <b className="approval__action" dir="ltr">{item.requested_tool || tr(lang, 'تشغيل محادثة', 'Conversation run')}</b>
               <span>{levelLabel(item.approval_level, lang)} · {tr(lang, 'بيانات', 'Data')}: {classificationLabels[item.classification].label[lang]}</span>
               <small>{data.names.get(item.requested_by ?? '') ?? tr(lang, 'مستخدم', 'A user')} · {when(item.created_at, lang)}</small>
             </div>

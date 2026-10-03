@@ -26,6 +26,7 @@ import "./style.css";
 import "./brand.css";
 import "./auth.css";
 import "./profile.css";
+import "./public-shell.css";
 import "./workflow.css";
 import "./reid-os.css";
 
@@ -212,7 +213,14 @@ function Login({
     setBusy(false);
   };
   return (
-    <main className="auth">
+    <main className="auth auth-redesign">
+      <section className="auth-context" aria-hidden="true">
+        <img src={reidLogo} alt="" />
+        <span>REID OS</span>
+        <h2>{lang === "ar" ? "مساحة واحدة للعمل والقرار." : "One place for work and decisions."}</h2>
+        <p>{lang === "ar" ? "مشاريعك وفريقك ووكلاء ريّد، بصلاحيات واضحة وسجل كامل." : "Your projects, people and Reid agents, with clear access and a complete audit trail."}</p>
+        <ul><li><ShieldCheck />{lang === "ar" ? "الحسابات المعتمدة فقط" : "Approved accounts only"}</li><li><Sparkles />{lang === "ar" ? "العمليات الحساسة تنتظر قرارك" : "Sensitive actions wait for you"}</li></ul>
+      </section>
       <section className="auth-card">
         <span>REID ACCOUNT</span>
         <h1>{tr[lang].login}</h1>
@@ -222,7 +230,7 @@ function Login({
             : "Approved accounts only. If you do not have an account, submit a join request first."}
         </p>
         <div className="oauth">
-          <button onClick={oauth} disabled={busy}>G Google</button>
+          <button type="button" onClick={oauth} disabled={busy}><b>G</b>{lang === "ar" ? "الدخول باستخدام Google" : "Continue with Google"}</button>
         </div>
         <div className="or">
           <i />
@@ -244,7 +252,7 @@ function Login({
             {lang === "ar" ? "كلمة المرور" : "Password"}
             <input name="password" type="password" minLength={8} required />
           </label>
-          <button className="primary" disabled={busy}>
+          <button className="os-primary auth-submit" disabled={busy}>
             {busy ? "…" : tr[lang].login}
           </button>
         </form>
@@ -341,7 +349,7 @@ function Join({ lang }: { lang: Lang }) {
   };
   if (sent)
     return (
-      <main className="apply">
+      <main className="apply apply-redesign">
         <section className="sent">
           <b>✓</b>
           <h1>{lang === "ar" ? "تم استلام طلبك" : "Application received"}</h1>
@@ -370,10 +378,10 @@ function Join({ lang }: { lang: Lang }) {
     </label>
   );
   return (
-    <main className="apply">
-      <span>JOIN REID</span>
-      <h1>{lang === "ar" ? "طلب انضمام" : "Join request"}</h1>
-      <form onSubmit={submit}>
+    <main className="apply apply-redesign">
+      <div className="apply-heading"><span className="os-eyebrow">JOIN REID</span><h1>{lang === "ar" ? "ابنِ معنا ما يستحق." : "Build what matters with us."}</h1><p>{lang === "ar" ? "أرسل معلوماتك مرة واحدة. يراجع الفريق الطلب، ثم يصلك قرار واضح عبر البريد." : "Share your details once. The team reviews your request and sends a clear decision by email."}</p></div>
+      <div className="apply-layout"><aside className="apply-aside"><b>01</b><h2>{lang === "ar" ? "طلب آمن وواضح" : "A clear, secure request"}</h2><p>{lang === "ar" ? "السيرة الذاتية خاصة، ولا تُنشأ أي صلاحية قبل اعتماد الطلب." : "Your CV stays private and no access is created before approval."}</p><ol><li>{lang === "ar" ? "أكمل بياناتك المهنية" : "Complete your professional details"}</li><li>{lang === "ar" ? "نراجع الدور والنطاق المناسب" : "We review the right role and scope"}</li><li>{lang === "ar" ? "يصلك الرد على بريدك" : "You receive the decision by email"}</li></ol></aside>
+      <form className="apply-form" onSubmit={submit}>
         <F n="full_name" l={lang === "ar" ? "الاسم الكامل" : "Full name"} />
         <F
           n="email"
@@ -420,10 +428,10 @@ function Join({ lang }: { lang: Lang }) {
             {message}
           </p>
         )}
-        <button className="primary" disabled={busy}>
+        <button className="os-primary" disabled={busy}>
           {busy ? "…" : lang === "ar" ? "إرسال الطلب" : "Submit"}
         </button>
-      </form>
+      </form></div>
     </main>
   );
 }
@@ -492,9 +500,8 @@ function Profile({
     </label>
   );
   return (
-    <main className="profile">
-      <span>REID PROFILE</span>
-      <h1>{tr[lang].account}</h1>
+    <main className="os-page profile profile-redesign">
+      <div className="os-page-heading"><div><span className="os-eyebrow">REID / PROFILE</span><h1>{tr[lang].account}</h1><p>{lang === "ar" ? "هويتك المهنية وإعدادات دخولك في ريّد." : "Your professional identity and Reid sign-in settings."}</p></div><button type="button" className="os-secondary" onClick={signout}><LogOut />{lang === "ar" ? "تسجيل الخروج" : "Sign out"}</button></div>
       {!p.linkedin_url && (
         <p className="guard-message">
           {lang === "ar"
@@ -502,7 +509,7 @@ function Profile({
             : "Complete LinkedIn before workspace access."}
         </p>
       )}
-      <section>
+      <section className="profile-card">
         <div className="avatar">R</div>
         <div>
           <h2>{p.full_name || user.email}</h2>
@@ -539,14 +546,11 @@ function Profile({
             onChange={(event) => setNewPassword(event.target.value)}
           />
         </label>
-        <button className="primary">
+        <button className="os-primary">
           {lang === "ar" ? "حفظ الملف" : "Save profile"}
         </button>
       </form>
       {message && <p role="status">{message}</p>}
-      <button className="text-link" onClick={signout}>
-        {lang === "ar" ? "تسجيل الخروج" : "Sign out"}
-      </button>
     </main>
   );
 }
