@@ -21,7 +21,22 @@ services:
       interval: 20s
       timeout: 5s
       retries: 3
-    depends_on: [ai-relay]
+    depends_on:
+      ai-relay:
+        condition: service_started
+      tts:
+        condition: service_healthy
+
+  tts:
+    build: ./infra/tts
+    image: reid-tts:local
+    container_name: reid-tts
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
 
   ai-relay:
     build:

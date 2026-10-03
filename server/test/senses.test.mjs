@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inboundText } from '../policy.mjs';
-import { createImageCache, mediaPlaceholder, transcribeAudio, transcriptBody } from '../media.mjs';
+import { createImageCache, mediaPlaceholder, spokenLanguage, synthesizeVoice, transcribeAudio, transcriptBody, voiceRequested } from '../media.mjs';
 import { createTyping, pacingDelay, reactions, splitReply } from '../signals.mjs';
 
 const direct = extra => ({ key: { id: 'm1', remoteJid: '96812345678@s.whatsapp.net' }, ...extra });
@@ -59,6 +59,36 @@ test('transcription refuses oversized, empty and failed recordings', async () =>
   await assert.rejects(() => transcribeAudio(Buffer.alloc(17 * 1024 * 1024), 'audio/ogg', { fetchImpl: async () => ok }), /audio_too_large/);
   await assert.rejects(() => transcribeAudio(Buffer.from('x'), 'audio/ogg', { fetchImpl: async () => ok }), /empty_transcript/);
   await assert.rejects(() => transcribeAudio(Buffer.from('x'), 'audio/ogg', { fetchImpl: async () => ({ ok: false, status: 502 }) }), /transcribe_502/);
+});
+
+test('an explicit Arabic or English request selects a voice reply', () => {
+  assert.equal(voiceRequested('رد علي بصوت وقل لي ملخص اليوم'), true);
+  assert.equal(voiceRequested('سجل رسالة صوتية تقول الاجتماع الساعة 9'), true);
+  assert.equal(voiceRequested('Reply with a voice note please'), true);
+  assert.equal(voiceRequested('هل تستطيع فهم الرسائل الصوتية؟'), false, 'a capability question is not a send command');
+  assert.equal(voiceRequested('لخص لي اليوم'), false);
+  assert.equal(spokenLanguage('هلا كيف الحال'), 'ar');
+  assert.equal(spokenLanguage('Hello, how are you?'), 'en');
+});
+
+test('voice-note wording is detected before it can be mistaken for a saved note', () => {
+  assert.equal(voiceRequested('سجل لي رسالة صوتية قصيرة تقول إن ريد جاهز'), true);
+  assert.equal(voiceRequested('سجل لي ملاحظة إن ريد جاهز'), false);
+});
+
+test('voice synthesis requests local audio and validates the Ogg result', async () => {
+  const calls = [];
+  const audio = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(100)]);
+  const result = await synthesizeVoice('هلا والله', {
+    url: 'http://tts:5050',
+    fetchImpl: async (url, options) => {
+      calls.push({ url, body: JSON.parse(options.body) });
+      return { ok: true, arrayBuffer: async () => audio };
+    },
+  });
+  assert.equal(result.subarray(0, 4).toString(), 'OggS');
+  assert.deepEqual(calls, [{ url: 'http://tts:5050/synthesize', body: { text: 'هلا والله', language: 'ar' } }]);
+  await assert.rejects(() => synthesizeVoice('x', { url: 'http://tts', fetchImpl: async () => ({ ok: false, status: 503 }) }), /voice_503/);
 });
 
 test('a transcript keeps the caption that came with it', () => {

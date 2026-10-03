@@ -103,7 +103,9 @@ test('tone instructions match the moment', () => {
   assert.match(personaLines({ mood: 'محبط', urgency: 'normal', rapport: 0, recent: [], style: '', summary: '', facts: [] }), /لا تعتذر مرتين/);
   assert.match(personaLines({ mood: 'جاد', urgency: 'normal', rapport: 0, recent: [], style: '', summary: '', facts: [] }), /بلا إيموجي ولا مزح/);
   const lines = personaLines({ mood: 'ودّي', urgency: 'normal', rapport: 0, recent: [], style: '', summary: '', facts: [] });
-  assert.match(lines, /لا تدّعِ مشاعر لا تملكها/);
+  assert.match(lines, /اضحك طبيعيًا/);
+  assert.match(lines, /شخصيتك مستمرة/);
+  assert.match(lines, /لا تقل إنك إنسان/);
   assert.match(lines, /لا تكرر صياغة ردك السابق/);
 });
 

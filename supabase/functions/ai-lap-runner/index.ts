@@ -173,6 +173,14 @@ async function notifyWhatsApp(admin: ReturnType<typeof createClient>, runId: str
   });
 }
 
+function naturalWhatsAppReply(value:string) {
+  return value
+    .replace(/^\s*(?:رد\s+الوكيل|Agent\s+(?:reply|response))\s*:\s*/iu,'')
+    .replace(/^\s*\*{0,2}(?:الحقائق|التوصية|Facts|Recommendation)\*{0,2}\s*:\s*$/gimu,'')
+    .replace(/\n{3,}/g,'\n\n')
+    .trim();
+}
+
 async function updateAgentRoomMessage(admin:ReturnType<typeof createClient>,runId:string,state:'queued'|'running'|'completed'|'failed',body?:string,error?:string|null){
   const patch:Record<string,unknown>={state,updated_at:new Date().toISOString()};
   if(body)patch.body=body.slice(0,12000);
@@ -306,7 +314,7 @@ Deno.serve(async request => {
       if (output) await admin.from('memories').insert({scope:'agent',scope_id:run.data.agent_id,title:`Run ${run.data.id}`,content:output.slice(0,4000),embedding,classification:run.data.classification,created_by:run.data.requested_by,source_run_id:run.data.id});
       if(output) await updateAgentRoomMessage(admin,run.data.id,'completed',output,null);
       await admin.from('agent_run_payloads').delete().eq('run_id',run.data.id);
-      await notifyWhatsApp(admin,run.data.id,output?`رد الوكيل:\n${output}`:'اكتمل تنفيذ الأمر.', 'completed');
+      await notifyWhatsApp(admin,run.data.id,output?naturalWhatsAppReply(output):'اكتمل تنفيذ الأمر.', 'completed');
       return json({ ok:true });
     }
 

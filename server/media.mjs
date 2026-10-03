@@ -3,6 +3,37 @@
 // for images. Nothing is sent to a third party, and nothing is stored at rest.
 export const mediaLimits = { audio: 16 * 1024 * 1024, image: 5 * 1024 * 1024 };
 
+export function spokenLanguage(text) {
+  const value = String(text || '');
+  const letters = value.match(/[\p{L}]/gu)?.length || 0;
+  const arabic = value.match(/[؀-ۿ]/g)?.length || 0;
+  return letters && arabic / letters >= 0.2 ? 'ar' : 'en';
+}
+
+// Voice output is explicit so Reid never floods a conversation with audio.
+// The request may be Arabic, English, or the common Gulf "فويس" shorthand.
+export function voiceRequested(text) {
+  const value = String(text || '').trim();
+  return /(?:^|\s)(?:رد|جاوب|أرسل|ارسل|سجّل|سجل|تكلم|كلمني|قلها)(?:.|\n){0,60}(?:بصوت|صوتي|رسالة\s+صوتية|فويس)/iu.test(value)
+    || /(?:^|\s)(?:رسالة\s+صوتية|فويس)(?:.|\n){0,30}(?:تقول|عن|بخصوص)/iu.test(value)
+    || /\b(?:reply|answer|send|record|say)(?:.|\n){0,50}\b(?:voice|audio)(?:\s+(?:note|message))?\b/iu.test(value);
+}
+
+export async function synthesizeVoice(text, { url, fetchImpl = fetch, timeout = 90_000 } = {}) {
+  const body = String(text || '').trim();
+  if (!body || body.length > 1800) throw new Error('voice_text_invalid');
+  const response = await fetchImpl(`${url}/synthesize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: body, language: spokenLanguage(body) }),
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (!response.ok) throw new Error(`voice_${response.status}`);
+  const audio = Buffer.from(await response.arrayBuffer());
+  if (audio.length < 64 || audio.subarray(0, 4).toString('ascii') !== 'OggS') throw new Error('voice_invalid_audio');
+  return audio;
+}
+
 export function mediaPlaceholder(kind, caption = '') {
   const text = String(caption || '').trim();
   if (text) return text.slice(0, 8000);

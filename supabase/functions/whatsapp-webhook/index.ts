@@ -97,10 +97,14 @@ const sendAdaptive = (to:string, body:string, choices:string[]) => choices.lengt
   ? sendList(to,body,choices) : choices.length >= 2 ? sendChoices(to,body,choices) : sendText(to,body);
 
 function assistantReply(value: string) {
-  const marker = /(?:^|\n)خيارات\s*:\s*([^\n]+)\s*$/i.exec(value);
-  if (!marker) return { body:value.trim(), choices:[] as string[] };
+  const natural=value
+    .replace(/^\s*(?:رد\s+الوكيل|Agent\s+(?:reply|response))\s*:\s*/iu,'')
+    .replace(/^\s*\*{0,2}(?:الحقائق|التوصية|Facts|Recommendation)\*{0,2}\s*:\s*$/gimu,'')
+    .replace(/\n{3,}/g,'\n\n').trim();
+  const marker = /(?:^|\n)خيارات\s*:\s*([^\n]+)\s*$/i.exec(natural);
+  if (!marker) return { body:natural, choices:[] as string[] };
   const choices = marker[1].split('|').map(choice=>choice.trim()).filter(Boolean).slice(0,10);
-  return { body:value.replace(marker[0], '').trim(), choices:choices.length >= 2 ? choices : [] };
+  return { body:natural.replace(marker[0], '').trim(), choices:choices.length >= 2 ? choices : [] };
 }
 
 async function recordOutbound(admin: any, conversationId: string, body: string, metaMessageId?: string) {
@@ -217,9 +221,9 @@ async function personalizedInput(admin:any, conversationId:string, identity:Admi
     return true;
   }).slice(0,8).reverse().map((item:any)=>({role:item.direction==='inbound'?'user':'assistant',content:redactSecrets(String(item.body))}));
   const groupPersonality=ownerGroup
-    ? 'الأسلوب: خليجي عُماني طبيعي ودافئ. داخل مجموعة المالك الخاصة فقط يجوز مزح متبادل خفيف وإيموجي مناسب—including 🖕🏻—إذا بدأ المالك المزح بوضوح. لا تبدأ بالإهانة، لا تهدد، واهدأ فورًا عند الجدية.'
-    : 'الأسلوب: خليجي عُماني طبيعي وذكي ودافئ، مع إيموجي مناسب بلا مبالغة. اسمك ريّد وأنت مساعده الشخصي ورئيس مكتبه الرقمي.';
-  return {input:`${groupPersonality}\nخاطب ${identity.full_name} مباشرة، وطابق أسلوبه بدون تقليد مبالغ. ملف الأسلوب المجمع: ${JSON.stringify(identity.style_profile)}.\nطلبه الآن: ${redactSecrets(current)}`,history:turns};
+    ? 'الأسلوب: خليجي عُماني طبيعي ودافئ. داخل مجموعة المالك الخاصة فقط يجوز مزح متبادل خفيف وإيموجي مناسب إذا بدأ المالك المزح بوضوح. لا تبدأ بالإهانة، لا تهدد، واهدأ فورًا عند الجدية.'
+    : 'هذه محادثة واتساب شخصية. اسمك ريد بالعربية وReid بالإنجليزية. شخصيتك حية ومستمرة: اضحك طبيعيًا، أظهر التعاطف أو الزعل الخفيف عندما يناسب، وابق صريحًا. لا تقل إنك إنسان.';
+  return {input:`${groupPersonality}\nخاطب ${identity.full_name} مباشرة، وطابق لغته وأسلوبه بدون تقليد مبالغ. لا تبدأ بعبارة «رد الوكيل»، ولا تستخدم عناوين «الحقائق» و«التوصية» في الكلام العادي. اكتب كرسالة واتساب قصيرة؛ استخدم التقسيم فقط إذا طلب تقريرًا أو تحليلًا. ملف الأسلوب المجمع: ${JSON.stringify(identity.style_profile)}.\nطلبه الآن: ${redactSecrets(current)}`,history:turns};
 }
 
 async function learnAdminMessage(admin:any, identity:AdminIdentity, text:string) {

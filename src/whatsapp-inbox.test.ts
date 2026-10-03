@@ -15,6 +15,7 @@ const qrPolicy = readFileSync(new URL("../server/policy.mjs", import.meta.url), 
 const qrService = readFileSync(new URL("../server/index.mjs", import.meta.url), "utf8");
 const qrInbound = readFileSync(new URL("../server/inbound.mjs", import.meta.url), "utf8");
 const qrTransport = readFileSync(new URL("../supabase/functions/_shared/qr-transport.ts", import.meta.url), "utf8");
+const runner = readFileSync(new URL("../supabase/functions/ai-lap-runner/index.ts", import.meta.url), "utf8");
 
 describe("WhatsApp Owner inbox contract", () => {
   it("keeps the permanent Meta token on the server", () => {
@@ -57,8 +58,9 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("requesterId:identity.id");
   });
 
-  it("acts as a personal chief of staff with isolated durable memory and learned style", () => {
-    expect(webhook).toContain("رئيس مكتبه الرقمي");
+  it("acts as Reid with isolated durable memory and learned style", () => {
+    expect(webhook).toContain("اسمك ريد بالعربية وReid بالإنجليزية");
+    expect(webhook).toContain("شخصيتك حية ومستمرة");
     expect(webhook).toContain("learnAdminMessage");
     expect(webhook).toContain("learn_whatsapp_admin_style");
     expect(adminMemoryMigration).toContain("whatsapp_admin_profiles");
@@ -88,7 +90,6 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("qr_group");
     expect(qrService).toContain("group_admin_dispatch_denied");
     expect(webhook).toContain("ownerGroup=false");
-    expect(webhook).toContain("including 🖕🏻");
     expect(webhook).toContain("لا تبدأ بالإهانة");
     expect(webhook).toContain("لا تهدد");
     expect(ownerGroupPinned).toContain("120363412585944970@g.us");
@@ -114,6 +115,9 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).not.toContain("بخير دامك بخير");
     expect(webhook).not.toContain("مساعدك الشخصي الذكي، موجود عشان");
     expect(webhook).not.toContain("`رد الوكيل:\\n${result.output}`");
+    expect(runner).not.toContain("output?`رد الوكيل:");
+    expect(webhook).toContain("اسمك ريد بالعربية وReid بالإنجليزية");
+    expect(webhook).toContain("لا تبدأ بعبارة «رد الوكيل»");
     expect(gateway).toContain("let effectiveApproval = 0");
     expect(gateway).toContain("effectiveApproval = tool.approval_level");
   });
