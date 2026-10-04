@@ -21,7 +21,8 @@ import { readCorrection, readReaction } from './feedback.mjs';
 import { createWebSearch } from './web.mjs';
 import { createProactive } from './proactive.mjs';
 import { createHostOps } from './host-ops.mjs';
-import { createMeetingService } from './meetings.mjs';
+import { createMeetingService, verifyAgentToken } from './meetings.mjs';
+import { createMeetingTurnHandler, meetingAgentPage } from './meeting-agent.mjs';
 
 // libsignal prints full session objects (including private key material) with
 // console.info whenever it rotates a session. Suppress only that unsafe
@@ -236,6 +237,7 @@ const imageBudget={
 };
 const hostOps=createHostOps({url:env.REID_HOST_OPS_URL,token:env.REID_HOST_OPS_TOKEN});
 const meetings=createMeetingService({admin,check,env});
+const handleMeetingTurn=createMeetingTurnHandler({admin,check,aiChat,sessionKey:env.SESSION_KEY,rate,synthesize:body=>synthesizeVoice(body,{url:env.REID_TTS_URL||'http://tts:5050'})});
 const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,webSearch,imageBudget,hostOps,meetings});
 const runProactive=createProactive({admin,check,queueText,ensureConversation});
 const getOperationsSnapshot=createOperationsSnapshot({admin,getConnection:()=>connection,aiUrl:env.AI_URL,aiToken:env.AI_TOKEN,sampleHost:()=>sampleLocalHost()});
@@ -268,6 +270,12 @@ app.get('/internal/operations/status',async(req,res)=>{
   if(!internalTokenValid(env.REID_OPS_STATUS_TOKEN,req.get('x-reid-internal-token')))return res.status(404).end();
   res.json(await getOperationsSnapshot());
 });
+app.get('/meet-agent/:token',(req,res)=>{
+  try{verifyAgentToken(req.params.token,env.SESSION_KEY);}catch{return res.status(404).end();}
+  res.set('Content-Security-Policy',"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' wss://meeting-data.bot.recall.ai; media-src 'self' blob:");
+  res.type('html').send(meetingAgentPage(req.params.token));
+});
+app.post('/meet-agent/:token/turn',handleMeetingTurn);
 // The OAuth callback cannot carry the browser's Reid bearer token. Its signed,
 // ten-minute state identifies the already-authenticated Owner who initiated it.
 app.get('/api/meet/google/callback',async(req,res)=>{

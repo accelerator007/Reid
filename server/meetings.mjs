@@ -49,6 +49,16 @@ export function verifyState(value,secret,now=Date.now()) {
   return payload;
 }
 
+export function createAgentToken({meetingId,ownerId},secret,now=Date.now()) {
+  return signState({meetingId,ownerId,kind:'meeting_agent',exp:now+8*60*60_000},secret);
+}
+
+export function verifyAgentToken(value,secret,now=Date.now()) {
+  const payload=verifyState(value,secret,now);
+  if(payload.kind!=='meeting_agent'||!payload.meetingId)throw new Error('meeting_agent_token_invalid');
+  return payload;
+}
+
 async function jsonFetch(fetchImpl,url,options,label) {
   const response=await fetchImpl(url,{...options,signal:AbortSignal.timeout(30_000)});
   const payload=await response.json().catch(()=>({}));
@@ -58,7 +68,9 @@ async function jsonFetch(fetchImpl,url,options,label) {
 
 export function createMeetingService({admin,check,env,fetchImpl=fetch}) {
   const googleReady=Boolean(env.GOOGLE_MEET_CLIENT_ID&&env.GOOGLE_MEET_CLIENT_SECRET);
-  const recallReady=Boolean(env.RECALL_API_KEY);
+  const recallKeyReady=Boolean(env.RECALL_API_KEY);
+  const transcriptionReady=env.RECALL_TRANSCRIPTION_READY==='1';
+  const recallReady=recallKeyReady&&transcriptionReady;
   const redirectUri=env.GOOGLE_MEET_REDIRECT_URI||'https://reidpro.com/api/meet/google/callback';
   const recallBase=(env.RECALL_API_BASE||'https://us-east-1.recall.ai/api/v1').replace(/\/$/,'');
   const assertOwner=identity=>{
@@ -83,15 +95,19 @@ export function createMeetingService({admin,check,env,fetchImpl=fetch}) {
     return await jsonFetch(fetchImpl,'https://meet.googleapis.com/v2/spaces',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({config:{accessType:'OPEN',entryPointAccess:'ALL',moderation:'OFF'}})},'google_meet_create');
   }
 
-  async function createBot(meetingUrl,meetingId) {
-    if(!recallReady)throw new Error('meeting_voice_provider_not_configured');
-    return await jsonFetch(fetchImpl,`${recallBase}/bot/`,{method:'POST',headers:{Authorization:`Token ${env.RECALL_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({meeting_url:meetingUrl,bot_name:'Reid | ريّد',metadata:{reid_meeting_id:meetingId},automatic_leave:{everyone_left_timeout:{timeout:120,activate_after:0},in_call_not_recording_timeout:1200}})},'recall_bot_create');
+  async function createBot(meetingUrl,meetingId,ownerId) {
+    if(!recallKeyReady)throw new Error('meeting_voice_provider_not_configured');
+    if(!transcriptionReady)throw new Error('meeting_transcription_not_configured');
+    const token=createAgentToken({meetingId,ownerId},env.SESSION_KEY);
+    const publicBase=(env.REID_PUBLIC_URL||'https://reidpro.com').replace(/\/$/,'');
+    return await jsonFetch(fetchImpl,`${recallBase}/bot/`,{method:'POST',headers:{Authorization:`Token ${env.RECALL_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({meeting_url:meetingUrl,bot_name:'Reid | ريّد',metadata:{reid_meeting_id:meetingId},output_media:{camera:{kind:'webpage',config:{url:`${publicBase}/meet-agent/${token}`}}},recording_config:{transcript:{provider:{elevenlabs_streaming:{model_id:'scribe_v2_realtime'}},diarization:{use_separate_streams_when_available:true}}},automatic_leave:{everyone_left_timeout:{timeout:120,activate_after:0},in_call_not_recording_timeout:1200}})},'recall_bot_create');
   }
 
   async function start({identity,conversationId=null,sourceText=''}) {
     assertOwner(identity);
     if(!googleReady)throw new Error('meeting_google_app_not_configured');
-    if(!recallReady)throw new Error('meeting_voice_provider_not_configured');
+    if(!recallKeyReady)throw new Error('meeting_voice_provider_not_configured');
+    if(!transcriptionReady)throw new Error('meeting_transcription_not_configured');
     const linked=await connection(identity.id);
     if(!linked?.google_refresh_token)throw new Error('meeting_google_not_connected');
     const active=await check(admin.from('reid_meetings').select('*').eq('owner_id',identity.id).in('status',['creating','joining','active']).order('created_at',{ascending:false}).limit(1).maybeSingle());
@@ -105,7 +121,7 @@ export function createMeetingService({admin,check,env,fetchImpl=fetch}) {
       if(!space?.meetingUri||!space?.name)throw new Error('google_meet_response_invalid');
       if(space?.config?.accessType!=='OPEN')throw new Error('meeting_open_access_unavailable');
       await check(admin.from('reid_meetings').update({status:'joining',google_space_name:space.name,meeting_code:space.meetingCode||null,meeting_url:space.meetingUri,updated_at:new Date().toISOString()}).eq('id',id));
-      const bot=await createBot(space.meetingUri,id);
+      const bot=await createBot(space.meetingUri,id,identity.id);
       if(!bot?.id)throw new Error('recall_bot_response_invalid');
       const row=await check(admin.from('reid_meetings').update({status:'active',recall_bot_id:bot?.id||null,started_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',id).select('*').single());
       return row;
@@ -158,7 +174,7 @@ export function createMeetingService({admin,check,env,fetchImpl=fetch}) {
   async function status(ownerId) {
     const linked=await connection(ownerId).catch(()=>null);
     const active=await check(admin.from('reid_meetings').select('id,status,meeting_url,started_at,created_at').eq('owner_id',ownerId).in('status',['creating','joining','active']).order('created_at',{ascending:false}).limit(1).maybeSingle()).catch(()=>null);
-    return {googleAppConfigured:googleReady,googleConnected:Boolean(linked?.google_refresh_token),googleEmail:linked?.google_email||null,voiceProviderConfigured:recallReady,ready:googleReady&&recallReady&&Boolean(linked?.google_refresh_token),active};
+    return {googleAppConfigured:googleReady,googleConnected:Boolean(linked?.google_refresh_token),googleEmail:linked?.google_email||null,voiceProviderConfigured:recallKeyReady,transcriptionConfigured:transcriptionReady,ready:googleReady&&recallReady&&Boolean(linked?.google_refresh_token),active};
   }
 
   return {start,end,latest,status,authorizationUrl,completeAuthorization};
@@ -170,6 +186,7 @@ export function meetingErrorMessage(error) {
   if(reason==='meeting_google_app_not_configured')return 'تكامل Google Meet غير مجهز على الخادم بعد. افتح صفحة الاتصالات لمعرفة الإعداد الناقص.';
   if(reason==='meeting_google_not_connected')return 'اربط حساب Google من صفحة الاتصالات أولًا، وبعدها أقدر أنشئ الاجتماع فورًا.';
   if(reason==='meeting_voice_provider_not_configured')return 'دخول ريّد الصوتي للاجتماع غير موصل بعد. أضف مفتاح مزود الاجتماعات من صفحة الاتصالات.';
+  if(reason==='meeting_transcription_not_configured')return 'مزود دخول ريّد موجود، لكن الاستماع العربي المباشر لم يكتمل في إعدادات الاجتماعات.';
   if(reason==='meeting_start_in_progress')return 'أنا الآن أجهّز الاجتماع وأدخل. انتظر لحظات واكتب «حالة الميتنج».';
   if(reason==='meeting_open_access_unavailable')return 'سياسة حساب Google منعت رابط الدخول المفتوح، لذلك أوقفت الاجتماع بدل ما أرسل رابطًا يحتاج قبول.';
   return 'ما قدرت أبدأ الاجتماع الآن. سجلت الخطأ بدون ما أدّعي أن ريّد دخل.';

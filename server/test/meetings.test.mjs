@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { open, parseMeetingCommand, seal, signState, verifyState } from '../meetings.mjs';
+import { createAgentToken, open, parseMeetingCommand, seal, signState, verifyAgentToken, verifyState } from '../meetings.mjs';
+import { meetingAgentPage } from '../meeting-agent.mjs';
 
 const secret='a'.repeat(64);
 
@@ -24,4 +25,14 @@ test('OAuth state is signed, expires and rejects changes',()=>{
   assert.equal(verifyState(state,secret,1_000).ownerId,'owner-1');
   assert.throws(()=>verifyState(state,secret,3_000),/expired/);
   assert.throws(()=>verifyState(`${state}x`,secret,1_000),/invalid/);
+});
+
+test('meeting agent token is scoped and its page connects only to the meeting bridge',()=>{
+  const token=createAgentToken({meetingId:'meeting-1',ownerId:'owner-1'},secret,1_000);
+  assert.equal(verifyAgentToken(token,secret,2_000).meetingId,'meeting-1');
+  assert.throws(()=>verifyAgentToken(signState({ownerId:'owner-1',exp:9_000},secret),secret,2_000));
+  const page=meetingAgentPage(token);
+  assert.match(page,/meeting-data\.bot\.recall\.ai/);
+  assert.match(page,/\/meet-agent\//);
+  assert.ok(!page.includes('RECALL_API_KEY'));
 });
