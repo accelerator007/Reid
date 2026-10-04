@@ -140,7 +140,10 @@ export function createMeetingService({admin,check,env,fetchImpl=fetch}) {
     if(row.google_space_name){
       try{const token=await accessToken(identity.id);await jsonFetch(fetchImpl,`https://meet.googleapis.com/v2/${encodeURI(row.google_space_name)}:endActiveConference`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:'{}'},'google_meet_end');}catch(error){failures.push(error.message);}
     }
-    if(row.recall_bot_id&&recallReady){
+    // A meeting can still have a live Recall bot if transcription is disabled
+    // after it started. Leaving the call only needs the Recall API key, so do
+    // not strand that bot just because the transcription readiness flag changed.
+    if(row.recall_bot_id&&recallKeyReady){
       try{const response=await fetchImpl(`${recallBase}/bot/${encodeURIComponent(row.recall_bot_id)}/leave_call/`,{method:'POST',headers:{Authorization:`Token ${env.RECALL_API_KEY}`,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(30_000)});if(!response.ok&&response.status!==404)failures.push(`recall_bot_leave_${response.status}`);}catch(error){failures.push(String(error?.message||'recall_bot_leave_failed'));}
     }
     const status=failures.length?'end_failed':'ended';
