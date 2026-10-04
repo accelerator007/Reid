@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inboundText } from '../policy.mjs';
-import { createImageCache, mediaPlaceholder, spokenLanguage, synthesizeVoice, transcribeAudio, transcriptBody, voiceRequested, voiceScript } from '../media.mjs';
+import { createImageCache, mediaPlaceholder, replyModeCommand, spokenLanguage, synthesizeVoice, transcribeAudio, transcriptBody, voiceReplyWanted, voiceRequested, voiceScript } from '../media.mjs';
 import { createTyping, pacingDelay, reactions, splitReply } from '../signals.mjs';
 
 const direct = extra => ({ key: { id: 'm1', remoteJid: '96812345678@s.whatsapp.net' }, ...extra });
@@ -77,6 +77,21 @@ test('an explicit Arabic or English request selects a voice reply', () => {
 test('voice-note wording is detected before it can be mistaken for a saved note', () => {
   assert.equal(voiceRequested('سجل لي رسالة صوتية قصيرة تقول إن ريد جاهز'), true);
   assert.equal(voiceRequested('سجل لي ملاحظة إن ريد جاهز'), false);
+});
+
+test('short commands persistently switch between voice and text replies',()=>{
+  for(const value of ['ريد ارسل فويس','ريّد رد صوتي دائم','خلاص كل شي فويس','خلي ردودك بصوت','Reid always reply with voice'])assert.equal(replyModeCommand(value),'voice',value);
+  for(const value of ['اكتب','ريد اكتب','رد كتابة','كل شي نص','Reid reply with text'])assert.equal(replyModeCommand(value),'text',value);
+  assert.equal(replyModeCommand('اكتب لي تقرير عن المشروع'),null,'a writing request must not change the saved mode');
+  assert.equal(replyModeCommand('ارسل فويس تقول الاجتماع الساعة تسعة'),null,'a one-off recording must not change the saved mode');
+});
+
+test('saved voice mode applies to later messages until text mode is selected',()=>{
+  assert.equal(voiceReplyWanted('وش أخبار المشروع؟',{savedMode:'voice'}),true);
+  assert.equal(voiceReplyWanted('وش أخبار المشروع؟',{savedMode:'text'}),false);
+  assert.equal(voiceReplyWanted('رد علي بصوت',{savedMode:'text'}),true,'an explicit one-off request still works');
+  assert.equal(voiceReplyWanted('وش الأخبار؟',{savedMode:'voice',voiceEnabled:false}),false,'account capability remains authoritative');
+  assert.equal(voiceReplyWanted('رد علي بصوت',{savedMode:'voice',globalEnabled:false}),false,'the server kill switch remains authoritative');
 });
 
 test('voice synthesis requests local audio and validates the Ogg result', async () => {

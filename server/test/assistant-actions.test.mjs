@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isCancellation, isConfirmation, normalizePhone, parseNoteCommand, parseOutboundRequest, parseWorkshopCommand } from '../assistant-actions.mjs';
+import { artifactIntentMatchesText, isCancellation, isConfirmation, normalizePhone, parseNoteCommand, parseOutboundRequest, parseWorkshopCommand, reportPlan, shouldRouteIntent } from '../assistant-actions.mjs';
 import { parseServerRequest } from '../host-ops.mjs';
 import { generateArtifact, requestedArtifactType } from '../artifacts.mjs';
 
@@ -32,6 +32,22 @@ test('recognizes explicit Ubuntu host work without treating normal chat as a com
   assert.deepEqual(parseServerRequest('نفذ على السيرفر: docker ps'),{request:'نفذ على السيرفر: docker ps',command:'docker ps'});
   assert.equal(parseServerRequest('أعد تشغيل خدمة الموقع على السيرفر')?.command,null);
   assert.equal(parseServerRequest('كيف حالك اليوم؟'),null);
+});
+
+test('programming requests stay conversation and can never become a report',()=>{
+  assert.equal(shouldRouteIntent('سوي لي كود عن البيض'),false);
+  assert.equal(artifactIntentMatchesText('سوي لي كود عن البيض'),false);
+  assert.equal(shouldRouteIntent('أبيك ترسل لعلي إني بتأخر'),true);
+  assert.equal(shouldRouteIntent('جهز لي تقرير حالة المشاريع'),true);
+  assert.equal(artifactIntentMatchesText('جهز لي تقرير حالة المشاريع'),true);
+});
+
+test('report planning defaults to Arabic and adapts to the report purpose',()=>{
+  assert.deepEqual(reportPlan('جهز تقرير مالي عن المبيعات').language,'ar');
+  assert.equal(reportPlan('جهز تقرير مالي عن المبيعات').kind,'financial');
+  assert.equal(reportPlan('تقرير تقني عن أداء الخادم').kind,'technical');
+  assert.equal(reportPlan('Create an English report about project risks').language,'en');
+  assert.equal(reportPlan('Create an English report about project risks').kind,'project');
 });
 
 test('builds real PDF, Word and Excel artifacts',async()=>{

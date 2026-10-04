@@ -19,6 +19,27 @@ export function voiceRequested(text) {
     || /\b(?:reply|answer|send|record|say)(?:.|\n){0,50}\b(?:voice|audio)(?:\s+(?:note|message))?\b/iu.test(value);
 }
 
+// A short, direct command changes the default reply format until the same
+// person changes it again. Longer requests such as "ارسل فويس تقول..." stay
+// one-off voice-note requests and must not silently change a durable setting.
+export function replyModeCommand(text) {
+  const value=String(text||'')
+    .replace(/[\u0000-\u001f\u007f]/g,' ')
+    .replace(/[.!؟?،,]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim()
+    .replace(/^(?:يا\s+)?(?:ريد|ريّد|reid)\s+/iu,'')
+    .trim();
+  if(!value||value.length>100)return null;
+  if(/^(?:اكتب|اكتبلي|رد\s+(?:كتابة|كتابه|نص)|خل(?:ي)?\s+ردودك\s+(?:كتابة|كتابه|نص)|كل\s+شي\s+(?:كتابة|كتابه|نص)|text|reply\s+(?:in|with)\s+text)$/iu.test(value))return 'text';
+  if(/^(?:ارسل|أرسل|رد|جاوب)\s+(?:لي\s+)?(?:فويس|بصوت|صوتي|رسالة\s+صوتية)(?:\s+(?:دايم|دائم|دائما|دائمًا|خلاص|كامل))?$|^(?:خلاص\s+)?كل\s+شي\s+(?:فويس|بصوت|صوتي)|^خل(?:ي)?\s+ردودك\s+(?:فويس|بصوت|صوتي)|^(?:always\s+)?reply\s+(?:in|with)\s+(?:voice|audio)$/iu.test(value))return 'voice';
+  return null;
+}
+
+export function voiceReplyWanted(text,{savedMode='text',globalEnabled=true,voiceEnabled=true}={}) {
+  return Boolean(globalEnabled&&voiceEnabled&&(savedMode==='voice'||voiceRequested(text)));
+}
+
 // When the sender supplies the words to record, preserve them verbatim. This
 // avoids a language model adding a preface or denying a capability that the
 // voice pipeline is already performing.

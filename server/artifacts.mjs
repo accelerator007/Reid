@@ -150,7 +150,7 @@ function createPdfWriter(doc, fonts) {
     const tallest = Math.max(...rows.map(row => row.length));
     room(height * tallest + 6);
     const top = doc.y;
-    if (header) doc.save().rect(left, top - 3, right - left, height * tallest + 6).fill('#5E3F9E').restore();
+    if (header) doc.save().rect(left, top - 3, right - left, height * tallest + 6).fill(fonts.accent||'#5E3F9E').restore();
     use({ size, bold: header, color: header ? '#FFFFFF' : '#222222' });
     rows.forEach((row, column) => {
       // First cell sits at the right edge: the reading order of the table is
@@ -175,23 +175,26 @@ function createPdfWriter(doc, fonts) {
   return { paragraph, tableRow, drawText, ensureRoom: room, left, right };
 }
 
-async function makePdf(title, body, env) {
+async function makePdf(title, body, env,design={}) {
   const fonts = resolveFonts(env);
+  const accent=/^#[0-9A-F]{6}$/i.test(design.accent||'')?design.accent:'#5E3F9E';
+  const label=String(design.label||'خاص • ريّد').slice(0,80);
   const doc = new PDFDocument({ size: 'A4', bufferPages: true, margins: { top: 48, bottom: 64, left: 52, right: 52 }, info: { Title: title, Author: 'Reid' } });
   const chunks = [];
   doc.on('data', chunk => chunks.push(chunk));
   doc.registerFont('reid', fonts.regular);
   doc.registerFont('reid-bold', fonts.bold);
-  const writer = createPdfWriter(doc, { regular: 'reid', bold: 'reid-bold' });
+  const writer = createPdfWriter(doc, { regular: 'reid', bold: 'reid-bold',accent });
 
   // The banner is sized to the title it actually holds. A fixed 130pt band let
   // a long title spill out of it and render white on white.
   doc.font('reid-bold').fontSize(22);
   const titleRows = wrapTokens(String(title).trim().split(/\s+/), doc.page.width - 104 - 38, token => doc.widthOfString(token), doc.widthOfString(' '));
   const banner = Math.max(130, 60 + titleRows.length * 34);
-  doc.save().rect(0, 0, doc.page.width, banner).fill('#2B1D3C').restore();
+  doc.save().rect(0, 0, doc.page.width, banner).fill(accent).restore();
   doc.y = 44;
   writer.paragraph(title, { size: 22, bold: true, color: '#FFFFFF', indent: 19, after: 0 });
+  doc.font('reid').fontSize(8).fillColor('#FFFFFF').text(label,52,banner-26,{width:doc.page.width-104,align:hasArabic(label)?'right':'left',lineBreak:false});
   doc.y = banner + 26;
 
   let pendingHeader = true;
@@ -211,7 +214,7 @@ async function makePdf(title, body, env) {
     if (item.kind === 'row') { writer.tableRow(item.cells, { header: pendingHeader }); block.push(item.cells); pendingHeader = false; continue; }
     closeTable();
     pendingHeader = true;
-    if (item.kind === 'heading') writer.paragraph(item.text, { size: item.level === 1 ? 16 : 14, bold: true, color: '#5E3F9E', after: 9 });
+    if (item.kind === 'heading') writer.paragraph(item.text, { size: item.level === 1 ? 16 : 14, bold: true, color: accent, after: 9 });
     else if (item.kind === 'bullet') writer.paragraph(item.text, { indent: 18, bullet: '•', after: 4 });
     else writer.paragraph(item.text);
   }
@@ -234,18 +237,19 @@ async function makePdf(title, body, env) {
   return await new Promise((resolve, reject) => { doc.on('end', () => resolve(Buffer.concat(chunks))); doc.on('error', reject); });
 }
 
-const docxCell = (text, header) => new TableCell({
+const docxCell = (text, header,rtl=true) => new TableCell({
   width: { size: 100, type: WidthType.PERCENTAGE },
   shading: header ? { fill: '5E3F9E' } : undefined,
-  children: [new Paragraph({ bidirectional: true, alignment: AlignmentType.RIGHT, children: [new TextRun({ text, size: 22, bold: header, rightToLeft: true, color: header ? 'FFFFFF' : '222222' })] })],
+  children: [new Paragraph({ bidirectional: rtl, alignment: rtl?AlignmentType.RIGHT:AlignmentType.LEFT, children: [new TextRun({ text, size: 22, bold: header, rightToLeft: rtl, color: header ? 'FFFFFF' : '222222' })] })],
 });
 
-async function makeDocx(title, body) {
-  const children = [new Paragraph({ text: title, heading: HeadingLevel.TITLE, bidirectional: true, alignment: AlignmentType.RIGHT })];
+async function makeDocx(title, body,design={}) {
+  const rtl=design.direction!=='ltr';
+  const children = [new Paragraph({ text: title, heading: HeadingLevel.TITLE, bidirectional: rtl, alignment: rtl?AlignmentType.RIGHT:AlignmentType.LEFT })];
   let pending = [];
   const flush = () => {
     if (!pending.length) return;
-    children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: pending.map((cells, index) => new TableRow({ children: cells.map(cell => docxCell(cell, index === 0)) })) }));
+    children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: pending.map((cells, index) => new TableRow({ children: cells.map(cell => docxCell(cell, index === 0,rtl)) })) }));
     pending = [];
   };
   for (const raw of lines(body)) {
@@ -253,27 +257,29 @@ async function makeDocx(title, body) {
     if (item.kind === 'separator') continue;
     if (item.kind === 'row') { pending.push(item.cells); continue; }
     flush();
-    if (item.kind === 'heading') children.push(new Paragraph({ text: item.text, heading: item.level === 1 ? HeadingLevel.HEADING_1 : HeadingLevel.HEADING_2, bidirectional: true, alignment: AlignmentType.RIGHT }));
+    if (item.kind === 'heading') children.push(new Paragraph({ text: item.text, heading: item.level === 1 ? HeadingLevel.HEADING_1 : HeadingLevel.HEADING_2, bidirectional: rtl, alignment: rtl?AlignmentType.RIGHT:AlignmentType.LEFT }));
     else children.push(new Paragraph({
-      bidirectional: true, alignment: AlignmentType.RIGHT, spacing: { after: 140 },
+      bidirectional: rtl, alignment: rtl?AlignmentType.RIGHT:AlignmentType.LEFT, spacing: { after: 140 },
       ...(item.kind === 'bullet' ? { bullet: { level: 0 } } : {}),
-      children: [new TextRun({ text: item.text, size: 24, rightToLeft: true })],
+      children: [new TextRun({ text: item.text, size: 24, rightToLeft: rtl })],
     }));
   }
   flush();
   return Buffer.from(await Packer.toBuffer(new Document({ creator: 'Reid', title, sections: [{ properties: {}, children }] })));
 }
 
-async function makeXlsx(title, body) {
+async function makeXlsx(title, body,design={}) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Reid';
-  const sheet = workbook.addWorksheet('التقرير', { views: [{ rightToLeft: true, state: 'frozen', ySplit: 2 }] });
+  const rtl=design.direction!=='ltr';
+  const accent=String(design.accent||'#5E3F9E').replace('#','').toUpperCase();
+  const sheet = workbook.addWorksheet(rtl?'التقرير':'Report', { views: [{ rightToLeft: rtl, state: 'frozen', ySplit: 2 }] });
   sheet.mergeCells('A1:F1');
   const header = sheet.getCell('A1');
   header.value = title;
   header.font = { bold: true, size: 18, color: { argb: 'FFFFFFFF' } };
-  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF5E3F9E' } };
-  header.alignment = { horizontal: 'right' };
+  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${accent}` } };
+  header.alignment = { horizontal: rtl?'right':'left' };
 
   let index = 3;
   for (const raw of lines(body)) {
@@ -282,17 +288,17 @@ async function makeXlsx(title, body) {
     const row = sheet.getRow(index);
     if (item.kind === 'row') item.cells.forEach((cell, column) => { row.getCell(column + 1).value = cell; });
     else row.getCell(1).value = item.kind === 'bullet' ? `• ${item.text}` : item.text;
-    if (item.kind === 'heading') row.getCell(1).font = { bold: true, size: 13, color: { argb: 'FF5E3F9E' } };
-    row.alignment = { horizontal: 'right', vertical: 'top', wrapText: true };
+    if (item.kind === 'heading') row.getCell(1).font = { bold: true, size: 13, color: { argb: `FF${accent}` } };
+    row.alignment = { horizontal: rtl?'right':'left', vertical: 'top', wrapText: true };
     index += 1;
   }
   for (let column = 1; column <= 6; column += 1) sheet.getColumn(column).width = column === 1 ? 42 : 22;
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
-export async function generateArtifact(type, body, title = 'تقرير ريّد', env = process.env) {
+export async function generateArtifact(type, body, title = 'تقرير ريّد', env = process.env,design={}) {
   if (!['pdf', 'docx', 'xlsx'].includes(type)) throw new Error('unsupported_artifact_type');
-  const buffer = type === 'pdf' ? await makePdf(title, body, env) : type === 'docx' ? await makeDocx(title, body) : await makeXlsx(title, body);
+  const buffer = type === 'pdf' ? await makePdf(title, body, env,design) : type === 'docx' ? await makeDocx(title, body,design) : await makeXlsx(title, body,design);
   const meta = {
     pdf: ['application/pdf', 'pdf'],
     docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'docx'],
