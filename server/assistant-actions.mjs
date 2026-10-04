@@ -2,6 +2,7 @@ import { generateArtifact, requestedArtifactType } from './artifacts.mjs';
 import { createIntentRouter, recipientInText } from './intent.mjs';
 import { readPage, sourcesLine, wrapUntrusted } from './web.mjs';
 import { parseServerRequest, planServerCommand } from './host-ops.mjs';
+import { meetingErrorMessage, parseMeetingCommand } from './meetings.mjs';
 
 const ownerRoles=new Set(['owner','super_admin']);
 const workshopManagerRoles=new Set(['owner','super_admin','admin','hr']);
@@ -71,7 +72,7 @@ function parseArtifactRequest(text) {
 }
 
 function actionLabel(kind) {
-  return ({send_text:'إرسال رسالة',send_artifact:'إرسال ملف',generate_artifact:'إنشاء ملف',generate_image:'إنشاء صورة',workshop_create:'إضافة ورشة',workshop_update:'تعديل ورشة',workshop_publish:'نشر ورشة',workshop_cancel:'إلغاء ورشة',note_delete:'حذف ملاحظة',server_command:'أمر خادم'})[kind]||kind;
+  return ({send_text:'إرسال رسالة',send_artifact:'إرسال ملف',generate_artifact:'إنشاء ملف',generate_image:'إنشاء صورة',workshop_create:'إضافة ورشة',workshop_update:'تعديل ورشة',workshop_publish:'نشر ورشة',workshop_cancel:'إلغاء ورشة',note_delete:'حذف ملاحظة',server_command:'أمر خادم',meeting_start:'بدء اجتماع',meeting_end:'إنهاء اجتماع'})[kind]||kind;
 }
 
 function safeJson(value) {
@@ -88,7 +89,7 @@ const webAnswerPrompt=[
 
 export const linkInText=text=>/https?:\/\/[^\s<>"']{4,500}/i.exec(String(text||''))?.[0]?.replace(/[).,،]+$/,'')||null;
 
-export function createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,route=createIntentRouter({aiChat}),webSearch=null,fetchPage=readPage,imageBudget=null,hostOps=null}) {
+export function createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,route=createIntentRouter({aiChat}),webSearch=null,fetchPage=readPage,imageBudget=null,hostOps=null,meetings=null}) {
   const hasRole=(identity,set)=>identity.roles.some(role=>set.has(role));
   const isOwner=identity=>hasRole(identity,ownerRoles);
 
@@ -361,6 +362,30 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     return {handled:true,text:`${preview}\n\n${confirmation}`,actionId:action.id};
   }
 
+  async function handleMeeting(identity,chat,command,sourceText) {
+    if(!isOwner(identity))return {handled:true,text:'إنشاء اجتماع صوتي مع ريّد متاح للمالك فقط.'};
+    if(!meetings)return {handled:true,text:'خدمة الاجتماعات غير مهيأة على الخادم الآن.'};
+    try{
+      if(command.kind==='status'){
+        const row=await meetings.latest(identity);
+        if(!row)return {handled:true,text:'ما عندك اجتماع أنشأه ريّد إلى الآن.'};
+        const state={creating:'قيد الإنشاء',joining:'ريّد يدخل الآن',active:'شغال',ended:'منتهي',failed:'فشل',end_failed:'تعذر إنهاؤه بالكامل'}[row.status]||row.status;
+        return {handled:true,text:`حالة آخر اجتماع: ${state}${row.meeting_url?`\n${row.meeting_url}`:''}`};
+      }
+      if(command.kind==='end'){
+        const row=await meetings.end({identity});
+        if(!row)return {handled:true,text:'ما فيه اجتماع شغال أنهيه.'};
+        const receipt=await admin.from('whatsapp_actions').insert({requester_id:identity.id,requester_phone:identity.phone_e164,conversation_id:chat.id,kind:'meeting_end',payload:{meeting_id:row.id},preview:'إنهاء اجتماع ريّد',approval_level:1,status:row.status==='ended'?'completed':'failed',completed_at:new Date().toISOString(),output_summary:row.status,error_code:row.error_code||null});
+        if(receipt.error)console.error('meeting_end_receipt_failed');
+        return {handled:true,text:row.status==='ended'?'تم إنهاء الاجتماع وخروج ريّد ✅':'حاولت أنهي الاجتماع، لكن أحد المزودين ما أكد الإنهاء. سجلت الحالة للمراجعة.'};
+      }
+      const row=await meetings.start({identity,conversationId:chat.id,sourceText});
+      const receipt=await admin.from('whatsapp_actions').insert({requester_id:identity.id,requester_phone:identity.phone_e164,conversation_id:chat.id,kind:'meeting_start',payload:{meeting_id:row.id},preview:'إنشاء Google Meet مفتوح ودخول ريّد',approval_level:1,status:'completed',completed_at:new Date().toISOString(),output_summary:row.reused?'existing_meeting':'meeting_started'});
+      if(receipt.error)console.error('meeting_start_receipt_failed');
+      return {handled:true,text:`${row.reused?'الاجتماع شغال أصلًا وريّد داخله':'تم، فتحت الاجتماع وريّد دخل معك'} ✅\n\n${row.meeting_url}\n\nأي شخص ترسل له الرابط يقدر يدخل مباشرة.`};
+    }catch(error){return {handled:true,text:meetingErrorMessage(error)};}
+  }
+
   async function handleWebSearch(identity,chat,userText,query) {
     if(!webSearch)return {handled:true,text:'البحث في الويب غير مفعّل حاليًا. يحتاج مفتاح مزوّد بحث في إعدادات الخدمة.'};
     let found;
@@ -449,6 +474,7 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     if(isCancellation(value)){const cancelled=await cancelPending(identity,chat);if(cancelled)return cancelled;}
     if(isConfirmation(value)||/^(?:نفذ|نفّذ|execute)\s+[A-F0-9]{6}$/iu.test(value))return executePending(identity,chat,value);
     if(/(?:حالة|وش صار|وين وصل).*(?:طلب|إرسال|ارسال)|^(?:طلباتي|حالة الطلبات)$/iu.test(value))return statusReport(identity);
+    const meeting=parseMeetingCommand(value);if(meeting)return handleMeeting(identity,chat,meeting,value);
     const note=parseNoteCommand(value);if(note)return handleNote(identity,chat,note);
     const workshop=parseWorkshopCommand(value);if(workshop)return handleWorkshop(identity,chat,workshop);
     const artifact=parseArtifactRequest(value);if(artifact)return generate(identity,chat,artifact);

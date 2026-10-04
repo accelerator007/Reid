@@ -21,6 +21,7 @@ import { readCorrection, readReaction } from './feedback.mjs';
 import { createWebSearch } from './web.mjs';
 import { createProactive } from './proactive.mjs';
 import { createHostOps } from './host-ops.mjs';
+import { createMeetingService } from './meetings.mjs';
 
 // libsignal prints full session objects (including private key material) with
 // console.info whenever it rotates a session. Suppress only that unsafe
@@ -234,7 +235,8 @@ const imageBudget={
   async release(wanted){await admin.rpc('release_content_image_budget',{wanted});},
 };
 const hostOps=createHostOps({url:env.REID_HOST_OPS_URL,token:env.REID_HOST_OPS_TOKEN});
-const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,webSearch,imageBudget,hostOps});
+const meetings=createMeetingService({admin,check,env});
+const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,webSearch,imageBudget,hostOps,meetings});
 const runProactive=createProactive({admin,check,queueText,ensureConversation});
 const getOperationsSnapshot=createOperationsSnapshot({admin,getConnection:()=>connection,aiUrl:env.AI_URL,aiToken:env.AI_TOKEN,sampleHost:()=>sampleLocalHost()});
 const handleOperations=createOperationsHandler({getSnapshot:getOperationsSnapshot});
@@ -266,6 +268,15 @@ app.get('/internal/operations/status',async(req,res)=>{
   if(!internalTokenValid(env.REID_OPS_STATUS_TOKEN,req.get('x-reid-internal-token')))return res.status(404).end();
   res.json(await getOperationsSnapshot());
 });
+// The OAuth callback cannot carry the browser's Reid bearer token. Its signed,
+// ten-minute state identifies the already-authenticated Owner who initiated it.
+app.get('/api/meet/google/callback',async(req,res)=>{
+  try{
+    if(typeof req.query.code!=='string'||typeof req.query.state!=='string')return res.redirect('/connections?meet=cancelled');
+    await meetings.completeAuthorization({code:req.query.code,state:req.query.state});
+    res.redirect('/connections?meet=connected');
+  }catch(error){console.error(JSON.stringify({event:'meet_oauth_failed',reason:String(error?.message||'unknown').slice(0,80)}));res.redirect('/connections?meet=failed');}
+});
 app.use('/api',async(req,res,next)=>{
   try {
     if(!rate(req.ip,150))return res.status(429).json({error:'rate_limited'});
@@ -283,6 +294,8 @@ app.use('/api',async(req,res,next)=>{
   }catch{res.status(503).json({error:'authorization_unavailable'});}
 });
 app.get('/api/whatsapp/status',(_req,res)=>res.json({connection,qr,number:socket?.user?.id?.split(':')[0]||null,lastError,transport:'qr'}));
+app.get('/api/meet/status',async(req,res)=>res.json(await meetings.status(req.user.id)));
+app.post('/api/meet/google/connect',async(req,res)=>res.json({url:meetings.authorizationUrl(req.user.id)}));
 app.get('/api/operations/status',async(_req,res)=>res.json(await getOperationsSnapshot()));
 app.post('/api/whatsapp/connect',async(_req,res)=>{await connect();res.json({ok:true});});
 app.get('/api/whatsapp/conversations',async(_req,res)=>res.json(await check(admin.from('qr_conversations').select('*').order('updated_at',{ascending:false}).limit(100))));
