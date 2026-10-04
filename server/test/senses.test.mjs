@@ -80,8 +80,8 @@ test('voice-note wording is detected before it can be mistaken for a saved note'
 });
 
 test('short commands persistently switch between voice and text replies',()=>{
-  for(const value of ['ريد ارسل فويس','ريّد رد صوتي دائم','خلاص كل شي فويس','خلي ردودك بصوت','Reid always reply with voice'])assert.equal(replyModeCommand(value),'voice',value);
-  for(const value of ['اكتب','ريد اكتب','رد كتابة','كل شي نص','Reid reply with text'])assert.equal(replyModeCommand(value),'text',value);
+  for(const value of ['ريد ارسل فويس','ريّد رد صوتي دائم','ريد ارسل فويس كامل خلاص كل شي فويس','خلاص كل شي فويس','خلي ردودك بصوت','Reid always reply with voice'])assert.equal(replyModeCommand(value),'voice',value);
+  for(const value of ['اكتب','ريد اكتب','خلاص اكتب','من الحين اكتب','رد كتابة','كل شي نص','Reid reply with text'])assert.equal(replyModeCommand(value),'text',value);
   assert.equal(replyModeCommand('اكتب لي تقرير عن المشروع'),null,'a writing request must not change the saved mode');
   assert.equal(replyModeCommand('ارسل فويس تقول الاجتماع الساعة تسعة'),null,'a one-off recording must not change the saved mode');
 });

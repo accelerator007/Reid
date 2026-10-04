@@ -31,7 +31,8 @@ export function replyModeCommand(text) {
     .replace(/^(?:يا\s+)?(?:ريد|ريّد|reid)\s+/iu,'')
     .trim();
   if(!value||value.length>100)return null;
-  if(/^(?:اكتب|اكتبلي|رد\s+(?:كتابة|كتابه|نص)|خل(?:ي)?\s+ردودك\s+(?:كتابة|كتابه|نص)|كل\s+شي\s+(?:كتابة|كتابه|نص)|text|reply\s+(?:in|with)\s+text)$/iu.test(value))return 'text';
+  if(/^(?:(?:خلاص|من\s+الحين)\s+)?(?:اكتب|اكتبلي|رد\s+(?:كتابة|كتابه|نص)|خل(?:ي)?\s+ردودك\s+(?:كتابة|كتابه|نص)|كل\s+شي\s+(?:كتابة|كتابه|نص)|text|reply\s+(?:in|with)\s+text)$/iu.test(value))return 'text';
+  if(/(?:كل\s+شي|كل\s+الردود|ردودك).*(?:فويس|بصوت|صوتي)/iu.test(value))return 'voice';
   if(/^(?:ارسل|أرسل|رد|جاوب)\s+(?:لي\s+)?(?:فويس|بصوت|صوتي|رسالة\s+صوتية)(?:\s+(?:دايم|دائم|دائما|دائمًا|خلاص|كامل))?$|^(?:خلاص\s+)?كل\s+شي\s+(?:فويس|بصوت|صوتي)|^خل(?:ي)?\s+ردودك\s+(?:فويس|بصوت|صوتي)|^(?:always\s+)?reply\s+(?:in|with)\s+(?:voice|audio)$/iu.test(value))return 'voice';
   return null;
 }
