@@ -40,20 +40,43 @@ WRITE = re.compile(
     r"(?:^|[;&|]\s*)(?:cp|mv|rm|mkdir|touch|tee|sed\s+-i|chown|chmod)\b|"
     r">{1,2})", re.I
 )
+SHELL_COMPLEX = re.compile(r"[\n;&|`$<>]")
+READ_ONLY = re.compile(
+    r"(?:"
+    r"uname(?:\s+[-A-Za-z0-9]+)*|uptime|whoami|id(?:\s+[-A-Za-z0-9]+)*|hostname(?:\s+[-A-Za-z0-9]+)*|date(?:\s+[-A-Za-z0-9:+.%]+)*|"
+    r"df(?:\s+[^\s;&|`$<>]+)*|free(?:\s+[^\s;&|`$<>]+)*|ps(?:\s+[^\s;&|`$<>]+)*|ss(?:\s+[^\s;&|`$<>]+)*|"
+    r"ip\s+(?:addr|address|route|link)(?:\s+[^\s;&|`$<>]+)*|"
+    r"docker\s+ps(?:\s+[^\s;&|`$<>]+)*|docker\s+compose\s+ps(?:\s+[^\s;&|`$<>]+)*|"
+    r"systemctl\s+(?:status|is-active|is-enabled|is-system-running)(?:\s+[^\s;&|`$<>]+)*|"
+    r"git\s+(?:status|log|diff|show|branch|rev-parse)(?:\s+[^\s;&|`$<>]+)*"
+    r")", re.I
+)
 SECRET_PATTERNS = [
+    re.compile(r"(?im)^\s*[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL)[A-Z0-9_]*\s*=.*$"),
     re.compile(r"(?i)(?:api[_-]?key|token|secret|password|passwd|credential)\s*[=:]\s*[^\s'\"]+"),
     re.compile(r"\bsk_[A-Za-z0-9_-]{12,}\b"),
+    re.compile(r"\btvly-[A-Za-z0-9_-]{12,}\b"),
     re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~-]{12,}"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
 ]
 
 
 def risk_for(command: str) -> str:
     if CRITICAL.search(command):
         return "critical"
+    # Shell composition can hide a second command or generate one at runtime.
+    # Preserve full Owner control, but always require the per-action critical
+    # code for a pipeline, substitution, redirection, or command chain.
+    if SHELL_COMPLEX.search(command):
+        return "critical"
     if WRITE.search(command):
         return "write"
-    return "read"
+    if READ_ONLY.fullmatch(command.strip()):
+        return "read"
+    # Unknown programs are powerful by default. They remain executable after
+    # the Owner sees the exact command and supplies its unique critical code.
+    return "critical"
 
 
 def validate_command(command: object) -> tuple[str, str]:
