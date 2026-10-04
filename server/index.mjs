@@ -502,7 +502,7 @@ async function processJob() {
         check(admin.from('workshops').select('title_ar,title_en,start_at,end_at,format,venue_ar').eq('status','published').order('start_at').limit(8)),
       ]),
       memories.recall(identity,chat,job.input),
-    ]:[null,{summary:'',facts:[]}];
+    ]):[null,{summary:'',facts:[]}];
     const mood=identity?nextMood(chat.mood,decision?.sentiment,decision?.urgency):'محايد';
     const persona=identity?personaLines({mood,urgency:decision?.urgency,rapport:chat.rapport,recent:chat.recent_openers,style:describeStyle(identity.style_profile,identity.sample_count),summary:remembered.summary,facts:remembered.facts}):'';
     const language=spokenLanguage(job.input);
