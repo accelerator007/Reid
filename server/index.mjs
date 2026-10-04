@@ -11,7 +11,7 @@ import { createInboundPersistence } from './inbound.mjs';
 import { createOperationsHandler } from './operations.mjs';
 import { createOperationsSnapshot, sampleLocalHost } from './operations-snapshot.mjs';
 import { clockContext, clockReply, parseClockQuestion } from './clock.mjs';
-import { createImageCache, mediaLimits, mediaPlaceholder, spokenLanguage, synthesizeVoice, transcribeAudio, transcriptBody, voiceRequested } from './media.mjs';
+import { createImageCache, mediaLimits, mediaPlaceholder, spokenLanguage, synthesizeVoice, transcribeAudio, transcriptBody, voiceRequested, voiceScript } from './media.mjs';
 import { createTyping, pacingDelay, reactions, splitReply } from './signals.mjs';
 import { createMemory, describeStyle } from './memory.mjs';
 import { nextMood, nextRapport, openerFingerprint, personaLines, rememberOpener, repeatsOpener } from './affect.mjs';
@@ -20,6 +20,7 @@ import { assessReply } from './quality.mjs';
 import { readCorrection, readReaction } from './feedback.mjs';
 import { createWebSearch } from './web.mjs';
 import { createProactive } from './proactive.mjs';
+import { createHostOps } from './host-ops.mjs';
 
 // libsignal prints full session objects (including private key material) with
 // console.info whenever it rotates a session. Suppress only that unsafe
@@ -232,7 +233,8 @@ const imageBudget={
   },
   async release(wanted){await admin.rpc('release_content_image_budget',{wanted});},
 };
-const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,webSearch,imageBudget});
+const hostOps=createHostOps({url:env.REID_HOST_OPS_URL,token:env.REID_HOST_OPS_TOKEN});
+const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,webSearch,imageBudget,hostOps});
 const runProactive=createProactive({admin,check,queueText,ensureConversation});
 const getOperationsSnapshot=createOperationsSnapshot({admin,getConnection:()=>connection,aiUrl:env.AI_URL,aiToken:env.AI_TOKEN,sampleHost:()=>sampleLocalHost()});
 const handleOperations=createOperationsHandler({getSnapshot:getOperationsSnapshot});
@@ -413,6 +415,20 @@ async function processJob() {
         await check(admin.from('qr_jobs').update({state:'done'}).eq('id',job.id).eq('state','running'));
         return;
       }
+    }
+    const suppliedVoiceScript=wantsVoice?voiceScript(job.input):null;
+    if(suppliedVoiceScript){
+      const body=cleanReply(suppliedVoiceScript);
+      const quality=assessReply(body,{request:job.input,recentOpeners:chat.recent_openers,openerFingerprint});
+      try{
+        const audio=await synthesizeVoice(body,{url:env.REID_TTS_URL||'http://tts:5050'});
+        await queueVoice(chat,{body,audio,dedupeKey:`bot:${job.id}:voice`,replyTo:job.message_id,quality});
+      }catch(error){
+        console.error(JSON.stringify({event:'voice_reply_failed',reason:String(error?.message||'unknown').slice(0,60)}));
+        await queueText(chat,`${body}\n\n(تعذر إرسال التسجيل الصوتي، فأرسلت لك النص.)`,{dedupeKey:`bot:${job.id}`,replyTo:job.message_id});
+      }
+      await check(admin.from('qr_jobs').update({state:'done'}).eq('id',job.id).eq('state','running'));
+      return;
     }
     if(env.REID_QR_BRIDGE_TOKEN&&!wantsVoice&&!(identity&&photo)) {
       const dispatch=await fetch(`${env.SUPABASE_URL}/functions/v1/whatsapp-webhook`,{method:'POST',headers:{'Content-Type':'application/json','x-reid-qr-token':env.REID_QR_BRIDGE_TOKEN,'x-reid-qr-message':job.message_id},body:JSON.stringify({messageId:job.message_id}),signal:AbortSignal.timeout(30000)});

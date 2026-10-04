@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isCancellation, isConfirmation, normalizePhone, parseNoteCommand, parseOutboundRequest, parseWorkshopCommand } from '../assistant-actions.mjs';
+import { parseServerRequest } from '../host-ops.mjs';
 import { generateArtifact, requestedArtifactType } from '../artifacts.mjs';
 
 test('normalizes Oman local numbers and preserves international E.164 numbers',()=>{
@@ -25,6 +26,12 @@ test('parses private note and workshop commands deterministically',()=>{
   assert.deepEqual(parseNoteCommand('احفظ ملاحظة: تواصل مع العميل الخميس'),{kind:'create',body:'تواصل مع العميل الخميس'});
   assert.equal(parseWorkshopCommand('أضف ورشة ذكاء اصطناعي الخميس الساعة 5')?.kind,'create');
   assert.equal(parseWorkshopCommand('تفاصيل الورش القادمة')?.kind,'list');
+});
+
+test('recognizes explicit Ubuntu host work without treating normal chat as a command',()=>{
+  assert.deepEqual(parseServerRequest('نفذ على السيرفر: docker ps'),{request:'نفذ على السيرفر: docker ps',command:'docker ps'});
+  assert.equal(parseServerRequest('أعد تشغيل خدمة الموقع على السيرفر')?.command,null);
+  assert.equal(parseServerRequest('كيف حالك اليوم؟'),null);
 });
 
 test('builds real PDF, Word and Excel artifacts',async()=>{

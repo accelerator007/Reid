@@ -19,6 +19,17 @@ export function voiceRequested(text) {
     || /\b(?:reply|answer|send|record|say)(?:.|\n){0,50}\b(?:voice|audio)(?:\s+(?:note|message))?\b/iu.test(value);
 }
 
+// When the sender supplies the words to record, preserve them verbatim. This
+// avoids a language model adding a preface or denying a capability that the
+// voice pipeline is already performing.
+export function voiceScript(text) {
+  const value = String(text || '').trim();
+  const arabic = /(?:رسالة\s+صوتية|فويس)(?:\s+(?:قصيرة|قصيره))?\s+(?:تقول|يقول)\s*[:：-]?\s*([\s\S]{1,1500})$/iu.exec(value);
+  if (arabic) return arabic[1].trim();
+  const english = /(?:voice|audio)(?:\s+(?:note|message))?\s+(?:saying|that\s+says|say)\s*[:：-]?\s*([\s\S]{1,1500})$/iu.exec(value);
+  return english?.[1]?.trim() || null;
+}
+
 export async function synthesizeVoice(text, { url, fetchImpl = fetch, timeout = 90_000 } = {}) {
   const body = String(text || '').trim();
   if (!body || body.length > 1800) throw new Error('voice_text_invalid');

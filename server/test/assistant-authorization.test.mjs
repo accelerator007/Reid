@@ -4,10 +4,10 @@ import { createAssistantActions, parseWorkshopCommand } from '../assistant-actio
 
 // A small stateful PostgREST double lets the real action handler create,
 // claim, cancel and execute requests without contacting WhatsApp or a database.
-function fixture(kind='send_text',identityChanges={}) {
+function fixture(kind='send_text',identityChanges={},hostOps=null) {
   const identity={id:'requester',phone_e164:'96891000001',roles:['owner'],outbound_scope:'any',workshops_enabled:true,notes_enabled:true,artifacts_enabled:true,...identityChanges};
   const chat={id:'request-chat'};
-  const pending={id:'action-id',requester_id:identity.id,conversation_id:chat.id,kind,payload:{body:'Hello',artifact_id:'artifact-id',workshop_id:'workshop-id',note_id:'note-id',title_ar:'ورشة',title_en:'Workshop'},recipient_phone:'96891000002',recipient_name:'Recipient',status:'pending_confirmation',expires_at:new Date(Date.now()+60000).toISOString(),created_at:new Date().toISOString()};
+  const pending={id:'11111111-1111-4111-8111-111111111111',requester_id:identity.id,conversation_id:chat.id,kind,payload:{body:'Hello',artifact_id:'artifact-id',workshop_id:'workshop-id',note_id:'note-id',title_ar:'ورشة',title_en:'Workshop',command:'docker ps'},recipient_phone:'96891000002',recipient_name:'Recipient',status:'pending_confirmation',approval_level:3,expires_at:new Date(Date.now()+60000).toISOString(),created_at:new Date().toISOString()};
   const tables={
     whatsapp_actions:[pending],
     whatsapp_admin_profiles:[{user_id:'recipient',phone_e164:pending.recipient_phone,enabled:true}],
@@ -62,6 +62,7 @@ function fixture(kind='send_text',identityChanges={}) {
     ensureConversation:async phone=>{effects.push({kind:'conversation',phone});return {id:'recipient-chat'};},
     queueText:async(_chat,body,options)=>effects.push({kind:'text',body,options}),
     queueMedia:async(_chat,options)=>effects.push({kind:'media',options}),
+    hostOps,
   });
   return {identity,chat,pending,tables,writes,effects,handle,failReads(table){failedTable=table;}};
 }
@@ -148,6 +149,33 @@ test('unknown approval kinds are rejected before any execution',async()=>{
   const state=fixture('server_shell');
   await approve(state);
   assertCancelled(state,'unsupported_action');
+});
+
+test('an Owner-approved server command executes once and records the real result',async()=>{
+  const calls=[];
+  const state=fixture('server_command',{}, {execute:async(id,command)=>{calls.push({id,command});return {exit_code:0,duration_ms:17,output:'service healthy'};}});
+  const result=await approve(state);
+  assert.match(result.text,/تم تنفيذ أمر السيرفر/);
+  assert.equal(state.pending.status,'completed');
+  assert.deepEqual(calls,[{id:state.pending.id,command:'docker ps'}]);
+  assert.equal(await approve(state),null);
+  assert.equal(calls.length,1);
+});
+
+test('server control is rechecked for Owner authority and critical operations need their exact code',async()=>{
+  const denied=fixture('server_command',{roles:['employee']},{execute:async()=>{throw new Error('must_not_run');}});
+  await approve(denied);
+  assertCancelled(denied,'server_control_not_allowed');
+
+  const calls=[];
+  const critical=fixture('server_command',{}, {execute:async()=>{calls.push(true);return {exit_code:0,duration_ms:1,output:'ok'};}});
+  critical.pending.approval_level=4;
+  const first=await approve(critical);
+  assert.match(first.text,/نفذ 111111/);
+  assert.equal(critical.pending.status,'pending_confirmation');
+  await critical.handle({identity:critical.identity,chat:critical.chat,text:'نفذ 111111'});
+  assert.equal(critical.pending.status,'completed');
+  assert.equal(calls.length,1);
 });
 
 test('authorized company and any-number sends still queue once after explicit approval',async()=>{

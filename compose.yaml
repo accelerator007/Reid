@@ -26,12 +26,37 @@ services:
         condition: service_started
       tts:
         condition: service_healthy
+      host-ops:
+        condition: service_healthy
+
+  # Private execution boundary for Owner-approved Ubuntu operations. It is
+  # reachable only from the Compose network; no host TCP port is published.
+  host-ops:
+    build: ./infra/host-ops
+    image: reid-host-ops:local
+    container_name: reid-host-ops
+    restart: unless-stopped
+    env_file:
+      - /home/reid/.config/reid-os/host-ops.env
+    privileged: true
+    pid: host
+    volumes:
+      - /:/host
+      - /var/run/docker.sock:/var/run/docker.sock
+      - host-ops-state:/var/lib/reid-host-ops
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:8787/healthz]
+      interval: 20s
+      timeout: 5s
+      retries: 3
 
   tts:
     build: ./infra/tts
     image: reid-tts:local
     container_name: reid-tts
     restart: unless-stopped
+    env_file:
+      - /home/reid/.config/reid-os/tts.env
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
@@ -131,3 +156,4 @@ services:
 
 volumes:
   qr-session:
+  host-ops-state:

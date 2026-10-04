@@ -100,7 +100,7 @@ test('help gives only available operations and clear mutation limits without a b
   const handle = createOperationsHandler({ getSnapshot: async () => { throw new Error('must not read'); } });
   const result = await handle({ identity: { roles: ['owner'] }, text: 'أوامر الإدارة' });
   assert.match(result.text, /معاينة ثم تأكيد/u);
-  assert.match(result.text, /إعادة تشغيل الخدمات، النشر البرمجي، وإدارة النسخ الاحتياطية غير متاحة/u);
+  assert.match(result.text, /أوامر خادم الاستضافة متاحة للمالك/u);
 });
 
 test('collector failure stays contained and does not disclose its raw error', async () => {

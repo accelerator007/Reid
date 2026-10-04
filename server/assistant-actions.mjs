@@ -1,6 +1,7 @@
 import { generateArtifact, requestedArtifactType } from './artifacts.mjs';
 import { createIntentRouter, recipientInText } from './intent.mjs';
 import { readPage, sourcesLine, wrapUntrusted } from './web.mjs';
+import { parseServerRequest, planServerCommand } from './host-ops.mjs';
 
 const ownerRoles=new Set(['owner','super_admin']);
 const workshopManagerRoles=new Set(['owner','super_admin','admin','hr']);
@@ -70,7 +71,7 @@ function parseArtifactRequest(text) {
 }
 
 function actionLabel(kind) {
-  return ({send_text:'إرسال رسالة',send_artifact:'إرسال ملف',generate_artifact:'إنشاء ملف',generate_image:'إنشاء صورة',workshop_create:'إضافة ورشة',workshop_update:'تعديل ورشة',workshop_publish:'نشر ورشة',workshop_cancel:'إلغاء ورشة',note_delete:'حذف ملاحظة'})[kind]||kind;
+  return ({send_text:'إرسال رسالة',send_artifact:'إرسال ملف',generate_artifact:'إنشاء ملف',generate_image:'إنشاء صورة',workshop_create:'إضافة ورشة',workshop_update:'تعديل ورشة',workshop_publish:'نشر ورشة',workshop_cancel:'إلغاء ورشة',note_delete:'حذف ملاحظة',server_command:'أمر خادم'})[kind]||kind;
 }
 
 function safeJson(value) {
@@ -87,7 +88,7 @@ const webAnswerPrompt=[
 
 export const linkInText=text=>/https?:\/\/[^\s<>"']{4,500}/i.exec(String(text||''))?.[0]?.replace(/[).,،]+$/,'')||null;
 
-export function createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,route=createIntentRouter({aiChat}),webSearch=null,fetchPage=readPage,imageBudget=null}) {
+export function createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,route=createIntentRouter({aiChat}),webSearch=null,fetchPage=readPage,imageBudget=null,hostOps=null}) {
   const hasRole=(identity,set)=>identity.roles.some(role=>set.has(role));
   const isOwner=identity=>hasRole(identity,ownerRoles);
 
@@ -214,18 +215,25 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
         return identity.workshops_enabled&&hasRole(identity,workshopManagerRoles)?null:'workshops_permission_revoked';
       case 'note_delete':
         return identity.notes_enabled?null:'notes_permission_revoked';
+      case 'server_command':
+        return isOwner(identity)&&hostOps&&typeof action.payload?.command==='string'?null:'server_control_not_allowed';
       default:
         return 'unsupported_action';
     }
   }
 
-  async function executePending(identity,chat) {
+  async function executePending(identity,chat,approvalText='') {
     const action=await check(admin.from('whatsapp_actions').select('*').eq('requester_id',identity.id).eq('conversation_id',chat.id).eq('status','pending_confirmation').gt('expires_at',new Date().toISOString()).order('created_at',{ascending:false}).limit(1).maybeSingle());
     if(!action)return null;
     const permissionError=await pendingPermissionError(identity,action);
     if(permissionError){
       await check(admin.from('whatsapp_actions').update({status:'cancelled',error_code:permissionError,updated_at:new Date().toISOString()}).eq('id',action.id).eq('status','pending_confirmation'));
       return {handled:true,text:'لم يتم تنفيذ الطلب؛ صلاحياته الحالية لا تسمح به أو لم يعد متاحًا. ألغيت التأكيد السابق، ويمكنك طلبه مجددًا بعد تحديث الصلاحيات.'};
+    }
+    if(action.kind==='server_command'&&action.approval_level>=4){
+      const code=action.id.replace(/-/g,'').slice(0,6).toUpperCase();
+      const supplied=clean(approvalText).toUpperCase();
+      if(!new RegExp(`^(?:نفذ|نفّذ|EXECUTE)\\s+${code}$`,'u').test(supplied))return {handled:true,text:`هذا أمر حرج. للتنفيذ اكتب بالضبط: نفذ ${code}`};
     }
     const claimed=await check(admin.from('whatsapp_actions').update({status:'running',updated_at:new Date().toISOString()}).eq('id',action.id).eq('status','pending_confirmation').select('*').maybeSingle());
     if(!claimed)return {handled:true,text:'هذا الطلب سبق حسمه أو انتهت صلاحيته.'};
@@ -253,6 +261,13 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
         await check(admin.from('assistant_notes').update({status:'archived'}).eq('id',action.payload.note_id).eq('owner_id',identity.id));
         await check(admin.from('whatsapp_actions').update({status:'completed',completed_at:new Date().toISOString(),output_summary:'note_archived',updated_at:new Date().toISOString()}).eq('id',action.id));
         return {handled:true,text:'تم حذف الملاحظة من قائمتك ✅'};
+      }
+      if(action.kind==='server_command'){
+        const result=await hostOps.execute(action.id,action.payload.command);
+        const succeeded=result.exit_code===0;
+        await check(admin.from('whatsapp_actions').update({status:succeeded?'completed':'failed',completed_at:new Date().toISOString(),output_summary:`exit=${result.exit_code}; duration_ms=${result.duration_ms}; ${clean(result.output).slice(0,1800)}`,error_code:succeeded?null:'server_command_failed',updated_at:new Date().toISOString()}).eq('id',action.id));
+        const output=clean(result.output)||'(ما رجع الأمر أي مخرجات)';
+        return {handled:true,text:`${succeeded?'تم تنفيذ أمر السيرفر ✅':'انتهى أمر السيرفر بخطأ'}\nرمز الخروج: ${result.exit_code} · الزمن: ${result.duration_ms}ms\n\n${output.slice(0,6500)}`};
       }
       throw new Error('unsupported_action');
     }catch(error){await admin.from('whatsapp_actions').update({status:'failed',error_code:String(error.message||'action_failed').slice(0,120),updated_at:new Date().toISOString()}).eq('id',action.id);return {handled:true,text:`تعذر تنفيذ الطلب (${action.id.slice(0,8)}). ما تم ادعاء نجاحه، وتقدر تشوف الخطأ في لوحة الاتصالات.`};}
@@ -323,6 +338,29 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     const action=await createAction(identity,chat,'send_text',{body:wanted},`إرسال إلى ${recipient.name} (+${recipient.phone}):\n“${wanted}”`,{recipientPhone:recipient.phone,recipientName:recipient.name});return {handled:true,text:`جاهزة للإرسال إلى ${recipient.name} (+${recipient.phone}):\n\n“${wanted}”\n\nاكتب «أرسلها» للتأكيد أو «إلغاء».`,actionId:action.id};
   }
 
+  async function handleServer(identity,chat,request) {
+    if(!isOwner(identity))return {handled:true,text:'التحكم بخادم الاستضافة متاح للمالك فقط.'};
+    if(!hostOps)return {handled:true,text:'منفّذ أوامر الخادم غير متصل الآن؛ ما تم تنفيذ أي شيء.'};
+    const plan=await planServerCommand(aiChat,request);
+    if(!plan)return {handled:true,text:'الطلب يحتاج تحديدًا أوضح. اذكر الخدمة أو الملف أو الأمر والنتيجة التي تريدها.'};
+    let validation;
+    try{validation=await hostOps.validate(plan.command);}catch{return {handled:true,text:'تعذر التحقق من الأمر على الخادم، لذلك لم أنشئ طلب تنفيذ.'};}
+    const level=validation.risk==='critical'?4:validation.risk==='write'?3:2;
+    const preview=[
+      `خطة خادم — ${plan.summary}`,
+      `المخاطرة: ${validation.risk} · موافقة L${level}`,
+      `الأثر: ${plan.impact}`,
+      `الاستعادة: ${plan.rollback}`,
+      '',
+      'الأمر الحرفي:',
+      plan.command,
+    ].join('\n');
+    const action=await createAction(identity,chat,'server_command',{command:plan.command,risk:validation.risk,command_sha256:validation.command_sha256},preview,{level});
+    const code=action.id.replace(/-/g,'').slice(0,6).toUpperCase();
+    const confirmation=level>=4?`للتنفيذ اكتب بالضبط: نفذ ${code}`:'اكتب «موافقة» للتنفيذ أو «إلغاء».';
+    return {handled:true,text:`${preview}\n\n${confirmation}`,actionId:action.id};
+  }
+
   async function handleWebSearch(identity,chat,userText,query) {
     if(!webSearch)return {handled:true,text:'البحث في الويب غير مفعّل حاليًا. يحتاج مفتاح مزوّد بحث في إعدادات الخدمة.'};
     let found;
@@ -382,7 +420,7 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     // action exists, so it checks again rather than trusting its caller.
     if(args.recipient&&!recipientInText(asked,args.recipient))return null;
     if(args.url&&!asked.includes(String(args.url).replace(/\/$/,'')))return null;
-    if(intent==='confirm')return executePending(identity,chat);
+    if(intent==='confirm')return executePending(identity,chat,decision.userText||'');
     if(intent==='cancel')return cancelPending(identity,chat);
     if(intent==='action_status')return statusReport(identity);
     if(intent==='web_search')return handleWebSearch(identity,chat,decision.userText||args.query,args.query);
@@ -409,13 +447,15 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     const value=chat.jid?.endsWith('@g.us')?clean(text).replace(/^(?:ري[ّ]?د|reid)(?:\s*[:،,]\s*|\s+)/iu,''):clean(text);if(!value)return null;
     await admin.from('whatsapp_actions').update({status:'expired',error_code:'confirmation_expired',updated_at:new Date().toISOString()}).eq('requester_id',identity.id).eq('status','pending_confirmation').lte('expires_at',new Date().toISOString());
     if(isCancellation(value)){const cancelled=await cancelPending(identity,chat);if(cancelled)return cancelled;}
-    if(isConfirmation(value))return executePending(identity,chat);
+    if(isConfirmation(value)||/^(?:نفذ|نفّذ|execute)\s+[A-F0-9]{6}$/iu.test(value))return executePending(identity,chat,value);
     if(/(?:حالة|وش صار|وين وصل).*(?:طلب|إرسال|ارسال)|^(?:طلباتي|حالة الطلبات)$/iu.test(value))return statusReport(identity);
     const note=parseNoteCommand(value);if(note)return handleNote(identity,chat,note);
     const workshop=parseWorkshopCommand(value);if(workshop)return handleWorkshop(identity,chat,workshop);
     const artifact=parseArtifactRequest(value);if(artifact)return generate(identity,chat,artifact);
     const outbound=parseOutboundRequest(value);
     if(outbound)return handleOutbound(identity,chat,outbound);
+    const serverRequest=parseServerRequest(value);
+    if(serverRequest)return handleServer(identity,chat,serverRequest);
     // A link someone sends is a request to read it. No round trip to the router
     // is needed to know that.
     const link=linkInText(value);

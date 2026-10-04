@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inboundText } from '../policy.mjs';
-import { createImageCache, mediaPlaceholder, spokenLanguage, synthesizeVoice, transcribeAudio, transcriptBody, voiceRequested } from '../media.mjs';
+import { createImageCache, mediaPlaceholder, spokenLanguage, synthesizeVoice, transcribeAudio, transcriptBody, voiceRequested, voiceScript } from '../media.mjs';
 import { createTyping, pacingDelay, reactions, splitReply } from '../signals.mjs';
 
 const direct = extra => ({ key: { id: 'm1', remoteJid: '96812345678@s.whatsapp.net' }, ...extra });
@@ -67,6 +67,9 @@ test('an explicit Arabic or English request selects a voice reply', () => {
   assert.equal(voiceRequested('Reply with a voice note please'), true);
   assert.equal(voiceRequested('هل تستطيع فهم الرسائل الصوتية؟'), false, 'a capability question is not a send command');
   assert.equal(voiceRequested('لخص لي اليوم'), false);
+  assert.equal(voiceScript('ارسل لي رسالة صوتية تقول: هلا علي، أنا ريد.'), 'هلا علي، أنا ريد.');
+  assert.equal(voiceScript('سجل رسالة صوتية قصيرة تقول إن ريد جاهز'), 'إن ريد جاهز');
+  assert.equal(voiceScript('Reply with a voice note please'), null);
   assert.equal(spokenLanguage('هلا كيف الحال'), 'ar');
   assert.equal(spokenLanguage('Hello, how are you?'), 'en');
 });

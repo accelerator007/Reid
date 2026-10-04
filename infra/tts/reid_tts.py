@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import subprocess
 import threading
+import urllib.error
+import urllib.parse
+import urllib.request
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,9 +25,12 @@ VOICE_PATHS = {
 VOICES = {language: PiperVoice.load(path) for language, path in VOICE_PATHS.items()}
 SYNTHESIS_LOCK = threading.Lock()
 MAX_TEXT = 1800
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
+ELEVENLABS_MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2").strip()
 
 
-def synthesize(text: str, language: str) -> bytes:
+def synthesize_local(text: str, language: str) -> bytes:
     voice = VOICES.get(language, VOICES["ar"])
     wav_io = io.BytesIO()
     # A slightly quicker cadence sounds more like a voice note than narration.
@@ -39,6 +46,44 @@ def synthesize(text: str, language: str) -> bytes:
         input=wav_io.getvalue(), capture_output=True, check=True, timeout=60,
     )
     return result.stdout
+
+
+def synthesize_elevenlabs(text: str) -> bytes:
+    if not ELEVENLABS_API_KEY or not ELEVENLABS_VOICE_ID:
+        raise ValueError("elevenlabs_not_configured")
+    voice = urllib.parse.quote(ELEVENLABS_VOICE_ID, safe="")
+    endpoint = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=opus_48000_32"
+    payload = json.dumps({
+        "text": text,
+        "model_id": ELEVENLABS_MODEL_ID,
+        "voice_settings": {
+            "stability": 0.42,
+            "similarity_boost": 0.82,
+            "style": 0.30,
+            "use_speaker_boost": True,
+        },
+    }).encode()
+    request = urllib.request.Request(endpoint, data=payload, method="POST", headers={
+        "Accept": "audio/ogg",
+        "Content-Type": "application/json",
+        "xi-api-key": ELEVENLABS_API_KEY,
+    })
+    with urllib.request.urlopen(request, timeout=75) as response:
+        audio = response.read(12 * 1024 * 1024 + 1)
+    if len(audio) > 12 * 1024 * 1024 or audio[:4] != b"OggS":
+        raise OSError("elevenlabs_invalid_audio")
+    return audio
+
+
+def synthesize(text: str, language: str) -> tuple[bytes, str]:
+    if ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID:
+        try:
+            return synthesize_elevenlabs(text), "elevenlabs"
+        except (OSError, TimeoutError, urllib.error.URLError, urllib.error.HTTPError):
+            # Voice delivery is more important than provider availability. The
+            # pinned local voice remains a private, deterministic fallback.
+            pass
+    return synthesize_local(text, language), "piper"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -59,7 +104,12 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != "/healthz":
             self.reply_json(404, {"error": "not_found"})
             return
-        self.reply_json(200, {"ok": True, "voices": sorted(VOICES)})
+        self.reply_json(200, {
+            "ok": True,
+            "voices": sorted(VOICES),
+            "primary": "elevenlabs" if ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID else "piper",
+            "fallback": "piper",
+        })
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/synthesize":
@@ -74,15 +124,16 @@ class Handler(BaseHTTPRequestHandler):
             language = str(data.get("language", "ar")).lower()
             if not text or len(text) > MAX_TEXT or language not in VOICES:
                 raise ValueError("invalid_request")
-            audio = synthesize(text, language)
+            audio, provider = synthesize(text, language)
             self.send_response(200)
             self.send_header("Content-Type", "audio/ogg; codecs=opus")
+            self.send_header("X-Reid-Voice-Provider", provider)
             self.send_header("Content-Length", str(len(audio)))
             self.end_headers()
             self.wfile.write(audio)
         except (ValueError, json.JSONDecodeError):
             self.reply_json(400, {"error": "invalid_request"})
-        except (subprocess.SubprocessError, OSError):
+        except (subprocess.SubprocessError, OSError, urllib.error.URLError):
             self.reply_json(503, {"error": "synthesis_failed"})
 
 
