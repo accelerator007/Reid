@@ -27,7 +27,7 @@ SYNTHESIS_LOCK = threading.Lock()
 MAX_TEXT = 1800
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "").strip()
 ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
-ELEVENLABS_MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2").strip()
+ELEVENLABS_MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_v4").strip()
 
 
 def synthesize_local(text: str, language: str) -> bytes:
@@ -48,19 +48,32 @@ def synthesize_local(text: str, language: str) -> bytes:
     return result.stdout
 
 
-def synthesize_elevenlabs(text: str) -> bytes:
+def elevenlabs_script(text: str, language: str) -> str:
+    # v4 responds well to a short delivery cue. Keep it out of the WhatsApp
+    # transcript: it controls performance and is never part of what Reid says.
+    # The Fahad voice already carries the Saudi/Gulf accent; Reid's response
+    # wording supplies the light Bedouin dialect without caricaturing it.
+    if ELEVENLABS_MODEL_ID in {"eleven_v3", "eleven_v4"}:
+        cue = "[warmly] [conversational]" if language == "ar" else "[conversational]"
+        return f"{cue} {text}"
+    return text
+
+
+def synthesize_elevenlabs(text: str, language: str) -> bytes:
     if not ELEVENLABS_API_KEY or not ELEVENLABS_VOICE_ID:
         raise ValueError("elevenlabs_not_configured")
     voice = urllib.parse.quote(ELEVENLABS_VOICE_ID, safe="")
     endpoint = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=opus_48000_32"
     payload = json.dumps({
-        "text": text,
+        "text": elevenlabs_script(text, language),
         "model_id": ELEVENLABS_MODEL_ID,
+        "language_code": language,
         "voice_settings": {
-            "stability": 0.42,
+            "stability": 0.50,
             "similarity_boost": 0.82,
-            "style": 0.30,
+            "style": 0.0,
             "use_speaker_boost": True,
+            "speed": 0.96,
         },
     }).encode()
     request = urllib.request.Request(endpoint, data=payload, method="POST", headers={
@@ -78,7 +91,7 @@ def synthesize_elevenlabs(text: str) -> bytes:
 def synthesize(text: str, language: str) -> tuple[bytes, str]:
     if ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID:
         try:
-            return synthesize_elevenlabs(text), "elevenlabs"
+            return synthesize_elevenlabs(text, language), "elevenlabs"
         except (OSError, TimeoutError, urllib.error.URLError, urllib.error.HTTPError):
             # Voice delivery is more important than provider availability. The
             # pinned local voice remains a private, deterministic fallback.
@@ -108,6 +121,7 @@ class Handler(BaseHTTPRequestHandler):
             "ok": True,
             "voices": sorted(VOICES),
             "primary": "elevenlabs" if ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID else "piper",
+            "model": ELEVENLABS_MODEL_ID if ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID else "piper",
             "fallback": "piper",
         })
 
