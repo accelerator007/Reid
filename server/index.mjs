@@ -457,6 +457,10 @@ async function processJob() {
       if(actionResult?.handled){
         if(actionResult.text){
           const mustStayText=Boolean(actionResult.actionId)||/https?:\/\//iu.test(actionResult.text);
+          if(wantsVoice&&mustStayText){
+            const spoken=actionResult.actionId?'جهزت لك العملية، وأرسلت المعاينة والتأكيد كتابة عشان تراجعها بوضوح.':'تم، جهزت لك الرابط وأرسلته كتابة عشان تقدر تفتحه.';
+            await queuePreferredReply(chat,spoken,{voice:true,dedupeKey:`assistant-action:${job.id}:notice`,replyTo:job.message_id});
+          }
           await queuePreferredReply(chat,actionResult.text,{voice:wantsVoice&&!mustStayText,actionId:actionResult.actionId||null,dedupeKey:`assistant-action:${job.id}`,replyTo:job.message_id});
         }
         await react(chat.jid,job.message_id,chat.jid.endsWith('@g.us')?`${job.sender_phone}@s.whatsapp.net`:undefined,reactions.done);
