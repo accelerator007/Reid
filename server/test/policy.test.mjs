@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isOwner, inboundText, maySend, cleanReply, whatsappText, internalTokenValid } from '../policy.mjs';
+import { isOwner, inboundText, maySend, cleanReply, whatsappText, internalTokenValid, groupParticipationCommand } from '../policy.mjs';
 
 test('owner access fails closed for suspension and staff', () => {
   assert.equal(isOwner(['owner'], 'active'), true);
   assert.equal(isOwner(['owner'], 'suspended'), false);
   assert.equal(isOwner(['admin'], 'active'), false);
 });
-test('group text requires Reid by name, mention, or reply to Reid', () => {
+test('group text records whether Reid was addressed so the allow-list can decide', () => {
   const base = { key: { id:'123', remoteJid:'96812345678@s.whatsapp.net' }, message:{ conversation:'مرحبا' } };
   assert.equal(inboundText(base).text, 'مرحبا');
   assert.equal(inboundText({...base, requestId:'forged'}), null);
@@ -17,12 +17,18 @@ test('group text requires Reid by name, mention, or reply to Reid', () => {
   assert.equal(inboundText(group).senderPhone,'96896709444');
   assert.equal(inboundText({...group,message:{conversation:'hello Reid'}}).isGroup,true);
   assert.equal(inboundText({...group,message:{conversation:'hello reid'}}).addressed,true);
-  assert.equal(inboundText({...group,message:{conversation:'كلام عادي'}}),null);
+  assert.equal(inboundText({...group,message:{conversation:'كلام عادي'}}).addressed,false);
   const mentioned={...group,message:{extendedTextMessage:{text:'هلا',contextInfo:{mentionedJid:['96897308003@s.whatsapp.net']}}}};
   assert.equal(inboundText(mentioned,['96897308003:1@s.whatsapp.net']).addressed,true);
   const reply={...group,message:{extendedTextMessage:{text:'انبح',contextInfo:{stanzaId:'bot-message',participant:'96897308003:1@s.whatsapp.net'}}}};
   assert.equal(inboundText(reply,['96897308003@s.whatsapp.net']).repliedToBot,true);
-  assert.equal(inboundText({...reply,message:{extendedTextMessage:{text:'انبح',contextInfo:{stanzaId:'other-message',participant:'96890000000@s.whatsapp.net'}}}},['96897308003@s.whatsapp.net']),null);
+  assert.equal(inboundText({...reply,message:{extendedTextMessage:{text:'انبح',contextInfo:{stanzaId:'other-message',participant:'96890000000@s.whatsapp.net'}}}},['96897308003@s.whatsapp.net']).addressed,false);
+});
+test('group participation commands are short and unambiguous',()=>{
+  for(const value of ['ريد خذ راحتك','يا ريد تكلم','ريّد تكلم براحتك','Reid reply to everyone'])assert.equal(groupParticipationCommand(value),'ambient',value);
+  for(const value of ['ريد اسكت','يا ريد لا ترد إلا إذا ناديتك','Reid only reply when mentioned'])assert.equal(groupParticipationCommand(value),'call_only',value);
+  assert.equal(groupParticipationCommand('ريد تكلم عن خطة المشروع'),null);
+  assert.equal(groupParticipationCommand('اسكت الموظف عن الكلام'),null);
 });
 test('human takeover, expiry and ambiguous deliveries suppress auto resend', () => {
   const row={status:'queued', origin:'bot', expires_at:new Date(Date.now()+60000).toISOString()};

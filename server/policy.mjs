@@ -16,6 +16,24 @@ export function isOwner(roles, status) {
 const jidPhone=value=>String(value||'').split('@')[0].split(':')[0].replace(/\D/g,'');
 const reidName=/(?:^|[\s@])(?:reid|ري[ّ]?د)(?=$|\s)/iu;
 
+// The owner can switch an allow-listed group between ambient participation
+// and call-only participation with a short, natural command. Keep this parser
+// deliberately narrow so ordinary phrases such as "تكلم عن المشروع" never
+// change a durable group setting.
+export function groupParticipationCommand(text) {
+  const value=String(text||'')
+    .replace(/[\u0000-\u001f\u007f]/g,' ')
+    .replace(/[.!؟?،,]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim()
+    .replace(/^(?:يا\s+)?(?:ريد|ريّد|reid)\s+/iu,'')
+    .trim();
+  if(!value||value.length>90)return null;
+  if(/^(?:خذ\s+راحتك|تكلم|تكلّم|تكلم\s+براحتك|شارك(?:نا)?|رد\s+على\s+(?:الكل|الجميع)|reply\s+to\s+everyone)$/iu.test(value))return 'ambient';
+  if(/^(?:اسكت|اصمت|لا\s+تتكلم|لا\s+ترد(?:\s+إلا\s+(?:إذا|اذا)\s+(?:ناديتك|قلت\s+ريد))?|only\s+reply\s+when\s+(?:mentioned|called)|be\s+quiet)$/iu.test(value))return 'call_only';
+  return null;
+}
+
 // Audio and image messages carry the same authorization surface as text: the
 // sender is still the authenticated participant, and a caption is still
 // untrusted content. Only the payload shape differs.
@@ -26,8 +44,9 @@ const mediaNode = value => {
 };
 
 export function inboundText(message, botJids=[]) {
-  // Process only new direct text or an explicitly invoked Owner-group message.
-  // History, status and protocol events must never trigger autonomous replies.
+  // Process only new direct or allow-list-eligible group content. Whether an
+  // unaddressed group message may reply is decided against the durable group
+  // record later; protocol parsing alone must not make that authorization call.
   if (!message?.key?.id || message.key.fromMe || message.requestId) return null;
   let jid = message.key.remoteJid || '';
   const isGroup=/^[0-9]+@g\.us$/.test(jid);
@@ -51,8 +70,7 @@ export function inboundText(message, botJids=[]) {
     const mentioned=(context.mentionedJid||[]).some(value=>botPhones.has(jidPhone(value)));
     const repliedToBot=Boolean(context.stanzaId)&&botPhones.has(jidPhone(context.participantPn||context.participant));
     const addressed=mentioned||reidName.test(text)||repliedToBot;
-    if(!addressed)return null;
-    return {jid,text,id:message.key.id,senderPhone,isGroup:true,addressed:true,repliedToBot,...carried};
+    return {jid,text,id:message.key.id,senderPhone,isGroup:true,addressed,repliedToBot,...carried};
   }
   return { jid, text, id: message.key.id, senderPhone:jidPhone(jid),isGroup:false,addressed:true,...carried };
 }

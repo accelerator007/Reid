@@ -21,9 +21,9 @@ test('a photo carries its caption as the message text', () => {
   assert.equal(item.text, 'وش رأيك في التصميم؟');
 });
 
-test('media in a group still requires an explicit invocation', () => {
+test('group media carries its addressed state for the durable group policy', () => {
   const silent = inboundText(group({ message: { audioMessage: { mimetype: 'audio/ogg' } } }));
-  assert.equal(silent, null, 'an unaddressed group voice note must stay ignored');
+  assert.equal(silent?.addressed, false);
   const mentioned = inboundText(
     group({ message: { audioMessage: { mimetype: 'audio/ogg', contextInfo: { mentionedJid: ['96897308003@s.whatsapp.net'] } } } }),
     ['96897308003:1@s.whatsapp.net'],

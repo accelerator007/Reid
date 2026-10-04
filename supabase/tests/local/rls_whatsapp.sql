@@ -31,6 +31,10 @@ select public.t_visible('whatsapp','Owner manages every linked administrator','s
 insert into public.whatsapp_qr_groups(jid,display_name,created_by) values
   ('120363000000001@g.us','Reid_Owner','70000000-0000-0000-0000-000000000001');
 select public.t_visible('whatsapp','Owner reads the exact QR group allow-list','select 1 from public.whatsapp_qr_groups',1);
+select public.t_changed('whatsapp','Owner controls ambient participation and group voice mode',
+  $$update public.whatsapp_qr_groups set respond_to_all=true,guest_chat_enabled=true,reply_mode='voice' where jid='120363000000001@g.us'$$,1);
+select public.t_true('whatsapp','Group mode settings persist together',
+  $$select respond_to_all and guest_chat_enabled and reply_mode='voice' from public.whatsapp_qr_groups where jid='120363000000001@g.us'$$);
 
 select public.test_sign_in('70000000-0000-0000-0000-000000000002');
 select public.t_visible('whatsapp','Admin cannot read owner WhatsApp events','select 1 from public.whatsapp_events',0);

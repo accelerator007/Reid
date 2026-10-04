@@ -111,15 +111,15 @@ test('human mode stores inbound messages without queuing an automated reply',asy
   assert.deepEqual(rates,[]);
 });
 
-test('authorized groups use the bounded registered name and retain rate limiting',async()=>{
-  const {persist,tables,authorizations,rates}=setup({group:{display_name:'G'.repeat(140)},rateAllowed:false});
+test('authorized reply-all groups use a higher bounded group rate',async()=>{
+  const {persist,tables,authorizations,rates}=setup({group:{display_name:'G'.repeat(140),respond_to_all:true},rateAllowed:false});
   const item={...inbound,jid:'group@g.us',isGroup:true};
   await persist({pushName:'Sender'},item);
   assert.deepEqual(authorizations,[item]);
   assert.equal(tables.qr_conversations[0].display_name,'G'.repeat(120));
   assert.equal(tables.qr_messages.length,1);
   assert.deepEqual(tables.qr_jobs,[]);
-  assert.deepEqual(rates,[['in:chat-new',6]]);
+  assert.deepEqual(rates,[['in:chat-new',30]]);
 });
 
 test('empty display names fall back to the WhatsApp identifier',async()=>{

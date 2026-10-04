@@ -25,7 +25,8 @@ export function createInboundPersistence({admin,check,allowedOwnerGroup,rate}) {
       stage='conversation_update';
       await check(admin.from('qr_conversations').update({last_message:item.text.slice(0,180),updated_at:new Date().toISOString()}).eq('id',chat.id));
       stage='job_upsert';
-      if(chat.bot_mode==='active'&&rate(`in:${chat.id}`,6))await check(admin.from('qr_jobs').upsert({conversation_id:chat.id,message_id:item.id,input:item.text,sender_phone:item.senderPhone},{onConflict:'message_id',ignoreDuplicates:true}));
+      const limit=item.isGroup&&group?.respond_to_all?30:6;
+      if(chat.bot_mode==='active'&&rate(`in:${chat.id}`,limit))await check(admin.from('qr_jobs').upsert({conversation_id:chat.id,message_id:item.id,input:item.text,sender_phone:item.senderPhone},{onConflict:'message_id',ignoreDuplicates:true}));
     }catch(error){throw new Error(`inbound_${stage}_failed`,{cause:error});}
   };
 }
