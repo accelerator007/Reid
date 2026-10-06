@@ -93,3 +93,15 @@ export function createOperationsSnapshot({admin,getConnection,aiUrl,aiToken,ttsU
     return pending;
   };
 }
+
+export function publicOperationsHealth(snapshot) {
+  const components={
+    website:snapshot?.components?.website?.status==='healthy',
+    database:snapshot?.components?.database?.status==='healthy',
+    whatsapp:snapshot?.components?.whatsapp?.status==='healthy',
+    aiLap:snapshot?.components?.ai?.status==='healthy'&&snapshot?.components?.runner?.status==='healthy',
+    tts:snapshot?.components?.tts?.status==='healthy',
+    queues:snapshot?.queue?.pending!==null&&snapshot?.queue?.pending<=20&&snapshot?.queue?.failed===0&&snapshot?.queue?.uncertain===0,
+  };
+  return {ok:Object.values(components).every(Boolean),components,checkedAt:snapshot?.checkedAt||new Date(0).toISOString()};
+}

@@ -31,8 +31,8 @@ check_status 'https://staging.reidpro.com/' 200
 # This endpoint intentionally exposes only pass/fail booleans. It covers the
 # private services that a public route alone cannot prove: WhatsApp, ai-lap,
 # TTS, the database and the durable work queues.
-monitor_payload="$(curl "${curl_common[@]}" --fail-with-body 'https://reidpro.com/api/monitor/health')"
-python3 - "$monitor_payload" <<'PY'
+validate_monitor_payload() {
+python3 - "$1" <<'PY'
 import json, sys
 payload = json.loads(sys.argv[1])
 expected = {'website', 'database', 'whatsapp', 'aiLap', 'tts', 'queues'}
@@ -40,6 +40,27 @@ components = payload.get('components') or {}
 if payload.get('ok') is not True or set(components) != expected or not all(components.values()):
     raise SystemExit(f"Deep health failed: {components}")
 PY
+}
+
+monitor_file="$(mktemp)"
+trap 'rm -f "$monitor_file"' EXIT
+monitor_status="$(curl "${curl_common[@]}" --output "$monitor_file" --write-out '%{http_code}' 'https://reidpro.com/api/monitor/health')"
+if [ "$monitor_status" = 200 ]; then
+  validate_monitor_payload "$(cat "$monitor_file")"
+elif [ "$monitor_status" = 403 ] && [ "${ALLOW_EDGE_CHALLENGE:-0}" = 1 ]; then
+  [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_PUBLISHABLE_KEY:-}" ] || { echo 'Supabase heartbeat credentials are required for the Cloudflare fallback.'; exit 1; }
+  monitor_payload="$(curl --fail-with-body --silent --show-error --max-time 20 \
+    -X POST -H "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+    -H "Authorization: Bearer ${SUPABASE_PUBLISHABLE_KEY}" \
+    -H 'Content-Type: application/json' \
+    --data '{}' "${SUPABASE_URL}/rest/v1/rpc/reid_public_health")"
+  validate_monitor_payload "$monitor_payload"
+  echo 'Cloudflare challenged the primary deep probe; the fresh Supabase heartbeat verified all private components.'
+else
+  echo "Deep health endpoint returned ${monitor_status}."
+  cat "$monitor_file"
+  exit 1
+fi
 
 headers="$(curl "${curl_common[@]}" --head 'https://reidpro.com/')"
 if grep -qE '^HTTP/[^ ]+ 403' <<<"$headers" && [ "${ALLOW_EDGE_CHALLENGE:-0}" = 1 ]; then

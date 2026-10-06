@@ -9,7 +9,7 @@ import { processReminders } from './reminders.mjs';
 import { createAssistantActions } from './assistant-actions.mjs';
 import { createInboundPersistence } from './inbound.mjs';
 import { createOperationsHandler } from './operations.mjs';
-import { createOperationsSnapshot, sampleLocalHost } from './operations-snapshot.mjs';
+import { createOperationsSnapshot, publicOperationsHealth, sampleLocalHost } from './operations-snapshot.mjs';
 import { clockContext, clockReply, parseClockQuestion } from './clock.mjs';
 import { createImageCache, mediaLimits, mediaPlaceholder, replyModeCommand, spokenLanguage, synthesizeVoice, transcribeAudio, transcriptBody, voiceReplyWanted, voiceRequested, voiceScript } from './media.mjs';
 import { createTyping, pacingDelay, reactions, splitReply } from './signals.mjs';
@@ -266,6 +266,17 @@ const handleMeetingTurn=createMeetingTurnHandler({admin,check,aiChat,sessionKey:
 const handleAssistantAction=createAssistantActions({admin,check,aiChat,aiImage,queueText,queueMedia,ensureConversation,verifyNumber,webSearch,imageBudget,hostOps,meetings});
 const runProactive=createProactive({admin,check,queueText,ensureConversation});
 const getOperationsSnapshot=createOperationsSnapshot({admin,getConnection:()=>connection,aiUrl:env.AI_URL,aiToken:env.AI_TOKEN,ttsUrl:env.REID_TTS_URL||'http://tts:5050',sampleHost:()=>sampleLocalHost()});
+async function persistOperationsHeartbeat(snapshot) {
+  snapshot??=await getOperationsSnapshot();
+  const health=publicOperationsHealth(snapshot);
+  const {error}=await admin.from('service_health_snapshots').upsert({id:'production',checked_at:health.checkedAt,ok:health.ok,components:health.components,updated_at:new Date().toISOString()});
+  if(error)throw error;
+  return health;
+}
+const operationsHeartbeat=setInterval(()=>{persistOperationsHeartbeat().catch(()=>console.error('operations_heartbeat_failed'));},120000);
+operationsHeartbeat.unref();
+const initialOperationsHeartbeat=setTimeout(()=>{persistOperationsHeartbeat().catch(()=>console.error('operations_heartbeat_failed'));},1000);
+initialOperationsHeartbeat.unref();
 const handleOperations=createOperationsHandler({getSnapshot:getOperationsSnapshot});
 app.get('/healthz',(_req,res)=>res.json({ok:true}));
 // External monitoring gets only component booleans. Counts, timestamps, phone
@@ -274,16 +285,8 @@ app.get('/api/monitor/health',async(req,res)=>{
   if(!rate(`monitor:${req.ip}`,20))return res.status(429).json({ok:false});
   try{
     const snapshot=await getOperationsSnapshot();
-    const components={
-      website:snapshot.components.website.status==='healthy',
-      database:snapshot.components.database.status==='healthy',
-      whatsapp:snapshot.components.whatsapp.status==='healthy',
-      aiLap:snapshot.components.ai.status==='healthy'&&snapshot.components.runner.status==='healthy',
-      tts:snapshot.components.tts.status==='healthy',
-      queues:snapshot.queue.pending!==null&&snapshot.queue.pending<=20&&snapshot.queue.failed===0&&snapshot.queue.uncertain===0,
-    };
-    const ok=Object.values(components).every(Boolean);
-    res.status(ok?200:503).json({ok,components,checkedAt:snapshot.checkedAt});
+    const health=await persistOperationsHeartbeat(snapshot);
+    res.status(health.ok?200:503).json(health);
   }catch{res.status(503).json({ok:false});}
 });
 // Public chat is a separate, fixed-context capability, never an administrative

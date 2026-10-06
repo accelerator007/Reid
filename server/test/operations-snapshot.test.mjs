@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createOperationsSnapshot, hostTelemetry, sampleLocalHost } from '../operations-snapshot.mjs';
+import { createOperationsSnapshot, hostTelemetry, publicOperationsHealth, sampleLocalHost } from '../operations-snapshot.mjs';
 
 const epoch=Date.parse('2026-09-26T10:00:00Z');
 function fixture({failure,runner,fetchImpl,sampleHost,clock=()=>epoch}={}) {
@@ -54,6 +54,20 @@ test('network failure does not hide independent database and queue health',async
   assert.equal(result.components.ai.status,'unavailable');
   assert.equal(result.components.tts.status,'unavailable');
   assert.equal(result.components.database.status,'healthy');
+});
+
+test('public health exposes only fixed booleans and fails closed for queues or the runner',async()=>{
+  const snapshot=await fixture().collect();
+  const healthy=publicOperationsHealth({...snapshot,queue:{pending:0,failed:0,uncertain:0}});
+  assert.deepEqual(Object.keys(healthy.components),['website','database','whatsapp','aiLap','tts','queues']);
+  assert.equal(healthy.ok,true);
+  assert.ok(Object.values(healthy.components).every(value=>typeof value==='boolean'));
+  assert.ok(!JSON.stringify(healthy).includes('connection'));
+
+  const unhealthy=publicOperationsHealth({...snapshot,components:{...snapshot.components,runner:{status:'unknown'}},queue:{pending:null,failed:0,uncertain:0}});
+  assert.equal(unhealthy.ok,false);
+  assert.equal(unhealthy.components.aiLap,false);
+  assert.equal(unhealthy.components.queues,false);
 });
 
 test('old or future heartbeats and invalid measurements are not fresh telemetry',()=>{

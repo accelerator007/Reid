@@ -36,8 +36,9 @@ jobs:
       - name: Dump schema and data
         run: |
           mkdir -p backup
-          supabase db dump --project-ref cfxntjnewkmlvkogfxyu --schema public -f backup/schema.sql
-          supabase db dump --project-ref cfxntjnewkmlvkogfxyu --schema public -f backup/data.sql --data-only --use-copy
+          supabase link --project-ref cfxntjnewkmlvkogfxyu
+          supabase db dump --linked --schema public -f backup/schema.sql
+          supabase db dump --linked --schema public -f backup/data.sql --data-only --use-copy
           test -s backup/schema.sql
           test -s backup/data.sql
         env: {SUPABASE_ACCESS_TOKEN: "${{ secrets.SUPABASE_ACCESS_TOKEN }}"}
