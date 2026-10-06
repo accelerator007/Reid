@@ -510,7 +510,12 @@ async function processJob() {
     const photo=inboundImages.take(job.message_id);
     let decision=null;
     if(identity&&!explicitVoice){
-      const actionResult=await handleAssistantAction({identity,chat,text:job.input});
+      let actionDocumentContext='';
+      if(/(?:الملف|المرفق|الوثيقة|file|document|attachment)/iu.test(job.input)){
+        const actionDocuments=await check(admin.from('qr_conversation_documents').select('file_name,sender_name,sender_phone,extracted_text,created_at').eq('conversation_id',chat.id).order('created_at',{ascending:false}).limit(3));
+        actionDocumentContext=documentContext(actionDocuments);
+      }
+      const actionResult=await handleAssistantAction({identity,chat,text:job.input,documentContext:actionDocumentContext});
       decision=actionResult?.decision||null;
       if(actionResult?.handled){
         if(actionResult.text){
