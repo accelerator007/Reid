@@ -4,7 +4,7 @@
 // Owner only; the service on the Reid host enforces it.
 import React from 'react';
 import {
-  ArrowLeft, ArrowRight, Bot, ChevronDown, Image as ImageIcon, LoaderCircle, MessageCircle, Mic, QrCode, Search, Send,
+  ArrowLeft, ArrowRight, Bot, ChevronDown, FileText, Image as ImageIcon, LoaderCircle, MessageCircle, Mic, QrCode, Search, Send,
   UserRound, UsersRound, Wifi, X,
 } from 'lucide-react';
 import { localError } from '../local-api';
@@ -277,11 +277,18 @@ function Bubble({ lang, message, group }: { lang: Lang; message: ChatMessage; gr
   const outbound = message.direction === 'outbound';
   return (
     <article className="bubble" data-direction={message.direction}>
-      {group && !outbound && message.sender_phone && <span className="bubble__sender"><bdi dir="ltr">{formatPhone(message.sender_phone)}</bdi></span>}
+      {group && !outbound && (message.sender_name || message.sender_phone) && <span className="bubble__sender">
+        <bdi dir="auto">{message.sender_name || formatPhone(message.sender_phone || null)}</bdi>
+        {message.sender_name && message.sender_phone ? <small dir="ltr">{formatPhone(message.sender_phone)}</small> : null}
+      </span>}
       {message.media_kind && (
         <span className="bubble__media">
-          {message.media_kind === 'audio' ? <Mic aria-hidden="true" /> : <ImageIcon aria-hidden="true" />}
-          {message.media_kind === 'audio' ? tr(lang, 'رسالة صوتية، مفرّغة نصًا', 'Voice note, transcribed') : tr(lang, 'صورة، موصوفة نصًا', 'Photo, described')}
+          {message.media_kind === 'audio' ? <Mic aria-hidden="true" /> : message.media_kind === 'document' ? <FileText aria-hidden="true" /> : <ImageIcon aria-hidden="true" />}
+          {message.media_kind === 'audio'
+            ? tr(lang, 'رسالة صوتية، مفرّغة نصًا', 'Voice note, transcribed')
+            : message.media_kind === 'document'
+              ? tr(lang, 'ملف، تمت قراءة محتواه', 'Document, content extracted')
+              : tr(lang, 'صورة، موصوفة نصًا', 'Photo, described')}
         </span>
       )}
       <p dir="auto">{message.body}</p>

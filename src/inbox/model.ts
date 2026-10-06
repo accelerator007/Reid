@@ -12,7 +12,7 @@ export type Chat = {
 };
 export type ChatMessage = {
   id: string; direction: 'inbound' | 'outbound'; body: string; status: string; created_at: string;
-  media_kind?: 'audio' | 'image' | null; sender_phone?: string | null; quality_score?: number | null;
+  media_kind?: 'audio' | 'image' | 'document' | null; sender_phone?: string | null; sender_name?: string | null; quality_score?: number | null;
 };
 export type OutboxItem = { id: string; conversation_id: string; status: string; origin?: 'human' | 'bot'; error: string | null; created_at: string };
 

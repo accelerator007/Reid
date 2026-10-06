@@ -1,7 +1,7 @@
 // Voice notes and photos reach the assistant through the same local adapter
 // that already serves chat: Whisper for audio, the vision-capable chat model
 // for images. Nothing is sent to a third party, and nothing is stored at rest.
-export const mediaLimits = { audio: 16 * 1024 * 1024, image: 5 * 1024 * 1024 };
+export const mediaLimits = { audio: 16 * 1024 * 1024, image: 5 * 1024 * 1024, document: 12 * 1024 * 1024 };
 
 export function spokenLanguage(text) {
   const value = String(text || '');
@@ -70,7 +70,9 @@ export async function synthesizeVoice(text, { url, fetchImpl = fetch, timeout = 
 export function mediaPlaceholder(kind, caption = '') {
   const text = String(caption || '').trim();
   if (text) return text.slice(0, 8000);
-  return kind === 'audio' ? 'رسالة صوتية' : 'صورة';
+  if (kind === 'audio') return 'رسالة صوتية';
+  if (kind === 'document') return 'ملف';
+  return 'صورة';
 }
 
 export function transcriptBody(transcript, caption = '') {

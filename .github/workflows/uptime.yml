@@ -19,6 +19,23 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           ALLOW_EDGE_CHALLENGE: '1'
+      - name: Verify the latest weekly backup
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'weekly-backup.yml',
+              per_page: 1,
+            });
+            const latest = runs.data.workflow_runs[0];
+            if (!latest) core.setFailed('No weekly backup run exists.');
+            else {
+              const age = Date.now() - Date.parse(latest.created_at);
+              if (age > 8 * 24 * 60 * 60 * 1000) core.setFailed('The latest backup is older than eight days.');
+              if (latest.status === 'completed' && latest.conclusion !== 'success') core.setFailed(`Latest backup ${latest.id} ended as ${latest.conclusion}.`);
+            }
       - name: Open or update an incident
         if: failure()
         uses: actions/github-script@v7

@@ -29,9 +29,9 @@ describe('Reid workspace information architecture', () => {
   });
 
   it('uses clear labels in both languages, short ones on the phone', () => {
-    expect(workspaceLabel('assistant', 'ar')).toBe('فريق الوكلاء');
-    expect(workspaceLabel('dashboard', 'en')).toBe('Agent management');
-    expect(workspaceLabel('operations', 'ar')).toBe('المهام والطلبات');
+    expect(workspaceLabel('assistant', 'ar')).toBe('فريق ريّد');
+    expect(workspaceLabel('dashboard', 'en')).toBe('Agent setup');
+    expect(workspaceLabel('operations', 'ar')).toBe('المهام');
     expect(workspaceShortLabel('operations', 'ar')).toBe('المهام');
     expect(workspaceShortLabel('projects', 'en')).toBe('Projects');
   });

@@ -40,7 +40,7 @@ export async function sampleLocalHost({readFileImpl=readFile,statfsImpl=statfs,w
 
 // Every source is fixed by the service. No WhatsApp text may become a URL,
 // database selector, filesystem path, or command.
-export function createOperationsSnapshot({admin,getConnection,aiUrl,aiToken,websiteUrl='https://reidpro.com/healthz',sampleHost=null,fetchImpl=fetch,now=Date.now,cacheMs=10000}) {
+export function createOperationsSnapshot({admin,getConnection,aiUrl,aiToken,ttsUrl,websiteUrl='https://reidpro.com/healthz',sampleHost=null,fetchImpl=fetch,now=Date.now,cacheMs=10000}) {
   let cached,pending;
   async function probe(url,headers={}) {
     const start=now();
@@ -61,6 +61,7 @@ export function createOperationsSnapshot({admin,getConnection,aiUrl,aiToken,webs
     const results=await Promise.all([
       probe(websiteUrl),
       aiUrl?probe(`${aiUrl}/health`,{'x-reid-origin-token':aiToken}):{status:'unknown'},
+      ttsUrl?probe(`${ttsUrl}/healthz`):{status:'unknown'},
       count(()=>admin.from('qr_jobs').select('id',{count:'exact',head:true}).in('state',['queued','running']).gt('expires_at',checkedAt)),
       count(()=>admin.from('qr_outbox').select('id',{count:'exact',head:true}).in('status',['queued','sending']).gt('expires_at',checkedAt)),
       count(()=>admin.from('qr_jobs').select('id',{count:'exact',head:true}).eq('state','failed').gte('created_at',since)),
@@ -71,14 +72,14 @@ export function createOperationsSnapshot({admin,getConnection,aiUrl,aiToken,webs
       query(()=>admin.from('agent_runner_status').select('status,last_seen_at,cpu_percent,memory_used_gb,memory_total_gb').eq('id','ai-lap').maybeSingle()),
       sampleHost?Promise.resolve().then(sampleHost).catch(()=>null):null,
     ]);
-    const [website,ai,jobs,outbox,failedJobs,failedOutbox,uncertain,inbound,outbound,runner,hostSample]=results;
-    const databaseOk=results.slice(2,10).every(value=>value!==null);
+    const [website,ai,tts,jobs,outbox,failedJobs,failedOutbox,uncertain,inbound,outbound,runner,hostSample]=results;
+    const databaseOk=results.slice(3,11).every(value=>value!==null);
     const host=hostTelemetry(runner?.data,now());
     const websiteHost=hostTelemetry(hostSample,now(),'Reid');
     const connection=getConnection();
     return {
       checkedAt,
-      components:{website,ai,database:{status:databaseOk?'healthy':'unavailable'},
+      components:{website,ai,tts,database:{status:databaseOk?'healthy':'unavailable'},
         whatsapp:{status:connection==='connected'?'healthy':'unavailable',connection:['connected','connecting','disconnected','qr'].includes(connection)?connection:'unknown'},
         runner:{status:!runner?.data?'unknown':host.fresh?'healthy':runner.data.status==='degraded'?'degraded':'unavailable'}},
       queue:{pending:jobs===null||outbox===null?null:jobs+outbox,failed:failedJobs===null||failedOutbox===null?null:failedJobs+failedOutbox,uncertain},

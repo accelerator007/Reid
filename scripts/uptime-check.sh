@@ -28,6 +28,19 @@ check_status 'https://reidpro.com/assets/img/reid-logo.svg' 200
 check_status 'https://reidpro.com/this-route-must-not-exist' 404
 check_status 'https://staging.reidpro.com/' 200
 
+# This endpoint intentionally exposes only pass/fail booleans. It covers the
+# private services that a public route alone cannot prove: WhatsApp, ai-lap,
+# TTS, the database and the durable work queues.
+monitor_payload="$(curl "${curl_common[@]}" --fail-with-body 'https://reidpro.com/api/monitor/health')"
+python3 - "$monitor_payload" <<'PY'
+import json, sys
+payload = json.loads(sys.argv[1])
+expected = {'website', 'database', 'whatsapp', 'aiLap', 'tts', 'queues'}
+components = payload.get('components') or {}
+if payload.get('ok') is not True or set(components) != expected or not all(components.values()):
+    raise SystemExit(f"Deep health failed: {components}")
+PY
+
 headers="$(curl "${curl_common[@]}" --head 'https://reidpro.com/')"
 if grep -qE '^HTTP/[^ ]+ 403' <<<"$headers" && [ "${ALLOW_EDGE_CHALLENGE:-0}" = 1 ]; then
   echo 'Cloudflare WAF challenge confirmed; application-header validation is covered by the deployment pipeline and direct regional probe.'
@@ -46,4 +59,4 @@ if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_PUBLISHABLE_KEY:-}" ]; then
     "${SUPABASE_URL}/auth/v1/health" >/dev/null
 fi
 
-echo 'Reid Production, Staging, routing, security headers, assets, and Supabase API are healthy.'
+echo 'Reid Production, WhatsApp, ai-lap, TTS, queues, Staging, routing, security headers, assets, and Supabase API are healthy.'

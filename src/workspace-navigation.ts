@@ -11,10 +11,10 @@ export type WorkspaceNavGroup = {
 // are filtered by useNavigation before anything is shown, so a role never sees
 // a destination the gate would refuse.
 export const workspaceNavGroups: readonly WorkspaceNavGroup[] = [
-  { id: 'center', label: { ar: 'الرئيسية', en: 'Home' }, pages: ['owner', 'today', 'assistant'] },
-  { id: 'work', label: { ar: 'العمل', en: 'Work' }, pages: ['operations', 'projects', 'crm', 'research', 'workshops'] },
-  { id: 'company', label: { ar: 'الشركة', en: 'Company' }, pages: ['workspace', 'inbox'] },
-  { id: 'administration', label: { ar: 'الإدارة', en: 'Administration' }, pages: ['dashboard', 'forms', 'admin', 'connections'] },
+  { id: 'center', label: { ar: 'ابدأ من هنا', en: 'Start here' }, pages: ['owner', 'today', 'assistant'] },
+  { id: 'work', label: { ar: 'الشغل اليومي', en: 'Daily work' }, pages: ['operations', 'projects', 'crm', 'research', 'workshops'] },
+  { id: 'company', label: { ar: 'الناس والتواصل', en: 'People & messages' }, pages: ['workspace', 'inbox'] },
+  { id: 'administration', label: { ar: 'الإعدادات', en: 'Settings' }, pages: ['admin', 'connections', 'dashboard', 'forms'] },
 ] as const;
 
 /** Pinned below the groups, next to sign-out. */
@@ -26,18 +26,18 @@ export const mobilePrimaryPages: readonly Page[] = ['owner', 'today', 'assistant
 const labels: Partial<Record<Page, { ar: string; en: string }>> = {
   owner: { ar: 'نظرة عامة', en: 'Overview' },
   today: { ar: 'يومي', en: 'My day' },
-  assistant: { ar: 'فريق الوكلاء', en: 'Agent team' },
-  operations: { ar: 'المهام والطلبات', en: 'Tasks & requests' },
+  assistant: { ar: 'فريق ريّد', en: 'Reid team' },
+  operations: { ar: 'المهام', en: 'Tasks' },
   projects: { ar: 'المشاريع', en: 'Projects' },
   crm: { ar: 'العملاء', en: 'Clients' },
   research: { ar: 'الأبحاث', en: 'Research' },
   workshops: { ar: 'الورش', en: 'Workshops' },
-  workspace: { ar: 'الفريق', en: 'People' },
-  inbox: { ar: 'محادثات واتساب', en: 'WhatsApp inbox' },
-  dashboard: { ar: 'إدارة الوكلاء', en: 'Agent management' },
+  workspace: { ar: 'فريق الشركة', en: 'Company team' },
+  inbox: { ar: 'واتساب', en: 'WhatsApp' },
+  dashboard: { ar: 'إعداد الوكلاء', en: 'Agent setup' },
   forms: { ar: 'النماذج', en: 'Forms' },
-  admin: { ar: 'الحسابات والصلاحيات', en: 'Accounts & access' },
-  connections: { ar: 'الاتصالات', en: 'Connections' },
+  admin: { ar: 'المستخدمون والصلاحيات', en: 'Users & access' },
+  connections: { ar: 'الربط والتكاملات', en: 'Connections' },
   profile: { ar: 'حسابي', en: 'My account' },
 };
 

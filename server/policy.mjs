@@ -34,12 +34,13 @@ export function groupParticipationCommand(text) {
   return null;
 }
 
-// Audio and image messages carry the same authorization surface as text: the
+// Audio, image and document messages carry the same authorization surface as text: the
 // sender is still the authenticated participant, and a caption is still
 // untrusted content. Only the payload shape differs.
 const mediaNode = value => {
   if (value?.audioMessage) return { kind: 'audio', node: value.audioMessage };
   if (value?.imageMessage) return { kind: 'image', node: value.imageMessage };
+  if (value?.documentMessage) return { kind: 'document', node: value.documentMessage };
   return null;
 };
 
@@ -61,7 +62,11 @@ export function inboundText(message, botJids=[]) {
   const supplied = typeof written === 'string' && written.trim() ? written : caption;
   if(!media && (typeof supplied !== 'string'||!supplied.trim()))return null;
   const text = String(supplied||'').trim().slice(0, 8000);
-  const carried = media ? { media: { kind: media.kind, mimetype: String(media.node?.mimetype||'').split(';')[0] || null } } : {};
+  const carried = media ? { media: {
+    kind: media.kind,
+    mimetype: String(media.node?.mimetype||'').split(';')[0] || null,
+    ...(media.kind==='document'?{fileName:String(media.node?.fileName||'').slice(0,180)}:{}),
+  } } : {};
   if(isGroup){
     const senderPhone=jidPhone(message.key.participantPn||message.key.participantAlt||message.key.participant);
     if(!/^[1-9][0-9]{7,14}$/.test(senderPhone))return null;

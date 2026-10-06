@@ -5,7 +5,7 @@ import { createInboundPersistence } from '../inbound.mjs';
 const inbound={jid:'96890000000@s.whatsapp.net',id:'message-1',text:'مرحبا ريّد',senderPhone:'96890000000',isGroup:false};
 
 function setup({conversation=null,raceConversation=null,group=null,rateAllowed=true,insertError=null}={}) {
-  const tables={qr_conversations:conversation?[{...conversation}]:[],qr_messages:[],qr_jobs:[]};
+  const tables={qr_conversations:conversation?[{...conversation}]:[],qr_messages:[],qr_jobs:[],qr_conversation_documents:[],whatsapp_group_participants:[]};
   const calls=[],authorizations=[],rates=[];
   const admin={from(table) {
     const query={table,operation:'select',filters:[]};
@@ -21,8 +21,10 @@ function setup({conversation=null,raceConversation=null,group=null,rateAllowed=t
         return {data:{...created},error:null};
       }
       if(query.operation==='upsert'){
-        const key=query.options.onConflict;
-        if(!rows.some(row=>row[key]===query.payload[key]))rows.push({...query.payload});
+        const keys=query.options.onConflict.split(',');
+        const existing=rows.find(row=>keys.every(key=>row[key]===query.payload[key]));
+        if(existing&&!query.options.ignoreDuplicates)Object.assign(existing,query.payload);
+        else if(!existing)rows.push({...query.payload});
         return {data:null,error:null};
       }
       if(query.operation==='update'){
@@ -62,8 +64,8 @@ test('first inbound message creates a sanitized conversation, message and reply 
     last_message:item.text.slice(0,180),updated_at:tables.qr_conversations[0].updated_at,
   });
   assert.ok(Number.isFinite(Date.parse(tables.qr_conversations[0].updated_at)));
-  assert.deepEqual(tables.qr_messages,[{conversation_id:'chat-new',message_id:item.id,direction:'inbound',body:item.text,sender_phone:item.senderPhone,media_kind:null}]);
-  assert.deepEqual(tables.qr_jobs,[{conversation_id:'chat-new',message_id:item.id,input:item.text,sender_phone:item.senderPhone}]);
+  assert.deepEqual(tables.qr_messages,[{conversation_id:'chat-new',message_id:item.id,direction:'inbound',body:item.text,sender_phone:item.senderPhone,sender_name:'Ali Reid',media_kind:null}]);
+  assert.deepEqual(tables.qr_jobs,[{conversation_id:'chat-new',message_id:item.id,input:item.text,sender_phone:item.senderPhone,sender_name:'Ali Reid'}]);
   assert.deepEqual(rates,[['in:chat-new',6]]);
   assert.deepEqual(authorizations,[]);
 });
@@ -99,7 +101,7 @@ test('a disallowed group stops before any conversation or message write',async()
   assert.deepEqual(authorizations,[item]);
   assert.deepEqual(calls,[]);
   assert.deepEqual(rates,[]);
-  assert.deepEqual(tables,{qr_conversations:[],qr_messages:[],qr_jobs:[]});
+  assert.deepEqual(tables,{qr_conversations:[],qr_messages:[],qr_jobs:[],qr_conversation_documents:[],whatsapp_group_participants:[]});
 });
 
 test('human mode stores inbound messages without queuing an automated reply',async()=>{
@@ -118,6 +120,7 @@ test('authorized reply-all groups use a higher bounded group rate',async()=>{
   assert.deepEqual(authorizations,[item]);
   assert.equal(tables.qr_conversations[0].display_name,'G'.repeat(120));
   assert.equal(tables.qr_messages.length,1);
+  assert.equal(tables.whatsapp_group_participants[0].display_name,'Sender');
   assert.deepEqual(tables.qr_jobs,[]);
   assert.deepEqual(rates,[['in:chat-new',30]]);
 });
@@ -134,4 +137,18 @@ test('conversation insertion failures keep stage diagnostics and never queue a r
   await assert.rejects(persist({},inbound),error=>error.message==='inbound_conversation_insert_failed'&&error.cause===insertError);
   assert.deepEqual(tables.qr_messages,[]);
   assert.deepEqual(tables.qr_jobs,[]);
+});
+
+test('an extracted document is linked once to the conversation and keeps its speaker',async()=>{
+  const {persist,tables}=setup();
+  const item={...inbound,text:'أرسل ملفًا: الخطة.xlsx',media:{kind:'document'},document:{
+    fileName:'الخطة.xlsx',mimetype:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',byteSize:2400,text:'المبيعات | 120',truncated:false,
+  }};
+  await persist({pushName:'سالم'},item);
+  assert.equal(tables.qr_messages[0].sender_name,'سالم');
+  assert.equal(tables.qr_messages[0].media_kind,'document');
+  assert.deepEqual(tables.qr_conversation_documents,[{
+    conversation_id:'chat-new',message_id:item.id,sender_phone:item.senderPhone,sender_name:'سالم',
+    file_name:'الخطة.xlsx',mime_type:item.document.mimetype,byte_size:2400,extracted_text:'المبيعات | 120',text_truncated:false,
+  }]);
 });

@@ -105,7 +105,8 @@
 }
 .bubble p { margin: 0; font-size: var(--text-md); line-height: var(--leading-arabic); white-space: pre-wrap; overflow-wrap: anywhere; }
 .bubble small { justify-self: end; color: var(--text-subtle); font-size: var(--text-2xs); }
-.bubble__sender { color: var(--accent-text); font-size: var(--text-xs); font-weight: 600; justify-self: start; }
+.bubble__sender { display: inline-flex; align-items: baseline; gap: var(--space-2); color: var(--accent-text); font-size: var(--text-xs); font-weight: 700; justify-self: start; }
+.bubble__sender small { color: var(--text-subtle); font-size: var(--text-2xs); font-weight: 500; }
 .bubble__media { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-muted); font-size: var(--text-xs); }
 .bubble__media svg { width: 13px; height: 13px; }
 

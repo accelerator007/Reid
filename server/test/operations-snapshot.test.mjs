@@ -20,7 +20,7 @@ function fixture({failure,runner,fetchImpl,sampleHost,clock=()=>epoch}={}) {
       },
     };return builder;
   }};
-  const collect=createOperationsSnapshot({admin,getConnection:()=> 'connected',aiUrl:'http://private-ai',aiToken:'never-return-this',
+  const collect=createOperationsSnapshot({admin,getConnection:()=> 'connected',aiUrl:'http://private-ai',aiToken:'never-return-this',ttsUrl:'http://tts',
     now:clock,sampleHost,
     fetchImpl:fetchImpl|| (async(url,options)=>{requests.push({url,options});return {ok:true};}),
   });
@@ -34,7 +34,7 @@ test('collects bounded metadata and probes fixed services without returning cred
   assert.equal(result.components.whatsapp.connection,'connected');
   assert.deepEqual(result.queue,{pending:4,failed:4,uncertain:1});
   assert.equal(result.host.fresh,true);assert.equal(result.websiteHost.fresh,false);
-  assert.deepEqual(requests.map(request=>request.url),['https://reidpro.com/healthz','http://private-ai/health']);
+  assert.deepEqual(requests.map(request=>request.url),['https://reidpro.com/healthz','http://private-ai/health','http://tts/healthz']);
   assert.ok(queries.every(query=>!query.columns.includes('*')&&!query.columns.includes('body')));
   assert.ok(!JSON.stringify(result).includes('never-return-this'));
 });
@@ -52,6 +52,7 @@ test('network failure does not hide independent database and queue health',async
   const result=await fixture({fetchImpl:async()=>{throw Error('private network detail');}}).collect();
   assert.equal(result.components.website.status,'unavailable');
   assert.equal(result.components.ai.status,'unavailable');
+  assert.equal(result.components.tts.status,'unavailable');
   assert.equal(result.components.database.status,'healthy');
 });
 
@@ -70,9 +71,9 @@ test('missing runner is unknown, not a working AI runner',async()=>{
 test('concurrent probes coalesce and expire after ten seconds',async()=>{
   let current=epoch;const {collect,requests}=fixture({clock:()=>current});
   const [first,second]=await Promise.all([collect(),collect()]);
-  assert.equal(first,second);assert.equal(requests.length,2);
+  assert.equal(first,second);assert.equal(requests.length,3);
   current+=9000;assert.equal(await collect(),first);
-  current+=2000;assert.notEqual(await collect(),first);assert.equal(requests.length,4);
+  current+=2000;assert.notEqual(await collect(),first);assert.equal(requests.length,6);
 });
 
 test('optional host sampler is separate from ai-lap and fails closed on bad data',async()=>{

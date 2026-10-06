@@ -21,6 +21,16 @@ test('a photo carries its caption as the message text', () => {
   assert.equal(item.text, 'وش رأيك في التصميم؟');
 });
 
+test('a supported document carries its safe metadata into the media pipeline', () => {
+  const item = inboundText(direct({ message: { documentMessage: {
+    mimetype: 'application/pdf', fileName: 'خطة 2027.pdf', caption: 'لخصه لي',
+  } } }));
+  assert.equal(item.media.kind, 'document');
+  assert.equal(item.media.mimetype, 'application/pdf');
+  assert.equal(item.media.fileName, 'خطة 2027.pdf');
+  assert.equal(item.text, 'لخصه لي');
+});
+
 test('group media carries its addressed state for the durable group policy', () => {
   const silent = inboundText(group({ message: { audioMessage: { mimetype: 'audio/ogg' } } }));
   assert.equal(silent?.addressed, false);
@@ -114,6 +124,7 @@ test('a transcript keeps the caption that came with it', () => {
   assert.equal(transcriptBody('نص التسجيل', ''), 'نص التسجيل');
   assert.equal(mediaPlaceholder('image', ''), 'صورة');
   assert.equal(mediaPlaceholder('audio', ''), 'رسالة صوتية');
+  assert.equal(mediaPlaceholder('document', ''), 'ملف');
   assert.equal(mediaPlaceholder('image', ' وش هذا '), 'وش هذا');
 });
 
