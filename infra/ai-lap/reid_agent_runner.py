@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 import json, os, subprocess, time, urllib.request
+from agent_quality import assess, language, revision_instruction, subject
 
 RUNNER_URL=os.environ['REID_RUNNER_URL']; RUNNER_TOKEN=os.environ['REID_RUNNER_TOKEN']; ORIGIN_TOKEN=os.environ['REID_ORIGIN_TOKEN']
 ADAPTER=os.environ.get('REID_ADAPTER_URL','http://127.0.0.1:11436')
-VERSION='1.1.1'; last_heartbeat=0.0; last_ping=None
+REMOTE_ADAPTER=os.environ.get('REID_REMOTE_ADAPTER')=='1'
+VERSION='1.3.0'; last_heartbeat=0.0; last_ping=None
 
 def telemetry():
+    # A relay worker cannot measure the remote GPU host from its own /proc.
+    if REMOTE_ADAPTER: return {}
     result={}
     try:
       with open('/proc/meminfo',encoding='utf-8') as source:
@@ -29,26 +33,51 @@ def post(url,payload,token_header='authorization',token=None,timeout=140):
 
 def adapter(path,payload): return post(ADAPTER+path,payload,'x-reid-origin-token',ORIGIN_TOKEN)
 
-while True:
-  try:
-    if time.monotonic()-last_heartbeat > 5:
-      ping_started=time.monotonic()
-      payload={'action':'heartbeat','version':VERSION,'model':'gemma4:12b','gpu':'NVIDIA RTX 3080 Ti 12GB',**telemetry()}
-      if last_ping is not None: payload['pingMs']=last_ping
-      post(RUNNER_URL,payload)
-      last_ping=round((time.monotonic()-ping_started)*1000)
-      last_heartbeat=time.monotonic()
-    claimed=post(RUNNER_URL,{'action':'claim'}); job=claimed.get('job')
-    if not job: time.sleep(3); continue
+def adapter_available():
+    request=urllib.request.Request(ADAPTER+'/health',headers={'x-reid-origin-token':ORIGIN_TOKEN})
     started=time.monotonic()
     try:
-      if job['action']=='embed':
-        emb=adapter('/api/embeddings',{'prompt':job['input']}).get('embedding',[]); output=''; tokens=0
-      else:
-        messages=[]
-        if job.get('system_prompt'): messages.append({'role':'system','content':job['system_prompt']})
-        messages.append({'role':'user','content':job['input']})
-        result=adapter('/api/chat',{'messages':messages}); output=result.get('message',{}).get('content',''); tokens=(result.get('prompt_eval_count',0)+result.get('eval_count',0)); emb=adapter('/api/embeddings',{'prompt':output[:4000]}).get('embedding',[]) if output else []
-      post(RUNNER_URL,{'action':'complete','runId':job['id'],'output':output,'embedding':emb,'tokenUsage':tokens,'latencyMs':round((time.monotonic()-started)*1000)})
-    except Exception as error: post(RUNNER_URL,{'action':'fail','runId':job['id'],'error':type(error).__name__})
-  except Exception: time.sleep(5)
+      with urllib.request.urlopen(request,timeout=5) as response:
+        return 200 <= response.status < 300, round((time.monotonic()-started)*1000)
+    except Exception:return False, None
+
+def main():
+  global last_heartbeat, last_ping
+  while True:
+    try:
+      ready, adapter_latency=adapter_available()
+      if time.monotonic()-last_heartbeat > 5:
+        ping_started=time.monotonic()
+        payload={'action':'heartbeat','status':'online' if ready else 'degraded','version':VERSION,'model':'gemma4:12b','gpu':None if REMOTE_ADAPTER else 'NVIDIA RTX 3080 Ti 12GB',**telemetry()}
+        if last_ping is not None: payload['pingMs']=last_ping
+        if adapter_latency is not None: payload['adapterLatencyMs']=adapter_latency
+        post(RUNNER_URL,payload)
+        last_ping=round((time.monotonic()-ping_started)*1000)
+        last_heartbeat=time.monotonic()
+      if not ready:
+        time.sleep(3)
+        continue
+      claimed=post(RUNNER_URL,{'action':'claim'}); job=claimed.get('job')
+      if not job: time.sleep(3); continue
+      started=time.monotonic()
+      try:
+        if job['action']=='embed':
+          emb=adapter('/api/embeddings',{'prompt':job['input']}).get('embedding',[]); output=''; tokens=0
+        else:
+          messages=[]
+          if job.get('system_prompt'): messages.append({'role':'system','content':job['system_prompt']})
+          messages.append({'role':'user','content':job['input']})
+          result=adapter('/api/chat',{'messages':messages}); output=result.get('message',{}).get('content','').strip(); tokens=(result.get('prompt_eval_count',0)+result.get('eval_count',0)); quality=assess(job['input'],output); revisions=0
+          if not quality['passed']:
+            request,_=subject(job['input']); messages.extend([{'role':'assistant','content':output},{'role':'user','content':revision_instruction(quality,language(request))}])
+            revised=adapter('/api/chat',{'messages':messages}); output=revised.get('message',{}).get('content','').strip(); tokens+=(revised.get('prompt_eval_count',0)+revised.get('eval_count',0)); quality=assess(job['input'],output); revisions=1
+          if not quality['passed']: raise RuntimeError('response_quality_failed:'+','.join(quality['flags']))
+          emb=adapter('/api/embeddings',{'prompt':output[:4000]}).get('embedding',[])
+        payload={'action':'complete','runId':job['id'],'output':output,'embedding':emb,'tokenUsage':tokens,'latencyMs':round((time.monotonic()-started)*1000)}
+        if job['action']!='embed': payload.update(qualityScore=quality['score'],qualityFlags=quality['flags'],qualityVersion=quality['version'],revisionCount=revisions)
+        post(RUNNER_URL,payload)
+      except Exception as error: post(RUNNER_URL,{'action':'fail','runId':job['id'],'error':type(error).__name__})
+    except Exception: time.sleep(5)
+
+if __name__ == '__main__':
+  main()

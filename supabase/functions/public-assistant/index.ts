@@ -2,7 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 const HUMAN_INTENT = /(?:\b(?:human|person|agent|staff|team|call|contact|whats(?:app)?|representative)\b|موظف|شخص|إنسان|احد|أحد|الفريق|اتواصل|تواصل|اتحدث|أتحدث|اكلم|أكلم|واتس|واتساب)/i;

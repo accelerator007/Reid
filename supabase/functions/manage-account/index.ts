@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, apikey, content-type' };
+const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
 const privileged = new Set(['owner', 'super_admin']);
 const validRoles = new Set(['owner', 'super_admin', 'admin', 'hr', 'sales', 'employee', 'project_member', 'research_member', 'guest']);
 const validStatuses = new Set(['active', 'suspended', 'disabled']);
@@ -18,25 +18,34 @@ Deno.serve(async (request) => {
     const { data: roleRows, error: roleError } = await caller.from('user_roles').select('role').eq('user_id', auth.user.id);
     const { data: callerControl, error: controlError } = await caller.from('account_controls').select('status').eq('user_id', auth.user.id).single();
     if (roleError || controlError || callerControl?.status !== 'active' || !roleRows?.some(({ role }) => privileged.has(role))) throw new Error('not_authorized');
+    const callerIsOwner = roleRows.some(({ role }) => role === 'owner');
 
     const { action, targetUserId, role, enabled, status, reason } = await request.json();
     if (!targetUserId || targetUserId === auth.user.id) throw new Error('cannot_modify_self');
     const { data: targetRoles, error: targetRoleError } = await admin.from('user_roles').select('role').eq('user_id', targetUserId);
     if (targetRoleError) throw targetRoleError;
     const targetIsOwner = targetRoles?.some(({ role: targetRole }) => targetRole === 'owner');
-    const callerIsOwner = roleRows.some(({ role: callerRole }) => callerRole === 'owner');
+    const targetIsSuperAdmin = targetRoles?.some(({ role: targetRole }) => targetRole === 'super_admin');
+    const oldControl = await admin.from('account_controls').select('status,reason').eq('user_id',targetUserId).maybeSingle();
+    if (oldControl.error) throw oldControl.error;
 
     if (action === 'set_status') {
       if (!validStatuses.has(status)) throw new Error('invalid_status');
       if (targetIsOwner) throw new Error('owner_account_protected');
+      if (targetIsSuperAdmin && !callerIsOwner) throw new Error('owner_approval_required');
+      if (!reason?.trim()) throw new Error('reason_required');
       const banDuration = status === 'active' ? 'none' : '876000h';
       const { error: authUpdateError } = await admin.auth.admin.updateUserById(targetUserId, { ban_duration: banDuration });
       if (authUpdateError) throw authUpdateError;
       const { error } = await admin.from('account_controls').upsert({ user_id: targetUserId, status, reason: reason?.trim() || null, changed_by: auth.user.id, changed_at: new Date().toISOString() });
       if (error) throw error;
+      const audit=await admin.from('audit_logs').insert({actor_id:auth.user.id,action:'account_status_changed',table_name:'account_controls',record_id:targetUserId,old_data:oldControl.data||null,new_data:{status,reason:reason?.trim()||null}});
+      if(audit.error) throw audit.error;
     } else if (action === 'set_role') {
       if (!validRoles.has(role)) throw new Error('invalid_role');
-      if (role === 'owner' && !callerIsOwner) throw new Error('owner_role_requires_owner');
+      if (role === 'owner') throw new Error('owner_role_change_requires_secure_transfer');
+      if ((role === 'super_admin' || targetIsSuperAdmin) && !callerIsOwner) throw new Error('owner_approval_required');
+      if (!reason?.trim()) throw new Error('reason_required');
       if (enabled) {
         const { error } = await admin.from('user_roles').upsert({ user_id: targetUserId, role, granted_by: auth.user.id });
         if (error) throw error;
@@ -45,6 +54,8 @@ Deno.serve(async (request) => {
         const { error } = await admin.from('user_roles').delete().eq('user_id', targetUserId).eq('role', role);
         if (error) throw error;
       }
+      const audit=await admin.from('audit_logs').insert({actor_id:auth.user.id,action:enabled?'role_granted':'role_removed',table_name:'user_roles',record_id:targetUserId,old_data:{role,enabled:!enabled},new_data:{role,enabled,reason:reason?.trim()||null}});
+      if(audit.error) throw audit.error;
     } else throw new Error('invalid_action');
 
     return Response.json({ ok: true }, { headers: cors });

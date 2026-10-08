@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstError, list, messageFor, run, toAppError } from "./db";
+import { firstError, list, messageFor, messageForRaw, run, toAppError } from "./db";
 import type { Result } from "./db";
 
 const supabaseError = (over: Record<string, unknown>) => ({
@@ -38,6 +38,13 @@ describe("classifying a Supabase failure", () => {
     expect(toAppError(new TypeError("Failed to fetch")).kind).toBe("offline");
     expect(toAppError(supabaseError({ message: "NetworkError when attempting to fetch" })).kind)
       .toBe("offline");
+    expect(toAppError(supabaseError({ message: "Failed to send a request to the Edge Function" })).kind)
+      .toBe("offline");
+  });
+
+  it("turns stable service codes into safe bilingual copy", () => {
+    expect(messageForRaw("outside_24h_window", "ar")).toContain("24");
+    expect(messageForRaw("owner_required", "en")).toContain("Owner");
   });
 
   it("falls back to HTTP status when no code is given", () => {

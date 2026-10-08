@@ -3,38 +3,48 @@ import { createRoot } from "react-dom/client";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { installIdleTimeout } from "./session";
-import { pathFor, resolvePage } from "./routes";
-import { firstError, list, messageFor, run, toAppError } from "./db";
+import { landingPage, pathFor, resolvePage } from "./routes";
 import {
-  Gate,
+  accessForPage,
   Guarded,
   SessionProvider,
   useNavigation,
   useSession,
 } from "./shell";
-import type { AppError } from "./db";
 import type { Page } from "./routes";
-import { EmployeeWorkspace } from "./employee";
-import { ProjectWorkspace } from "./projects";
-import { AgentCommand } from "./agent-command";
-import { WhatsAppInbox } from "./whatsapp-inbox";
-import { ResearchWorkspace } from "./research";
-import { CrmWorkspace } from "./crm";
-import { Building2, FolderKanban, FlaskConical, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X } from "lucide-react";
+import { PublicHome } from "./public-home";
+import { workspaceLabel, workspacePages } from "./workspace-navigation";
+import { AppShell } from "./app-shell/app-shell";
+import { Building2, Crown, FolderKanban, FlaskConical, GraduationCap, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X, CalendarDays, Settings2, BriefcaseBusiness, Search, ShieldCheck, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 // Imported rather than written as a literal URL. The assets directory sits
 // outside Vite's public directory, so a hard-coded path is never emitted to
 // dist and the header mark 404s in production while still resolving in dev.
 import reidLogo from "../assets/img/reid-logo.svg";
+import "./fonts.css";
 import "./tokens.css";
 import "./style.css";
 import "./brand.css";
 import "./auth.css";
 import "./profile.css";
+import "./public-shell.css";
 import "./workflow.css";
-import "./agents.css";
-import "./crm.css";
-import "./workspace-shell.css";
-import "./whatsapp-inbox.css";
+import "./reid-os.css";
+
+const EmployeeWorkspace=React.lazy(()=>import('./people/people-page').then(module=>({default:module.EmployeeWorkspace})));
+const ProjectWorkspace=React.lazy(()=>import('./projects/projects-page').then(module=>({default:module.ProjectWorkspace})));
+const AgentManagement=React.lazy(()=>import('./agent-admin/agent-admin-page').then(module=>({default:module.AgentManagement})));
+const AdminWorkspace=React.lazy(()=>import('./admin-workspace').then(module=>({default:module.AdminWorkspace})));
+const OwnerOverview=React.lazy(()=>import('./owner-overview').then(module=>({default:module.OwnerOverview})));
+const Today=React.lazy(()=>import('./work/today-page').then(module=>({default:module.Today})));
+const Operations=React.lazy(()=>import('./work/operations-page').then(module=>({default:module.Operations})));
+const AssistantWorkspace=React.lazy(()=>import('./agent-team/agent-team-page').then(module=>({default:module.AgentTeamRoom})));
+const Connections=React.lazy(()=>import('./qr-workspace').then(module=>({default:module.Connections})));
+const Inbox=React.lazy(()=>import('./inbox/inbox-page').then(module=>({default:module.Inbox})));
+const ResearchWorkspace=React.lazy(()=>import('./research').then(module=>({default:module.ResearchWorkspace})));
+const CrmWorkspace=React.lazy(()=>import('./clients/clients-page').then(module=>({default:module.CrmWorkspace})));
+const Workshops=React.lazy(()=>import('./workshops').then(module=>({default:module.Workshops})));
+const FormsWorkspace=React.lazy(()=>import('./forms/forms-workspace').then(module=>({default:module.FormsWorkspace})));
+const RespondPage=React.lazy(()=>import('./forms/respond-page').then(module=>({default:module.RespondPage})));
 
 type Lang = "ar" | "en";
 type ProfileData = {
@@ -45,46 +55,6 @@ type ProfileData = {
   linkedin_url: string;
   github_url: string;
   bio: string;
-};
-type Application = {
-  id: string;
-  full_name: string;
-  email: string;
-  account_type: string;
-  organization: string;
-  phone: string;
-  title: string;
-  linkedin_url: string;
-  github_url: string | null;
-  project_or_research: string | null;
-  join_reason: string;
-  cover_letter: string;
-  cv_path: string | null;
-  created_at: string;
-  status: string;
-  invitation_status?: string;
-};
-type Notification = {
-  id: string;
-  title_ar: string;
-  title_en: string;
-  body_ar: string | null;
-  body_en: string | null;
-  read_at: string | null;
-  created_at: string;
-  entity_id: string | null;
-};
-type CompanyAccount = {
-  id: string;
-  full_name: string;
-  email: string;
-  department: string | null;
-  position: string | null;
-  user_roles: { role: string }[];
-  account_controls:
-    | { status: string; reason: string | null }[]
-    | { status: string; reason: string | null }
-    | null;
 };
 const tr = {
   ar: {
@@ -186,13 +156,33 @@ function Login({
     if (!error) done();
     setBusy(false);
   };
-  const oauth = async (provider: "google" | "azure" | "github") => {
-    if (!supabase) return;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: `${location.origin}/dashboard` },
-    });
-    if (error) setMessage(error.message);
+  const oauth = async () => {
+    if (!supabase || busy) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/settings`, {
+        headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) throw new Error("auth_settings_unavailable");
+      const settings = await response.json();
+      if (settings.external?.google !== true) {
+        setMessage(lang === "ar"
+          ? "الدخول بجوجل غير مفعّل حاليًا. استخدم البريد وكلمة المرور."
+          : "Google sign-in is not available yet. Use your email and password.");
+        return;
+      }
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${location.origin}/dashboard` },
+      });
+      if (error) setMessage(error.message);
+    } catch {
+      setMessage(lang === "ar" ? "تعذر الاتصال بخدمة الدخول. حاول مرة أخرى." : "Unable to connect to sign-in. Try again.");
+    } finally {
+      setBusy(false);
+    }
   };
   const emailLink = async (kind: "magic" | "recovery") => {
     if (!supabase || !email.trim()) {
@@ -223,7 +213,14 @@ function Login({
     setBusy(false);
   };
   return (
-    <main className="auth">
+    <main className="auth auth-redesign">
+      <section className="auth-context" aria-hidden="true">
+        <img src={reidLogo} alt="" />
+        <span>REID OS</span>
+        <h2>{lang === "ar" ? "مساحة واحدة للعمل والقرار." : "One place for work and decisions."}</h2>
+        <p>{lang === "ar" ? "مشاريعك وفريقك ووكلاء ريّد، بصلاحيات واضحة وسجل كامل." : "Your projects, people and Reid agents, with clear access and a complete audit trail."}</p>
+        <ul><li><ShieldCheck />{lang === "ar" ? "الحسابات المعتمدة فقط" : "Approved accounts only"}</li><li><Sparkles />{lang === "ar" ? "العمليات الحساسة تنتظر قرارك" : "Sensitive actions wait for you"}</li></ul>
+      </section>
       <section className="auth-card">
         <span>REID ACCOUNT</span>
         <h1>{tr[lang].login}</h1>
@@ -233,9 +230,7 @@ function Login({
             : "Approved accounts only. If you do not have an account, submit a join request first."}
         </p>
         <div className="oauth">
-          <button onClick={() => oauth("google")}>G Google</button>
-          <button onClick={() => oauth("azure")}>▦ Microsoft</button>
-          <button onClick={() => oauth("github")}>◉ GitHub</button>
+          <button type="button" onClick={oauth} disabled={busy}><b>G</b>{lang === "ar" ? "الدخول باستخدام Google" : "Continue with Google"}</button>
         </div>
         <div className="or">
           <i />
@@ -257,7 +252,7 @@ function Login({
             {lang === "ar" ? "كلمة المرور" : "Password"}
             <input name="password" type="password" minLength={8} required />
           </label>
-          <button className="primary" disabled={busy}>
+          <button className="os-primary auth-submit" disabled={busy}>
             {busy ? "…" : tr[lang].login}
           </button>
         </form>
@@ -354,7 +349,7 @@ function Join({ lang }: { lang: Lang }) {
   };
   if (sent)
     return (
-      <main className="apply">
+      <main className="apply apply-redesign">
         <section className="sent">
           <b>✓</b>
           <h1>{lang === "ar" ? "تم استلام طلبك" : "Application received"}</h1>
@@ -383,10 +378,10 @@ function Join({ lang }: { lang: Lang }) {
     </label>
   );
   return (
-    <main className="apply">
-      <span>JOIN REID</span>
-      <h1>{lang === "ar" ? "طلب انضمام" : "Join request"}</h1>
-      <form onSubmit={submit}>
+    <main className="apply apply-redesign">
+      <div className="apply-heading"><span className="os-eyebrow">JOIN REID</span><h1>{lang === "ar" ? "ابنِ معنا ما يستحق." : "Build what matters with us."}</h1><p>{lang === "ar" ? "أرسل معلوماتك مرة واحدة. يراجع الفريق الطلب، ثم يصلك قرار واضح عبر البريد." : "Share your details once. The team reviews your request and sends a clear decision by email."}</p></div>
+      <div className="apply-layout"><aside className="apply-aside"><b>01</b><h2>{lang === "ar" ? "طلب آمن وواضح" : "A clear, secure request"}</h2><p>{lang === "ar" ? "السيرة الذاتية خاصة، ولا تُنشأ أي صلاحية قبل اعتماد الطلب." : "Your CV stays private and no access is created before approval."}</p><ol><li>{lang === "ar" ? "أكمل بياناتك المهنية" : "Complete your professional details"}</li><li>{lang === "ar" ? "نراجع الدور والنطاق المناسب" : "We review the right role and scope"}</li><li>{lang === "ar" ? "يصلك الرد على بريدك" : "You receive the decision by email"}</li></ol></aside>
+      <form className="apply-form" onSubmit={submit}>
         <F n="full_name" l={lang === "ar" ? "الاسم الكامل" : "Full name"} />
         <F
           n="email"
@@ -433,10 +428,10 @@ function Join({ lang }: { lang: Lang }) {
             {message}
           </p>
         )}
-        <button className="primary" disabled={busy}>
+        <button className="os-primary" disabled={busy}>
           {busy ? "…" : lang === "ar" ? "إرسال الطلب" : "Submit"}
         </button>
-      </form>
+      </form></div>
     </main>
   );
 }
@@ -505,9 +500,8 @@ function Profile({
     </label>
   );
   return (
-    <main className="profile">
-      <span>REID PROFILE</span>
-      <h1>{tr[lang].account}</h1>
+    <main className="os-page profile profile-redesign">
+      <div className="os-page-heading"><div><span className="os-eyebrow">REID / PROFILE</span><h1>{tr[lang].account}</h1><p>{lang === "ar" ? "هويتك المهنية وإعدادات دخولك في ريّد." : "Your professional identity and Reid sign-in settings."}</p></div><button type="button" className="os-secondary" onClick={signout}><LogOut />{lang === "ar" ? "تسجيل الخروج" : "Sign out"}</button></div>
       {!p.linkedin_url && (
         <p className="guard-message">
           {lang === "ar"
@@ -515,7 +509,7 @@ function Profile({
             : "Complete LinkedIn before workspace access."}
         </p>
       )}
-      <section>
+      <section className="profile-card">
         <div className="avatar">R</div>
         <div>
           <h2>{p.full_name || user.email}</h2>
@@ -552,646 +546,11 @@ function Profile({
             onChange={(event) => setNewPassword(event.target.value)}
           />
         </label>
-        <button className="primary">
+        <button className="os-primary">
           {lang === "ar" ? "حفظ الملف" : "Save profile"}
         </button>
       </form>
       {message && <p role="status">{message}</p>}
-      <button className="text-link" onClick={signout}>
-        {lang === "ar" ? "تسجيل الخروج" : "Sign out"}
-      </button>
-    </main>
-  );
-}
-
-function Dashboard({
-  lang,
-  user,
-  ready,
-  login,
-  profile,
-}: {
-  lang: Lang;
-  user: User | null;
-  ready: boolean;
-  login: () => void;
-  profile: () => void;
-}) {
-  const [apps, setApps] = React.useState<Application[]>([]),
-    [failedInvites, setFailedInvites] = React.useState<Application[]>([]),
-    [accounts, setAccounts] = React.useState<CompanyAccount[]>([]),
-    [notifications, setNotifications] = React.useState<Notification[]>([]),
-    [counts, setCounts] = React.useState([0, 0, 0, 0, 0]),
-    [message, setMessage] = React.useState(""),
-    [reviewing, setReviewing] = React.useState<Application | null>(null),
-    [suggestedDecision, setSuggestedDecision] = React.useState<
-      "approved" | "rejected" | null
-    >(null),
-    [rejectReason, setRejectReason] = React.useState(""),
-    [busyDecision, setBusyDecision] = React.useState(false),
-    [loadError, setLoadError] = React.useState<AppError | null>(null);
-  // Suspension, completion and roles are the shell's business; this component
-  // only asks whether it may show the company view.
-  const { roles } = useSession();
-  const allowed = roles.some((x) =>
-    ["owner", "super_admin", "admin", "hr"].includes(x),
-  );
-  const refresh = React.useCallback(async () => {
-    if (!supabase || !user || !allowed) return;
-    setLoadError(null);
-    const [
-      p,
-      failed,
-      projects,
-      tasks,
-      people,
-      leads,
-      notices,
-      companyProfiles,
-      companyRoles,
-      companyControls,
-    ] = await Promise.all([
-      supabase
-        .from("applications")
-        .select(
-          "id,full_name,email,phone,organization,title,linkedin_url,github_url,account_type,project_or_research,join_reason,cover_letter,cv_path,created_at,status",
-        )
-        .eq("status", "pending")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("applications")
-        .select(
-          "id,full_name,email,phone,organization,title,linkedin_url,github_url,account_type,project_or_research,join_reason,cover_letter,cv_path,created_at,status,invitation_status",
-        )
-        .eq("status", "approved")
-        .eq("invitation_status", "failed")
-        .order("created_at", { ascending: true }),
-      supabase.from("projects").select("*", { count: "exact", head: true }),
-      supabase.from("tasks").select("*", { count: "exact", head: true }),
-      supabase.from("profiles").select("*", { count: "exact", head: true }),
-      supabase.from("crm_contacts").select("*", { count: "exact", head: true }),
-      supabase
-        .from("notifications")
-        .select(
-          "id,title_ar,title_en,body_ar,body_en,read_at,created_at,entity_id",
-        )
-        .order("created_at", { ascending: false })
-        .limit(8),
-      supabase
-        .from("profiles")
-        .select("id,full_name,email,department,position")
-        .order("full_name"),
-      supabase.from("user_roles").select("user_id,role"),
-      supabase.from("account_controls").select("user_id,status,reason"),
-    ]);
-    // A panel that loads in parallel reports one outcome. Without this the
-    // first denied query rendered as an empty section with no explanation.
-    const failure = firstError([p, failed, notices, companyProfiles, companyRoles, companyControls]
-      .map((r) => (r.error ? { ok: false as const, error: toAppError(r.error) } : { ok: true as const, data: null })));
-    if (failure) setLoadError(failure);
-
-    setApps((p.data || []) as Application[]);
-    setFailedInvites((failed.data || []) as Application[]);
-    setNotifications((notices.data || []) as Notification[]);
-    const memberRoles = (companyRoles.data || []) as {
-      user_id: string;
-      role: string;
-    }[];
-    const controlRows = (companyControls.data || []) as {
-      user_id: string;
-      status: string;
-      reason: string | null;
-    }[];
-    setAccounts(
-      (companyProfiles.data || []).map((account) => ({
-        ...account,
-        user_roles: memberRoles
-          .filter(({ user_id }) => user_id === account.id)
-          .map(({ role }) => ({ role })),
-        account_controls:
-          controlRows.find(({ user_id }) => user_id === account.id) || null,
-      })) as CompanyAccount[],
-    );
-    setCounts([
-      projects.count || 0,
-      tasks.count || 0,
-      people.count || 0,
-      leads.count || 0,
-      p.data?.length || 0,
-    ]);
-  }, [user]);
-  React.useEffect(() => {
-    refresh();
-  }, [refresh]);
-  React.useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const requested = params.get("review");
-    if (!requested || reviewing) return;
-    const application = apps.find(({ id }) => id === requested);
-    if (application) {
-      const requestedDecision = params.get("decision");
-      setSuggestedDecision(
-        requestedDecision === "approved" || requestedDecision === "rejected"
-          ? requestedDecision
-          : null,
-      );
-      setReviewing(application);
-    }
-  }, [apps, reviewing]);
-  React.useEffect(() => {
-    if (!supabase || !user || !allowed) return;
-    const channel = supabase
-      .channel(`review-workspace:${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "applications" },
-        refresh,
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notifications" },
-        refresh,
-      )
-      .subscribe();
-    return () => {
-      void supabase?.removeChannel(channel);
-    };
-  }, [allowed, refresh, user]);
-  const decide = async (a: Application, d: "approved" | "rejected") => {
-    const reason = d === "rejected" ? rejectReason : null;
-    if (d === "rejected" && !reason?.trim()) return;
-    setBusyDecision(true);
-    setMessage("");
-    const { data, error } = await supabase!.functions.invoke(
-      "decide-application",
-      {
-        body: { applicationId: a.id, decision: d, rejectionReason: reason },
-      },
-    );
-    setMessage(
-      error?.message ||
-        (data?.invitationStatus === "failed"
-          ? lang === "ar"
-            ? "تم القبول لكن فشل إرسال الدعوة. ظهرت في قائمة إعادة المحاولة."
-            : "Approved, but invitation delivery failed. It is now in the retry list."
-          : lang === "ar"
-            ? "تم حفظ القرار."
-            : "Decision saved."),
-    );
-    if (!error) {
-      setReviewing(null);
-      setRejectReason("");
-      await refresh();
-    }
-    setBusyDecision(false);
-  };
-  const retryInvitation = async (application: Application) => {
-    setBusyDecision(true);
-    const { data, error } = await supabase!.functions.invoke(
-      "decide-application",
-      {
-        body: { applicationId: application.id, decision: "retry_invitation" },
-      },
-    );
-    setMessage(
-      error?.message ||
-        (data?.invitationStatus === "sent"
-          ? lang === "ar"
-            ? "تم إرسال الدعوة."
-            : "Invitation sent."
-          : lang === "ar"
-            ? "فشل إرسال الدعوة مرة أخرى."
-            : "Invitation delivery failed again."),
-    );
-    await refresh();
-    setBusyDecision(false);
-  };
-  const manageAccount = async (body: Record<string, unknown>) => {
-    setMessage("");
-    const { error } = await supabase!.functions.invoke("manage-account", {
-      body,
-    });
-    setMessage(
-      error?.message ||
-        (lang === "ar" ? "تم تحديث الحساب." : "Account updated."),
-    );
-    if (!error) await refresh();
-  };
-  const openCv = async (application: Application) => {
-    if (!application.cv_path || !supabase) return;
-    const { data, error } = await supabase.storage
-      .from("application-cvs")
-      .createSignedUrl(application.cv_path, 60);
-    if (error || !data?.signedUrl) {
-      setMessage(lang === "ar" ? "تعذر فتح ملف CV." : "Could not open CV.");
-      return;
-    }
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-  };
-  if (!user)
-    return (
-      <Gate
-        title={lang === "ar" ? "تسجيل الدخول مطلوب" : "Sign in required"}
-        action={login}
-        label={tr[lang].login}
-      />
-    );
-  if (!ready)
-    return (
-      <Gate
-        title={
-          lang === "ar" ? "أكمل LinkedIn أولًا" : "Complete LinkedIn first"
-        }
-        action={profile}
-        label={tr[lang].account}
-      />
-    );
-  if (!allowed)
-    return (
-      <Gate
-        title={
-          loadError
-            ? messageFor(loadError, lang)
-            : lang === "ar"
-              ? "لا توجد صلاحية"
-              : "Access denied"
-        }
-        action={loadError ? () => void refresh() : undefined}
-        label={loadError ? (lang === "ar" ? "أعد المحاولة" : "Try again") : undefined}
-      />
-    );
-  return (
-    <main className="dashboard">
-      <span>REID COMMAND CENTER</span>
-      <h1>{lang === "ar" ? "لوحة الشركة الحية" : "Live company dashboard"}</h1>
-      {loadError && (
-        <p className="load-error" role="alert" data-kind={loadError.kind}>
-          {messageFor(loadError, lang)}
-          <button type="button" onClick={() => void refresh()}>
-            {lang === "ar" ? "أعد المحاولة" : "Try again"}
-          </button>
-        </p>
-      )}
-      <section className="kpis">
-        {[
-          "Active Projects",
-          "Open Tasks",
-          "Employees",
-          "New Leads",
-          "Pending Approvals",
-        ].map((l, i) => (
-          <article key={l}>
-            <b>{counts[i]}</b>
-            <small>{l}</small>
-          </article>
-        ))}
-      </section>
-      {message && <p className="guard-message">{message}</p>}
-      <section className="review-overview">
-        <article>
-          <h2>{lang === "ar" ? "الإشعارات" : "Notifications"}</h2>
-          {notifications.length ? (
-            notifications.map((notice) => (
-              <div
-                className={notice.read_at ? "notice" : "notice unread"}
-                key={notice.id}
-              >
-                <b>{lang === "ar" ? notice.title_ar : notice.title_en}</b>
-                <p>{lang === "ar" ? notice.body_ar : notice.body_en}</p>
-                <small>
-                  {new Date(notice.created_at).toLocaleString(
-                    lang === "ar" ? "ar-OM" : "en-OM",
-                  )}
-                </small>
-                {notice.entity_id &&
-                  apps.some(({ id }) => id === notice.entity_id) && (
-                    <button
-                      onClick={() =>
-                        setReviewing(
-                          apps.find(({ id }) => id === notice.entity_id) ||
-                            null,
-                        )
-                      }
-                    >
-                      {lang === "ar" ? "مراجعة الطلب" : "Review application"}
-                    </button>
-                  )}
-              </div>
-            ))
-          ) : (
-            <p>{lang === "ar" ? "لا توجد إشعارات." : "No notifications."}</p>
-          )}
-        </article>
-      </section>
-      <h2>{lang === "ar" ? "طلبات معلقة" : "Pending applications"}</h2>
-      <section className="applications-list">
-        {apps.length ? (
-          apps.map((a) => (
-            <article key={a.id}>
-              <div>
-                <b>{a.full_name}</b>
-                <small>
-                  {a.email} · {a.organization} · {a.account_type}
-                </small>
-                <p>{a.join_reason}</p>
-              </div>
-              <div>
-                <button
-                  onClick={() => {
-                    setReviewing(a);
-                    setRejectReason("");
-                  }}
-                >
-                  {lang === "ar" ? "مراجعة" : "Review"}
-                </button>
-              </div>
-            </article>
-          ))
-        ) : (
-          <p>{lang === "ar" ? "لا توجد طلبات." : "No pending applications."}</p>
-        )}
-      </section>
-      {failedInvites.length > 0 && (
-        <>
-          <h2>
-            {lang === "ar"
-              ? "دعوات تحتاج إعادة إرسال"
-              : "Invitations needing retry"}
-          </h2>
-          <section className="applications-list failed-invitations">
-            {failedInvites.map((application) => (
-              <article key={application.id}>
-                <div>
-                  <b>{application.full_name}</b>
-                  <small>{application.email}</small>
-                </div>
-                <div>
-                  <button
-                    disabled={busyDecision}
-                    onClick={() => retryInvitation(application)}
-                  >
-                    {lang === "ar" ? "إعادة إرسال الدعوة" : "Retry invitation"}
-                  </button>
-                </div>
-              </article>
-            ))}
-          </section>
-        </>
-      )}
-      {(roles.includes("owner") || roles.includes("super_admin")) && (
-        <>
-          <h2>
-            {lang === "ar" ? "الحسابات والصلاحيات" : "Accounts and roles"}
-          </h2>
-          <section className="accounts-list">
-            {accounts.map((account) => {
-              const control = Array.isArray(account.account_controls)
-                ? account.account_controls[0]
-                : account.account_controls;
-              const status = control?.status || "active";
-              const roleNames =
-                account.user_roles?.map(({ role }) => role) || [];
-              const protectedAccount =
-                account.id === user.id || roleNames.includes("owner");
-              return (
-                <article key={account.id}>
-                  <div>
-                    <b>{account.full_name}</b>
-                    <small>{account.email}</small>
-                    <small>
-                      {account.department || "—"} · {account.position || "—"}
-                    </small>
-                  </div>
-                  <div className="account-roles">
-                    {roleNames.map((role) => (
-                      <button
-                        type="button"
-                        key={role}
-                        disabled={protectedAccount || role === "owner"}
-                        title={lang === "ar" ? "إزالة الصلاحية" : "Remove role"}
-                        onClick={() => void manageAccount({ action: "set_role", targetUserId: account.id, role, enabled: false })}
-                      >
-                        {role.replaceAll("_", " ")} {protectedAccount || role === "owner" ? "" : "×"}
-                      </button>
-                    ))}
-                  </div>
-                  <div className={`account-status ${status}`}>
-                    <b>{status}</b>
-                    {control?.reason && <small>{control.reason}</small>}
-                  </div>
-                  <div className="account-actions">
-                    <select
-                      aria-label={
-                        lang === "ar"
-                          ? `إضافة صلاحية ${account.full_name}`
-                          : `Add role for ${account.full_name}`
-                      }
-                      defaultValue=""
-                      disabled={protectedAccount}
-                      onChange={(event) => {
-                        if (!event.target.value) return;
-                        void manageAccount({
-                          action: "set_role",
-                          targetUserId: account.id,
-                          role: event.target.value,
-                          enabled: true,
-                        });
-                        event.target.value = "";
-                      }}
-                    >
-                      <option value="">
-                        {lang === "ar" ? "إضافة صلاحية" : "Add role"}
-                      </option>
-                      {[
-                        "super_admin",
-                        "admin",
-                        "hr",
-                        "sales",
-                        "employee",
-                        "project_member",
-                        "research_member",
-                        "guest",
-                      ]
-                        .filter((role) => !roleNames.includes(role))
-                        .map((role) => (
-                          <option value={role} key={role}>
-                            {role.replaceAll("_", " ")}
-                          </option>
-                        ))}
-                    </select>
-                    <button
-                      disabled={protectedAccount}
-                      onClick={() => {
-                        if (status === "active") {
-                          const reason = window.prompt(
-                            lang === "ar"
-                              ? "سبب إيقاف الحساب"
-                              : "Suspension reason",
-                          );
-                          if (reason?.trim())
-                            void manageAccount({
-                              action: "set_status",
-                              targetUserId: account.id,
-                              status: "suspended",
-                              reason,
-                            });
-                        } else {
-                          void manageAccount({
-                            action: "set_status",
-                            targetUserId: account.id,
-                            status: "active",
-                          });
-                        }
-                      }}
-                    >
-                      {status === "active"
-                        ? lang === "ar"
-                          ? "إيقاف"
-                          : "Suspend"
-                        : lang === "ar"
-                          ? "إعادة تفعيل"
-                          : "Reactivate"}
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </section>
-        </>
-      )}
-      {reviewing && (
-        <div
-          className="review-backdrop"
-          role="presentation"
-          onMouseDown={() => setReviewing(null)}
-        >
-          <section
-            className="review-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="review-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header>
-              <div>
-                <small>{reviewing.account_type.replaceAll("_", " ")}</small>
-                <h2 id="review-title">{reviewing.full_name}</h2>
-              </div>
-              <button
-                aria-label={lang === "ar" ? "إغلاق" : "Close"}
-                onClick={() => setReviewing(null)}
-              >
-                ×
-              </button>
-            </header>
-            {suggestedDecision && (
-              <p className="notice">
-                {lang === "ar"
-                  ? `فُتح هذا الطلب من رابط ${suggestedDecision === "approved" ? "القبول" : "الرفض"} في البريد. راجع البيانات ثم أكّد القرار يدويًا.`
-                  : `This request was opened from the email ${suggestedDecision === "approved" ? "approval" : "rejection"} link. Review it and confirm manually.`}
-              </p>
-            )}
-            <dl>
-              <div>
-                <dt>{lang === "ar" ? "البريد" : "Email"}</dt>
-                <dd>{reviewing.email}</dd>
-              </div>
-              <div>
-                <dt>{lang === "ar" ? "الهاتف" : "Phone"}</dt>
-                <dd>{reviewing.phone}</dd>
-              </div>
-              <div>
-                <dt>{lang === "ar" ? "الجهة" : "Organization"}</dt>
-                <dd>{reviewing.organization}</dd>
-              </div>
-              <div>
-                <dt>{lang === "ar" ? "المسمى" : "Title"}</dt>
-                <dd>{reviewing.title}</dd>
-              </div>
-              <div>
-                <dt>LinkedIn</dt>
-                <dd>
-                  <a
-                    href={reviewing.linkedin_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {reviewing.linkedin_url}
-                  </a>
-                </dd>
-              </div>
-              <div>
-                <dt>GitHub</dt>
-                <dd>
-                  {reviewing.github_url ? (
-                    <a
-                      href={reviewing.github_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {reviewing.github_url}
-                    </a>
-                  ) : (
-                    "—"
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>
-                  {lang === "ar" ? "المشروع / البحث" : "Project / research"}
-                </dt>
-                <dd>{reviewing.project_or_research || "—"}</dd>
-              </div>
-            </dl>
-            <article>
-              <b>{lang === "ar" ? "سبب الانضمام" : "Join reason"}</b>
-              <p>{reviewing.join_reason}</p>
-            </article>
-            <article>
-              <b>{lang === "ar" ? "الرسالة التعريفية" : "Cover letter"}</b>
-              <p>{reviewing.cover_letter}</p>
-            </article>
-            {reviewing.cv_path && (
-              <button onClick={() => openCv(reviewing)}>
-                {lang === "ar" ? "فتح CV بشكل آمن" : "Open CV securely"}
-              </button>
-            )}
-            <label>
-              {lang === "ar"
-                ? "سبب الرفض الداخلي"
-                : "Internal rejection reason"}
-              <textarea
-                value={rejectReason}
-                onChange={(event) => setRejectReason(event.target.value)}
-                placeholder={
-                  lang === "ar"
-                    ? "إجباري عند الرفض، ولا يُرسل للمتقدم"
-                    : "Required for rejection; never sent to applicant"
-                }
-              />
-            </label>
-            <footer>
-              <button
-                className="primary"
-                disabled={busyDecision}
-                onClick={() => decide(reviewing, "approved")}
-                data-email-suggestion={suggestedDecision === "approved"}
-              >
-                {lang === "ar" ? "قبول وإرسال الدعوة" : "Approve and invite"}
-              </button>
-              <button
-                disabled={busyDecision || !rejectReason.trim()}
-                onClick={() => decide(reviewing, "rejected")}
-                data-email-suggestion={suggestedDecision === "rejected"}
-              >
-                {lang === "ar" ? "رفض الطلب" : "Reject application"}
-              </button>
-            </footer>
-          </section>
-        </div>
-      )}
-      <AgentCommand lang={lang} />
-      <WhatsAppInbox lang={lang} />
     </main>
   );
 }
@@ -1225,11 +584,9 @@ function Chat({ lang }: { lang: Lang }) {
     }
     setBusy(true);
     try {
-      if (!supabase) throw new Error("assistant_unavailable");
-      const { data, error } = await supabase.functions.invoke("public-assistant", {
-        body: { message: q, lang, history: msgs.slice(-6) },
-      });
-      if (error || !data?.reply) throw error || new Error("assistant_unavailable");
+      const response = await fetch('/api/public/chat', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:q,lang,history:msgs.slice(-6)}),signal:AbortSignal.timeout(100000)});
+      const data=await response.json();
+      if (!response.ok || !data?.reply) throw new Error("assistant_unavailable");
       setMsgs([...next, { role: "model", text: data.reply }]);
       setHandoff(Boolean(data.handoff));
     } catch {
@@ -1312,40 +669,16 @@ function Chat({ lang }: { lang: Lang }) {
 
 function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
   switch (page) {
+    case "today": case "inbox": case "connections": case "operations": case "workshops":
+    case "assistant": case "admin": case "owner": case "workspace": case "projects":
+    case "research": case "crm": case "dashboard": case "forms": case "profile": return workspaceLabel(page,lang);
     case "home":
       return t.home;
     case "apply":
       return t.join;
-    case "workspace":
-      return t.workspace;
-    case "projects":
-      return t.projects;
-    case "research":
-      return t.research;
-    case "crm":
-      return t.crm;
-    case "dashboard":
-      return t.system;
-    case "profile":
-      return t.account;
     default:
       return page;
   }
-}
-
-const workspaceIcons: Partial<Record<Page, React.ReactNode>> = {
-  dashboard: <LayoutDashboard />, workspace: <UsersRound />, projects: <FolderKanban />,
-  research: <FlaskConical />, crm: <Handshake />, profile: <UserRound />,
-};
-
-function WorkspaceSidebar({ lang, page, navigation, open, go, signout }: { lang: Lang; page: Page; navigation: ReturnType<typeof useNavigation>; open: boolean; go: (page: Page) => void; signout: () => void }) {
-  const t = tr[lang];
-  const destinations = navigation.filter(route => ["dashboard", "workspace", "projects", "research", "crm", "profile"].includes(route.page));
-  return <aside className="workspace-sidebar" data-open={open} aria-label={lang === "ar" ? "تنقل نظام الشركة" : "Company system navigation"}>
-    <div className="workspace-sidebar-heading"><small>REID OS</small><b>{lang === "ar" ? "مساحة الشركة" : "Company workspace"}</b></div>
-    <nav>{destinations.map(route => <button key={route.page} type="button" aria-current={page === route.page ? "page" : undefined} onClick={() => go(route.page)}>{workspaceIcons[route.page]}<span>{navLabel(route.page, lang, t)}</span></button>)}</nav>
-    <footer><button type="button" onClick={signout}><LogOut /><span>{lang === "ar" ? "تسجيل الخروج" : "Sign out"}</span></button></footer>
-  </aside>;
 }
 
 function App() {
@@ -1364,24 +697,40 @@ function App() {
   );
 }
 
+// Language and theme are per-viewer conveniences: remembered in this browser
+// when storage is available, and harmless when it is not.
+const remembered = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
+const remember = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch { /* optional */ } };
+
 function Chrome({ session }: { session: Session | null }) {
   const [page, go] = useRoute(),
-    [lang, setLang] = React.useState<Lang>("ar"),
-    [dark, setDark] = React.useState(
-      () =>
-        typeof matchMedia === "function" &&
-        matchMedia("(prefers-color-scheme: dark)").matches,
-    ),
+    [lang, setLang] = React.useState<Lang>(() => (remembered("reid-lang") === "en" ? "en" : "ar")),
+    [dark, setDark] = React.useState(() => {
+      const saved = remembered("reid-theme");
+      if (saved) return saved === "dark";
+      return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+    }),
     t = tr[lang];
   // Roles, suspension and profile completion are resolved once by the shell.
-  const { roles: sessionRoles, profileComplete: ready, reload: check } =
-    useSession();
-  const canManageCompany = sessionRoles.some((role) =>
-    ["owner", "super_admin", "admin", "hr"].includes(role),
-  );
+  const access = useSession();
+  const { reload: check } = access;
   const navigation = useNavigation();
-  const [menuOpen, setMenuOpen] = React.useState(false);
-  const internalPage = session && ["dashboard", "workspace", "projects", "research", "crm", "profile"].includes(page);
+  // /dashboard is where sign-in returns. A join-application link goes on to
+  // People, and anyone agent management would refuse starts on their own page.
+  React.useEffect(() => {
+    if (page !== "dashboard") return;
+    const params = new URLSearchParams(location.search);
+    const redirect = (path: string) => { history.replaceState({}, "", path); dispatchEvent(new PopStateEvent("popstate")); };
+    if (params.has("review")) redirect(`/workspace?tab=applications&${params}`);
+    else if (accessForPage("dashboard", access) === "forbidden") redirect(pathFor(landingPage(access.roles)));
+  }, [page, access]);
+  const internalPage = !!session && workspacePages.includes(page);
+  React.useEffect(() => remember("reid-lang", lang), [lang]);
+  React.useEffect(() => remember("reid-theme", dark ? "dark" : "light"), [dark]);
+  React.useEffect(() => {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  }, [lang]);
   React.useEffect(() => {
     const client = supabase;
     if (!session || !client) return;
@@ -1390,99 +739,28 @@ function Chrome({ session }: { session: Session | null }) {
       go("home");
     });
   }, [session]);
-  return (
-    <div
-      className={`${dark ? "app dark" : "app"}${internalPage ? " workspace-mode" : ""}`}
-      dir={lang === "ar" ? "rtl" : "ltr"}
-    >
-      <header className={internalPage ? "workspace-topbar" : "public-topbar"}>
-        <button className="brand" onClick={() => go("home")}>
-          <img src={reidLogo} alt="" aria-hidden="true" />
-          <strong>{t.brand}</strong>
-        </button>
-        {!internalPage && <nav>
-          {/* Derived from src/routes.ts, so the navigation can never offer a
-              destination the gate would then refuse. */}
-          {navigation
-            .filter(({ page: target }) => target !== "privacy" && target !== "login")
-            .map(({ page: target }) => (
-              <button
-                key={target}
-                onClick={() => go(target)}
-                aria-current={page === target ? "page" : undefined}
-              >
-                {navLabel(target, lang, t)}
-              </button>
-            ))}
-          <button
-            className="pill"
-            onClick={() => go(session ? "profile" : "login")}
-          >
-            {session ? t.account : t.login}
-          </button>
-        </nav>}
-        {internalPage && <div className="workspace-topbar-context"><Building2 /><span>{lang === "ar" ? "نظام شركة ريّد" : "Reid Company System"}</span></div>}
-        <aside>
-          {internalPage && <button className="mobile-menu" aria-label="Menu" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>}
-          <button onClick={() => setDark(!dark)}>{dark ? "☀" : "☾"}</button>
-          <button onClick={() => setLang(lang === "ar" ? "en" : "ar")}>
-            {lang === "ar" ? "EN" : "ع"}
-          </button>
-        </aside>
-      </header>
-      {internalPage && <WorkspaceSidebar lang={lang} page={page} navigation={navigation} open={menuOpen} go={(target) => { setMenuOpen(false); go(target); }} signout={async () => { await supabase?.auth.signOut(); go("home"); }} />}
-      {page === "home" && (
-        <main>
-          <section className="hero">
-            <span>REID · TECHNOLOGY & AI</span>
-            <h1>{t.hero}</h1>
-            <p>{t.intro}</p>
-            <div>
-              <button className="primary" onClick={() => go("apply")}>
-                {t.start} ←
-              </button>
-              <button onClick={() => go("dashboard")}>{t.discover}</button>
-            </div>
-            <section className="stats public-value">
-              <article>
-                <b>{lang === "ar" ? "حلول مخصصة" : "Tailored"}</b>
-                <small>{lang === "ar" ? "لأهداف كل مؤسسة" : "For each organization"}</small>
-              </article>
-              <article>
-                <b>{lang === "ar" ? "من الفكرة للتشغيل" : "End to end"}</b>
-                <small>{lang === "ar" ? "تصميم وبناء وتشغيل" : "Design, build and operate"}</small>
-              </article>
-              <article>
-                <b>{lang === "ar" ? "بأمان" : "Secure"}</b>
-                <small>{lang === "ar" ? "صلاحيات وموافقات واضحة" : "Clear access and approvals"}</small>
-              </article>
-            </section>
-          </section>
-          <section className="features">
-            <span>REID OS</span>
-            <h2>{t.platform}</h2>
-            <div>
-              <article>
-                <h3>Operations</h3>
-                <p>المشاريع والمهام والتقويم وساعات العمل.</p>
-              </article>
-              <article>
-                <h3>People & Research</h3>
-                <p>الموظفون والأبحاث والموافقات.</p>
-              </article>
-              <article>
-                <h3>Agent Command</h3>
-                <p>الحالة والصلاحيات وسجل التنفيذ.</p>
-              </article>
-            </div>
-          </section>
-          <Chat lang={lang} />
-        </main>
+  const signOut = async () => { await supabase?.auth.signOut(); go("home"); };
+  const userName = String(session?.user?.user_metadata?.full_name || session?.user?.email || (lang === "ar" ? "حسابي" : "My account"));
+  const content = (
+      <React.Suspense fallback={<main className="workspace-page-loading"><LoaderCircle/><span>{lang==='ar'?'جارٍ فتح المساحة…':'Opening workspace…'}</span></main>}>
+      {page === "home" && <><PublicHome lang={lang} go={go} /><Chat lang={lang} /></>}
+      {page === "workshops" && <Workshops lang={lang} go={go} />}
+      {(["owner", "today", "inbox", "connections", "operations", "assistant", "admin", "forms"] as Page[]).includes(page) && (
+        <Guarded page={page} lang={lang} renderSignIn={() => <Login lang={lang} done={() => go(page)} apply={() => go("apply")} />} onProfile={() => go("profile")}>
+          {page === "today" && <Today lang={lang} go={go} />}
+          {page === "owner" && <OwnerOverview lang={lang} go={go} />}
+          {page === "inbox" && <Inbox lang={lang} go={go} />}
+          {page === "connections" && <Connections lang={lang} go={go} />}
+          {page === "operations" && <Operations lang={lang} />}
+          {page === "assistant" && <AssistantWorkspace lang={lang} />}
+          {page === "admin" && <AdminWorkspace lang={lang} go={go} />}
+          {page === "forms" && <FormsWorkspace lang={lang} go={go} />}
+        </Guarded>
       )}
       {page === "login" && (
         <Login
           lang={lang}
-          done={() => go("workspace")}
+          done={() => go("today")}
           apply={() => go("apply")}
         />
       )}{" "}
@@ -1517,13 +795,7 @@ function Chrome({ session }: { session: Session | null }) {
           )}
           onProfile={() => go("profile")}
         >
-          <Dashboard
-            lang={lang}
-            user={session?.user || null}
-            ready={ready}
-            login={() => go("login")}
-            profile={() => go("profile")}
-          />
+          <AgentManagement lang={lang} go={go} />
         </Guarded>
       )}{" "}
       {page === "workspace" && (
@@ -1619,6 +891,68 @@ function Chrome({ session }: { session: Session | null }) {
           </button>
         </main>
       )}
+      </React.Suspense>
+  );
+  const appClass = `${dark ? "app dark" : "app"}${internalPage ? " workspace-mode" : ""}`;
+  // A respondent's page stands alone: no site header, footer or chat.
+  if (page === "respond") {
+    return (
+      <div className={appClass} dir={lang === "ar" ? "rtl" : "ltr"}>
+        <React.Suspense fallback={<main className="workspace-page-loading"><LoaderCircle/></main>}>
+          <RespondPage lang={lang} toggleLang={() => setLang(value => (value === "ar" ? "en" : "ar"))} />
+        </React.Suspense>
+      </div>
+    );
+  }
+  if (internalPage) {
+    return (
+      <div className={appClass} dir={lang === "ar" ? "rtl" : "ltr"}>
+        <AppShell
+          lang={lang} page={page} navigation={navigation} userName={userName} dark={dark} logo={reidLogo} go={go}
+          toggleDark={() => setDark(value => !value)} toggleLang={() => setLang(value => (value === "ar" ? "en" : "ar"))}
+          signOut={signOut}
+        >
+          {content}
+        </AppShell>
+      </div>
+    );
+  }
+  return (
+    <div className={appClass} dir={lang === "ar" ? "rtl" : "ltr"}>
+      <header className="public-topbar">
+        <button className="brand" onClick={() => go("home")}>
+          <img src={reidLogo} alt="" aria-hidden="true" />
+          <strong>{t.brand}</strong>
+        </button>
+        <nav>
+          {/* Derived from src/routes.ts, so the navigation can never offer a
+              destination the gate would then refuse. */}
+          {navigation
+            .filter(({ page: target }) => ["home", "workshops", "apply", "today"].includes(target))
+            .map(({ page: target }) => (
+              <button
+                key={target}
+                onClick={() => go(target)}
+                aria-current={page === target ? "page" : undefined}
+              >
+                {navLabel(target, lang, t)}
+              </button>
+            ))}
+          <button
+            className="pill"
+            onClick={() => go(session ? "profile" : "login")}
+          >
+            {session ? t.account : t.login}
+          </button>
+        </nav>
+        <aside>
+          <button onClick={() => setDark(!dark)} aria-label={dark ? "Light mode" : "Dark mode"}>{dark ? "☀" : "☾"}</button>
+          <button onClick={() => setLang(lang === "ar" ? "en" : "ar")}>
+            {lang === "ar" ? "EN" : "ع"}
+          </button>
+        </aside>
+      </header>
+      {content}
       <footer>
         <button className="text-link" onClick={() => go("privacy")}>
           {lang === "ar" ? "الخصوصية" : "Privacy"}

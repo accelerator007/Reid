@@ -1,0 +1,12 @@
+tunnel: 635939a7-92d1-4e60-a2f4-821eaa167ede
+credentials-file: /etc/cloudflared/635939a7-92d1-4e60-a2f4-821eaa167ede.json
+
+ingress:
+  - hostname: local.reidpro.com
+    service: http://web:8080
+  - hostname: reidpro.com
+    service: http://web:8080
+  - hostname: www.reidpro.com
+    service: http://web:8080
+  - service: http_status:404
+

@@ -1,6 +1,6 @@
-# ai-lap secure Ollama integration plan
+# ai-lap secure Ollama integration
 
-Status: outbound runner deployed to Supabase on 2026-09-06; local adapter passed live tests. Final runner-service installation is waiting for `ai-lap` to return to the network.
+Status: Production active. Outbound runner 1.2.0, restricted adapter and Ollama services were healthy and passed the live 5-case quality gate at 100/100 on 2026-09-12.
 
 ## Verified host state
 
@@ -26,6 +26,8 @@ Reid browser
 ```
 
 Ollama ports remain loopback-only and are never exposed directly. The local adapter uses `127.0.0.1:11436`; `11435` was already held by the Ollama service during installation. The adapter is mandatory because raw Ollama exposes administrative/model-management endpoints. It accepts only bounded `POST /api/chat`, `POST /api/embeddings`, and `GET /health`, whitelists `gemma4:12b` and `nomic-embed-text`, rejects model pulls/deletes and arbitrary URLs, caps request/response sizes, sets timeouts, redacts logs, and requires a separate origin token.
+
+Before a chat result is accepted, the runner applies a deterministic quality contract. It checks answer language, evidence citations, missing-evidence wording, invalid citations, prompt leakage and claims of unperformed actions. One failed answer is automatically revised with the exact failed checks; a second failure is recorded and withheld. Quality score, flags, contract version and revision count are stored on the run. Embedding jobs are validated independently and do not require a chat-answer attestation.
 
 The Cloudflare Tunnel design was tested and rejected on this network: even forced HTTP/2 required outbound TCP 7844, which timed out. The outbound runner uses normal HTTPS 443, creates no public hostname, and requires a separate 256-bit bearer credential stored only on ai-lap and in Supabase secrets.
 
@@ -89,7 +91,8 @@ The Cloudflare Tunnel design was tested and rejected on this network: even force
 - Sensitive runs remain queued/failed safely rather than falling back across the configured data boundary.
 - Tool execution continues because database tools do not require a model provider call.
 
-## Human/external prerequisites
+## Current operational prerequisites
 
-- `ai-lap` must be reachable over SSH once more so the already-prepared outbound runner and its user service can be installed and live-tested.
+- Keep `ai-lap` and its Ollama, adapter and runner user services online. A local-only policy fails safely when they are unavailable.
 - No Cloudflare Access token, DNS record, inbound firewall rule, or public Ollama hostname is required.
+- Re-run `evaluate_agent_quality.py` after model, adapter, prompt-contract or decoding-setting changes.

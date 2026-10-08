@@ -1,0 +1,10 @@
+.public-topbar { padding-inline: clamp(20px, 6vw, 88px) !important; border-bottom: 1px solid var(--line); }
+.public-topbar nav button { position: relative; padding: 10px 2px; color: var(--muted); }
+.public-topbar nav button[aria-current="page"] { color: var(--ink); }
+.public-topbar nav button[aria-current="page"]::after { content: ""; position: absolute; inset-inline: 0; bottom: 2px; height: 2px; border-radius: 9px; background: var(--brand-500); }
+.public-topbar .pill { padding-inline: 18px; color: var(--on-brand); }
+.public-topbar aside { gap: 6px; }
+.public-topbar aside button { min-width: 38px; height: 38px; border: 1px solid var(--line); border-radius: var(--radius-pill); }
+.app > footer { align-items: center; gap: 18px; padding-inline: clamp(20px, 6vw, 88px); background: var(--card); font-size: 12px; }
+.app > footer b { margin-inline-start: auto; color: var(--ink); }
+@media (max-width: 800px) { .app > footer { flex-wrap: wrap; justify-content: center; } .app > footer b { margin-inline-start: 0; } }

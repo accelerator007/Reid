@@ -1,0 +1,50 @@
+/* Reid's type faces, bundled by Vite.
+ *
+ * The families were previously declared in style.css with absolute
+ * /assets/fonts/... URLs. Those files live outside Vite's public directory, so
+ * they were never emitted and every Production request returned 404: the site
+ * rendered in the browser's fallback Arabic face. Relative URLs make Vite hash
+ * and ship the files.
+ *
+ * Family names stay "p" (IBM Plex Sans Arabic, interface text) and "a"
+ * (Alexandria, display headings) because the stylesheets already use them;
+ * new code uses var(--font-sans) and var(--font-display) from tokens.css.
+ * Arabic and Latin are separate files, so each is only downloaded when a page
+ * actually contains that script.
+ */
+
+/* IBM Plex Sans Arabic — Arabic subset */
+@font-face { font-family: p; font-style: normal; font-weight: 300; font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-arabic-arabic-fb7c61ac.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+@font-face { font-family: p; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-arabic-arabic-6fbb1d0f.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+@font-face { font-family: p; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-arabic-arabic-2bea59b9.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+@font-face { font-family: p; font-style: normal; font-weight: 600 700; font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-arabic-arabic-dbd75799.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+
+/* IBM Plex Sans Arabic — Latin subset */
+@font-face { font-family: p; font-style: normal; font-weight: 300; font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-arabic-latin-69c9bb5d.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: p; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-arabic-latin-eda81446.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: p; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-arabic-latin-88a0f109.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: p; font-style: normal; font-weight: 600 700; font-display: swap;
+  src: url('../assets/fonts/ibm-plex-sans-arabic-latin-a2f8e395.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+/* Alexandria — variable weight 100-900, display headings */
+@font-face { font-family: a; font-style: normal; font-weight: 100 900; font-display: swap;
+  src: url('../assets/fonts/alexandria-arabic-4f8da94b.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+@font-face { font-family: a; font-style: normal; font-weight: 100 900; font-display: swap;
+  src: url('../assets/fonts/alexandria-latin-275bbbc8.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }

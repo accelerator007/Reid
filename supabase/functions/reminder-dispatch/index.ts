@@ -9,6 +9,7 @@ Deno.serve(async request=>{
   if(request.method!=='POST') return Response.json({error:'method_not_allowed'},{status:405});
   const expected=Deno.env.get('REID_REMINDER_CRON_TOKEN')||'';
   if(!expected || !equal(expected,request.headers.get('x-reid-cron-token')||'')) return Response.json({error:'unauthorized'},{status:401});
+  if(Deno.env.get('REID_WHATSAPP_TRANSPORT')==='qr') return Response.json({ok:true,transport:'qr',delegated:true});
   const admin=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const due=await admin.from('personal_reminders').select('id,whatsapp_phone,reminder_text,attempts')
     .eq('status','scheduled').lte('due_at',new Date().toISOString()).order('due_at').limit(25);

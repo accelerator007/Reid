@@ -15,6 +15,19 @@ test.describe('authenticated employee role journeys', () => {
   const users: Record<string, { id: string; email: string }> = {};
   let departmentId: string | undefined;
 
+  const cleanup = async (steps: Array<{ label: string; run: () => PromiseLike<{ error: { message?: string } | null }> }>) => {
+    const failures: string[] = [];
+    for (const step of steps) {
+      try {
+        const result = await step.run();
+        if (result.error) failures.push(`${step.label}: ${result.error.message || 'unknown cleanup error'}`);
+      } catch (error) {
+        failures.push(`${step.label}: ${error instanceof Error ? error.message : 'cleanup threw'}`);
+      }
+    }
+    if (failures.length) throw new Error(`E2E cleanup failed:\n${failures.join('\n')}`);
+  };
+
   const createUser = async (label: string, role: 'employee' | 'hr' | 'owner') => {
     const email = `reid-browser-${label}-${stamp}@example.com`;
     const created = await admin.auth.admin.createUser({
@@ -40,8 +53,8 @@ test.describe('authenticated employee role journeys', () => {
     await page.goto('/workspace');
     await page.locator('input[name="email"]').fill(users[label].email);
     await page.locator('input[name="password"]').fill(password);
-    await page.locator('form button.primary').click();
-    await expect(page.getByRole('heading', { name: 'مساحة عمل الموظفين' })).toBeVisible();
+    await page.getByRole('main').getByRole('button', { name: 'تسجيل الدخول', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'الفريق', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('[role="status"]').filter({ hasText: /تعذر|انتهت الجلسة|غير مصرح/i })).toHaveCount(0);
   };
 
@@ -63,31 +76,33 @@ test.describe('authenticated employee role journeys', () => {
   });
 
   test.afterAll(async () => {
-    if (departmentId) await admin.from('departments').delete().eq('id', departmentId);
-    for (const user of Object.values(users)) await admin.auth.admin.deleteUser(user.id);
+    const steps: Array<{ label: string; run: () => PromiseLike<{ error: { message?: string } | null }> }> = [];
+    if (departmentId) steps.push({ label:'department', run:() => admin.from('departments').delete().eq('id', departmentId!) });
+    for (const [label,user] of Object.entries(users)) steps.push({ label:`auth user ${label}`, run:() => admin.auth.admin.deleteUser(user.id) });
+    await cleanup(steps);
   });
 
   test('Employee opens an active employee workspace with the assigned role', async ({ page }) => {
     await signIn(page, 'employee');
-    await expect(page.getByText('Reid employee · employee', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'ملفي الشخصي' })).toBeVisible();
+    await expect(page.getByText('Reid employee', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'ملفي', exact: true })).toBeVisible();
   });
 
   test('department Manager opens the directory and direct report', async ({ page }) => {
     await signIn(page, 'manager');
-    await page.getByRole('button', { name: 'الموظفون' }).click();
+    await page.getByRole('tab', { name: /الأشخاص/ }).click();
     await expect(page.getByText('Reid employee', { exact: true }).first()).toBeVisible();
     await expect(page.getByText(`ضمان الجودة ${stamp}`, { exact: true }).first()).toBeVisible();
   });
 
   test('HR opens the company directory across departments', async ({ page }) => {
     await signIn(page, 'hr');
-    await page.getByRole('button', { name: 'الموظفون' }).click();
+    await page.getByRole('tab', { name: /الأشخاص/ }).click();
     await expect(page.getByText('Reid manager', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Reid employee', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Reid hr', { exact: true }).first()).toBeVisible();
     await page.goto('/crm');
-    await expect(page.getByRole('heading', { name: 'إدارة العملاء والمبيعات' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'العملاء', exact: true })).toBeVisible();
   });
 
   test('Owner runs Operations through the configured governed provider', async ({ page }) => {
@@ -96,8 +111,8 @@ test.describe('authenticated employee role journeys', () => {
     await page.goto('/dashboard');
     await page.locator('input[name="email"]').fill(users.owner.email);
     await page.locator('input[name="password"]').fill(password);
-    await page.locator('form button.primary').click();
-    await expect(page.getByRole('heading', { name: 'خريطة قيادة الوكلاء' })).toBeVisible();
+    await page.getByRole('main').getByRole('button', { name: 'تسجيل الدخول', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'إدارة الوكلاء' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'مركز قيادة النظام' })).toBeVisible();
     const runnerCard=page.locator('.runner-card');
     await expect(runnerCard).toContainText('gemma4:12b');
@@ -190,7 +205,7 @@ test.describe('authenticated employee role journeys', () => {
       return response.data;
     };
     try {
-      const project=await admin.from('projects').insert({name:`Agent matrix ${stamp}`,type:'internal',status:'active',manager_id:users.owner.id,budget:1000,currency:'OMR'}).select('id').single();
+      const project=await admin.from('projects').insert({name:`Agent matrix ${stamp}`,type:'internal',status:'active',manager_id:users.owner.id}).select('id').single();
       if(project.error)throw project.error; projectId=project.data.id;
       const company=await admin.from('crm_companies').insert({name:`Agent matrix ${stamp}`,owner_id:users.owner.id}).select('id').single();
       if(company.error)throw company.error; companyId=company.data.id;
@@ -199,7 +214,7 @@ test.describe('authenticated employee role journeys', () => {
 
       for(const [agent,tool] of [
         ['operations','projects.list'],['operations','tasks.list'],['sales','crm.pipeline'],
-        ['hr','people.list'],['hr','applications.list'],['finance','finance.budgets'],
+        ['hr','people.list'],['hr','applications.list'],
         ['content','content.context'],['knowledge','knowledge.search'],
       ] as const) {
         const result=await invoke(agent,tool,tool==='knowledge.search'?{query:'Agent matrix'}:{});
@@ -220,21 +235,21 @@ test.describe('authenticated employee role journeys', () => {
       const rejectedPublish=await caller.functions.invoke('llm-gateway',{body:{action:'reject',runId:publish.run.id}});
       if(rejectedPublish.error)throw rejectedPublish.error; expect(rejectedPublish.data.status).toBe('cancelled');
 
-      const budget=await invoke('finance','projects.budget.update',{project_id:projectId,budget:9999,currency:'OMR'});
-      expect(budget.status).toBe('pending_approval'); expect(budget.approvalLevel).toBe(3);
-      const rejectedBudget=await caller.functions.invoke('llm-gateway',{body:{action:'reject',runId:budget.run.id}});
-      if(rejectedBudget.error)throw rejectedBudget.error; expect(rejectedBudget.data.status).toBe('cancelled');
-      const unchanged=await admin.from('projects').select('budget').eq('id',projectId).single();
-      expect(Number(unchanged.data?.budget)).toBe(1000);
     } finally {
-      if(activityId)await admin.from('crm_activities').delete().eq('id',activityId);
-      if(taskId)await admin.from('tasks').delete().eq('id',taskId);
-      if(onboardingId)await admin.from('onboarding_items').delete().eq('id',onboardingId);
-      if(draftId)await admin.from('content_drafts').delete().eq('id',draftId);
-      if(leadId)await admin.from('crm_leads').delete().eq('id',leadId);
-      if(companyId)await admin.from('crm_companies').delete().eq('id',companyId);
-      if(projectId)await admin.from('projects').delete().eq('id',projectId);
-      if(runIds.length)await admin.from('agent_runs').delete().in('id',runIds);
+      const steps: Array<{ label: string; run: () => PromiseLike<{ error: { message?: string } | null }> }> = [];
+      if(activityId)steps.push({label:'CRM activity',run:()=>admin.from('crm_activities').delete().eq('id',activityId!)});
+      if(taskId)steps.push({label:'project task',run:()=>admin.from('tasks').delete().eq('id',taskId!)});
+      if(projectId)steps.push(
+        {label:'remaining project tasks',run:()=>admin.from('tasks').delete().eq('project_id',projectId!)},
+        {label:'project activity',run:()=>admin.from('project_activity').delete().eq('project_id',projectId!)},
+      );
+      if(onboardingId)steps.push({label:'onboarding item',run:()=>admin.from('onboarding_items').delete().eq('id',onboardingId!)});
+      if(draftId)steps.push({label:'content draft',run:()=>admin.from('content_drafts').delete().eq('id',draftId!)});
+      if(leadId)steps.push({label:'CRM lead',run:()=>admin.from('crm_leads').delete().eq('id',leadId!)});
+      if(companyId)steps.push({label:'CRM company',run:()=>admin.from('crm_companies').delete().eq('id',companyId!)});
+      if(projectId)steps.push({label:'project',run:()=>admin.from('projects').delete().eq('id',projectId!)});
+      if(runIds.length)steps.push({label:'agent runs',run:()=>admin.from('agent_runs').delete().in('id',runIds)});
+      await cleanup(steps);
     }
   });
 });

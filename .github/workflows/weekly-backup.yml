@@ -5,12 +5,77 @@ on:
 permissions: {contents: read}
 jobs:
   backup:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env: {POSTGRES_PASSWORD: postgres}
+        ports: ['55433:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
-      - run: mkdir -p backup && supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql && supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --data-only --use-copy
-        env: {SUPABASE_DB_URL: "${{ secrets.SUPABASE_DB_URL }}"}
+      - name: Require backup credentials
+        run: |
+          python3 - <<'PY'
+          import os
+          if not os.environ.get('SUPABASE_URL'):
+              raise SystemExit('SUPABASE_URL is missing')
+          if not os.environ.get('SUPABASE_SERVICE_ROLE_KEY'):
+              raise SystemExit('SUPABASE_SERVICE_ROLE_KEY is missing')
+          if not os.environ.get('BACKUP_ENCRYPTION_KEY'):
+              raise SystemExit('BACKUP_ENCRYPTION_KEY is missing')
+          print('Backup credentials are present.')
+          PY
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+      - name: Build the restorable schema
+        run: |
+          mkdir -p backup
+          export PGPASSWORD=postgres
+          psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -f supabase/tests/local/bootstrap.sql >/dev/null
+          for migration in supabase/migrations/*.sql; do
+            sed -e 's/^create extension if not exists vector with schema extensions;$/-- vector extension shimmed for restore proof/' \
+                -e 's/extensions\.vector([0-9]*)/extensions.vector/g' "$migration" \
+              | psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 >/dev/null
+          done
+          psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -At -v ON_ERROR_STOP=1 \
+            -c "select tablename from pg_tables where schemaname='public' and tablename <> 'test_results' order by tablename" > backup/tables.txt
+          test -s backup/tables.txt
+      - name: Export and verify every public table
+        run: |
+          node scripts/rest-backup.mjs export --tables backup/tables.txt --out backup
+          node scripts/rest-backup.mjs verify --backup backup
+          node scripts/rest-backup.mjs restore-sql --backup backup --output /tmp/reid-restore.sql
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      - name: Prove the backup restores
+        run: |
+          export PGPASSWORD=postgres
+          psql -h 127.0.0.1 -p 55433 -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/reid-restore.sql
+          psql -h 127.0.0.1 -p 55433 -U postgres -v ON_ERROR_STOP=1 -c "select count(*) as restored_public_tables from pg_tables where schemaname='public';"
+      - name: Encrypt the verified backup
+        run: |
+          cp scripts/rest-backup.mjs backup/
+          cp -R supabase/migrations backup/migrations
+          tar -C backup -czf backup.tar.gz manifest.json data migrations rest-backup.mjs
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in backup.tar.gz -out reid-backup.tar.gz.enc -pass env:BACKUP_ENCRYPTION_KEY
+          sha256sum reid-backup.tar.gz.enc > reid-backup.sha256
+          find backup -type f -delete
+          rmdir backup/data backup/migrations backup
+          shred -u /tmp/reid-restore.sql backup.tar.gz
+        env: {BACKUP_ENCRYPTION_KEY: "${{ secrets.BACKUP_ENCRYPTION_KEY }}"}
       - uses: actions/upload-artifact@v4
-        with: {name: "reid-db-backup-${{ github.run_id }}", path: backup, retention-days: 30}
+        with:
+          name: reid-db-backup-${{ github.run_id }}
+          path: |
+            reid-backup.tar.gz.enc
+            reid-backup.sha256
+          retention-days: 30
+          if-no-files-found: error

@@ -29,8 +29,6 @@ type Research = {
   doi: string | null;
   conference: string | null;
   funding_source: string | null;
-  funding_amount: number | null;
-  currency: string;
   start_date: string | null;
   target_date: string | null;
   archived_at: string | null;
@@ -254,7 +252,7 @@ export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
     const q = await supabase
       .from("research")
       .select(
-        "id,title,abstract,field,status,supervisor_id,is_public,ethics_status,doi,conference,funding_source,funding_amount,currency,start_date,target_date,archived_at",
+        "id,title,abstract,field,status,supervisor_id,is_public,ethics_status,doi,conference,funding_source,start_date,target_date,archived_at",
       )
       .order("updated_at", { ascending: false });
     setResearch((q.data || []) as Research[]);
@@ -461,7 +459,7 @@ export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
 
   if (!item)
     return (
-      <main className="projects-page">
+      <main className="projects-page research-page">
         <header className="projects-heading">
           <div>
             <span>REID RESEARCH</span>
@@ -524,8 +522,6 @@ export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
                     status: "proposal",
                     is_public: f.get("is_public") === "on",
                     funding_source: f.get("funding_source") || null,
-                    funding_amount: Number(f.get("funding_amount") || 0),
-                    currency: f.get("currency"),
                     start_date: f.get("start_date") || null,
                     target_date: f.get("target_date") || null,
                     created_by: user.id,
@@ -575,19 +571,8 @@ export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
               </label>
               <Field
                 name="funding_source"
-                label={lang === "ar" ? "جهة التمويل" : "Funding source"}
+                label={lang === "ar" ? "الجهة الداعمة" : "Supporting organisation"}
                 required={false}
-              />
-              <Field
-                name="funding_amount"
-                label={lang === "ar" ? "قيمة التمويل" : "Funding amount"}
-                type="number"
-                required={false}
-              />
-              <Field
-                name="currency"
-                label={lang === "ar" ? "العملة" : "Currency"}
-                value="OMR"
               />
               <Field
                 name="start_date"
@@ -628,7 +613,7 @@ export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
   const approvedEthics = ethics.filter((e) => e.status === "approved").length;
 
   return (
-    <main className="project-dashboard">
+    <main className="project-dashboard research-page research-detail">
       <button className="project-back" onClick={back}>
         ← {t.back}
       </button>
@@ -641,9 +626,6 @@ export function ResearchWorkspace({ lang, user }: { lang: Lang; user: User }) {
           <p>{item.abstract}</p>
         </div>
         <div>
-          <b>
-            {item.funding_amount || 0} {item.currency}
-          </b>
           <span>
             {t.supervisor}: {person(item.supervisor_id)}
           </span>

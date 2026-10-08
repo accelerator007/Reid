@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
-const component = readFileSync(new URL("./whatsapp-inbox.tsx", import.meta.url), "utf8");
+// The owner inbox on /inbox reads the linked-phone (QR) service, not the Cloud API function.
+const component = readFileSync(new URL("./inbox/inbox-page.tsx", import.meta.url), "utf8");
 const endpoint = readFileSync(new URL("../supabase/functions/whatsapp-inbox/index.ts", import.meta.url), "utf8");
 const webhook = readFileSync(new URL("../supabase/functions/whatsapp-webhook/index.ts", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../supabase/migrations/202609060004_whatsapp_owner_inbox.sql", import.meta.url), "utf8");
 const reminderMigration = readFileSync(new URL("../supabase/migrations/202609070001_personal_reminders_memory_v2.sql", import.meta.url), "utf8");
 const reminderDispatch = readFileSync(new URL("../supabase/functions/reminder-dispatch/index.ts", import.meta.url), "utf8");
+const adminMemoryMigration = readFileSync(new URL("../supabase/migrations/202609120002_whatsapp_admin_memory.sql", import.meta.url), "utf8");
+const ownerGroupMigration = readFileSync(new URL("../supabase/migrations/202609120003_owner_whatsapp_group.sql", import.meta.url), "utf8");
+const ownerGroupPinned = readFileSync(new URL("../supabase/migrations/202609120004_owner_group_always_active.sql", import.meta.url), "utf8");
+const qrPolicy = readFileSync(new URL("../server/policy.mjs", import.meta.url), "utf8");
+const qrService = readFileSync(new URL("../server/index.mjs", import.meta.url), "utf8");
+const qrInbound = readFileSync(new URL("../server/inbound.mjs", import.meta.url), "utf8");
+const qrTransport = readFileSync(new URL("../supabase/functions/_shared/qr-transport.ts", import.meta.url), "utf8");
+const runner = readFileSync(new URL("../supabase/functions/ai-lap-runner/index.ts", import.meta.url), "utf8");
 
 describe("WhatsApp Owner inbox contract", () => {
   it("keeps the permanent Meta token on the server", () => {
@@ -17,6 +26,17 @@ describe("WhatsApp Owner inbox contract", () => {
   it("enforces Owner access and the free-form 24-hour window", () => {
     expect(endpoint).toContain(".eq('role', 'owner')");
     expect(endpoint).toContain("outside_24h_window");
+  });
+
+  it("allows the authenticated browser POST preflight", () => {
+    expect(endpoint).toContain("'access-control-allow-methods': 'POST, OPTIONS'");
+    expect(endpoint).toContain("authorization, apikey, content-type, x-client-info");
+    expect(endpoint).toContain("request.method === 'OPTIONS'");
+  });
+
+  it("shows safe localized failures instead of raw service errors", () => {
+    expect(component).toContain("localError(thrown, lang)");
+    expect(component).not.toContain(".message}");
   });
 
   it("ships RLS for both normalized inbox tables", () => {
@@ -38,11 +58,46 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).toContain("requesterId:identity.id");
   });
 
-  it("acts as a personal chief of staff and persists isolated user memory", () => {
-    expect(webhook).toContain("رئيس مكتبه الرقمي");
-    expect(webhook).toContain("rememberOwnerMessage");
+  it("acts as Reid with isolated durable memory and learned style", () => {
+    expect(webhook).toContain("اسمك ريد بالعربية وReid بالإنجليزية");
+    expect(webhook).toContain("شخصيتك حية ومستمرة");
+    expect(webhook).toContain("learnAdminMessage");
+    expect(webhook).toContain("learn_whatsapp_admin_style");
+    expect(adminMemoryMigration).toContain("whatsapp_admin_profiles");
+    expect(adminMemoryMigration).toContain("style_learning_enabled");
     expect(webhook).toContain("scope:'user'");
     expect(webhook).toContain("scope_id:identity.id");
+  });
+
+  it("binds each authorized administrator phone to an active account", () => {
+    expect(webhook).toContain("WHATSAPP_ADMIN_EMAIL_MAP");
+    expect(webhook).toContain("adminIdentity");
+    expect(webhook).toContain("account_controls");
+    expect(webhook).toContain("control.data?.status!=='active'");
+    expect(webhook).toContain("role!=='guest'");
+    expect(adminMemoryMigration).toContain("whatsapp_admin_profiles_owner_manage");
+    expect(webhook).not.toContain("WHATSAPP_OWNER_USER_ID");
+  });
+
+  it("keeps the exact Owner group invocation-only for mapped Owners", () => {
+    expect(ownerGroupMigration).toContain("whatsapp_qr_groups");
+    expect(qrService).toContain("REID_QR_BOOTSTRAP_GROUP_NAME");
+    expect(qrService).toContain("authorizedGroupOwner");
+    expect(qrPolicy).toContain("reid|ري[ّ]?د");
+    expect(qrPolicy).toContain("mentionedJid");
+    expect(qrTransport).toContain("targetQrConversation");
+    expect(webhook).toContain("sender_phone");
+    expect(webhook).toContain("qr_group");
+    expect(qrService).toContain("group_admin_dispatch_denied");
+    expect(webhook).toContain("ownerGroup=false");
+    expect(webhook).toContain("لا تبدأ بالإهانة");
+    expect(webhook).toContain("لا تهدد");
+    expect(ownerGroupPinned).toContain("120363412585944970@g.us");
+    expect(qrPolicy).toContain("repliedToBot");
+    expect(qrPolicy).toContain("addressed=mentioned||reidName.test(text)||repliedToBot");
+    expect(qrService).toContain("if(!item.addressed)");
+    expect(qrInbound).toContain("async function persistInbound");
+    expect(qrService).toContain("setTimeout(resolve,300)");
   });
 
   it("accepts typed Arabic approval and rejection for the latest pending command", () => {
@@ -53,8 +108,16 @@ describe("WhatsApp Owner inbox contract", () => {
 
   it("keeps normal conversation natural and reserves approval for real tools", () => {
     const gateway = readFileSync(new URL("../supabase/functions/llm-gateway/index.ts", import.meta.url), "utf8");
-    expect(webhook).toContain("أجب مباشرة عن التحية");
+    // Greetings, "what is your name" and "how are you" used to be answered
+    // from three fixed strings before the model ever saw them. Conversation is
+    // natural only while no reply is hardcoded here.
+    expect(webhook).not.toContain("هلا وغلا");
+    expect(webhook).not.toContain("بخير دامك بخير");
+    expect(webhook).not.toContain("مساعدك الشخصي الذكي، موجود عشان");
     expect(webhook).not.toContain("`رد الوكيل:\\n${result.output}`");
+    expect(runner).not.toContain("output?`رد الوكيل:");
+    expect(webhook).toContain("اسمك ريد بالعربية وReid بالإنجليزية");
+    expect(webhook).toContain("لا تبدأ بعبارة «رد الوكيل»");
     expect(gateway).toContain("let effectiveApproval = 0");
     expect(gateway).toContain("effectiveApproval = tool.approval_level");
   });

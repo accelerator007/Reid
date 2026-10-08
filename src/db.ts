@@ -133,7 +133,7 @@ export function toAppError(raw: unknown): AppError {
     return { kind: "not_found", message: messages.not_found, detail };
   }
   // Anything the browser could not send at all reads as an outage, not a bug.
-  if (/failed to fetch|networkerror|load failed/i.test(detail)) {
+  if (/failed to fetch|networkerror|load failed|failed to send a request to the edge function/i.test(detail)) {
     return { kind: "offline", message: messages.offline, detail };
   }
 
@@ -168,6 +168,34 @@ export async function list<T>(
 
 export function messageFor(error: AppError, lang: "ar" | "en"): string {
   return error.message[lang];
+}
+
+const serviceMessages: Record<string, Message> = {
+  outside_24h_window: { ar: "انتهت نافذة 24 ساعة. أرسل قالبًا معتمدًا أولًا.", en: "The 24-hour window ended. Send an approved template first." },
+  owner_required: { ar: "هذا الإجراء متاح للمالك فقط.", en: "This action is available to the Owner only." },
+  unauthenticated: messages.unauthenticated,
+  invalid_session: messages.unauthenticated,
+  conversation_not_found: messages.not_found,
+  invalid_message: { ar: "الرسالة فارغة أو أطول من الحد المسموح.", en: "The message is empty or exceeds the allowed length." },
+  whatsapp_delivery_not_configured: { ar: "إرسال واتساب غير مهيأ حاليًا. أبلغ المالك.", en: "WhatsApp delivery is not configured. Notify the Owner." },
+  // Agent gateway (llm-gateway) refusals.
+  rate_limit_exceeded: { ar: "وصلت لحد التشغيلات في الساعة. حاول بعد قليل.", en: "You reached the hourly run limit. Try again shortly." },
+  daily_quota_exceeded: { ar: "انتهت حصة اليوم لهذا المزوّد.", en: "Today's quota for this provider is used up." },
+  local_provider_offline: { ar: "جهاز ai-lap غير متصل الآن، فلا يمكن تشغيل الوكيل.", en: "ai-lap is offline, so the agent cannot run." },
+  agent_paused: { ar: "الوكيل موقوف مؤقتًا. استأنفه أولًا.", en: "The agent is paused. Resume it first." },
+  agent_disabled: { ar: "الوكيل معطّل.", en: "The agent is disabled." },
+  provider_disabled: { ar: "مزوّد النموذج متوقف.", en: "The model provider is switched off." },
+  tool_not_assigned_or_disabled: { ar: "هذه الأداة غير مسندة لهذا الوكيل أو متوقفة.", en: "This tool is not assigned to the agent or is switched off." },
+  tool_not_implemented: { ar: "هذه الأداة لم تُفعّل بعد.", en: "This tool is not available yet." },
+  run_not_pending: { ar: "هذا الطلب لم يعد بانتظار قرار؛ ربما قرّر فيه شخص آخر.", en: "This request is no longer waiting; someone may have decided it." },
+  empty_input: { ar: "اكتب المطلوب أولًا.", en: "Write the request first." },
+  grounded_context_too_large: { ar: "الطلب أطول من اللازم. اختصره وحاول مجددًا.", en: "The request is too long. Shorten it and retry." },
+  agent_not_found_or_forbidden: messages.not_found,
+};
+
+export function messageForRaw(raw: unknown, lang: "ar" | "en"): string {
+  const code = typeof raw === "string" ? raw : raw instanceof Error ? raw.message : "";
+  return serviceMessages[code]?.[lang] ?? messageFor(toAppError(raw), lang);
 }
 
 /**

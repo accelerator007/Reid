@@ -12,7 +12,10 @@ host="${RLS_LOCAL_HOST:-localhost}"
 db="${RLS_LOCAL_DB:-reid_rls}"
 bin="${RLS_LOCAL_PGBIN:-/usr/lib/postgresql/16/bin}"
 state="${RLS_LOCAL_STATE:-}"
-psql_bin="$(command -v psql)"
+if ! psql_bin="$(command -v psql)" || [ -z "$psql_bin" ]; then
+  echo "PostgreSQL psql is required for the RLS harness." >&2
+  exit 127
+fi
 
 start_server() {
   [ -n "$state" ] || state="$(mktemp -d)"

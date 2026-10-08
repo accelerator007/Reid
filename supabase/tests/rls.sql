@@ -1,5 +1,5 @@
 begin;
-select plan(49);
+select plan(55);
 select has_table('public', 'applications');
 select has_table('public', 'audit_logs');
 select has_table('public', 'notifications');
@@ -49,5 +49,11 @@ select has_table('public', 'research_activity');
 select has_function('public', 'can_manage_research', array['uuid']);
 select has_function('public', 'can_read_research_document', array['uuid']);
 select results_eq($$select public from storage.buckets where id='research-files'$$, $$values(false)$$, 'research files bucket is private');
+select has_table('public', 'content_assets');
+select has_table('public', 'content_asset_versions');
+select has_table('public', 'content_image_usage');
+select has_function('public', 'claim_content_image_budget', array['integer','integer']);
+select has_function('public', 'release_content_image_budget', array['integer']);
+select results_eq($$select public from storage.buckets where id='content-assets'$$, $$values(false)$$, 'content image bucket is private');
 select * from finish();
 rollback;
