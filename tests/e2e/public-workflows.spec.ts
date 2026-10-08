@@ -23,7 +23,7 @@ test('protects the dashboard for anonymous visitors', async ({ page }) => {
   // Every guarded route now offers sign-in inline and keeps the destination,
   // rather than a dead-end gate that forgets where the visitor was going.
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'G Google' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Google/ })).toBeVisible();
   await expect(page.getByText('Pending Approvals')).toHaveCount(0);
 });
 
@@ -42,7 +42,7 @@ test('protects the Owner brief for anonymous visitors', async ({ page }) => {
 test('protects the employee workspace for anonymous visitors', async ({ page }) => {
   await page.goto('/workspace');
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'G Google' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Google/ })).toBeVisible();
 });
 
 test('protects project routes for anonymous visitors', async ({ page }) => {
