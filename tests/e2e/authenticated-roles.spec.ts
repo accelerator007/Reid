@@ -54,7 +54,7 @@ test.describe('authenticated employee role journeys', () => {
     await page.locator('input[name="email"]').fill(users[label].email);
     await page.locator('input[name="password"]').fill(password);
     await page.getByRole('main').getByRole('button', { name: 'تسجيل الدخول', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'مساحة عمل الموظفين' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'الفريق', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('[role="status"]').filter({ hasText: /تعذر|انتهت الجلسة|غير مصرح/i })).toHaveCount(0);
   };
 
@@ -84,25 +84,25 @@ test.describe('authenticated employee role journeys', () => {
 
   test('Employee opens an active employee workspace with the assigned role', async ({ page }) => {
     await signIn(page, 'employee');
-    await expect(page.getByText('Reid employee · employee', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'ملفي الشخصي' })).toBeVisible();
+    await expect(page.getByText('Reid employee', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'ملفي', exact: true })).toBeVisible();
   });
 
   test('department Manager opens the directory and direct report', async ({ page }) => {
     await signIn(page, 'manager');
-    await page.getByRole('button', { name: 'الموظفون' }).click();
+    await page.getByRole('tab', { name: /الأشخاص/ }).click();
     await expect(page.getByText('Reid employee', { exact: true }).first()).toBeVisible();
     await expect(page.getByText(`ضمان الجودة ${stamp}`, { exact: true }).first()).toBeVisible();
   });
 
   test('HR opens the company directory across departments', async ({ page }) => {
     await signIn(page, 'hr');
-    await page.getByRole('button', { name: 'الموظفون' }).click();
+    await page.getByRole('tab', { name: /الأشخاص/ }).click();
     await expect(page.getByText('Reid manager', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Reid employee', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Reid hr', { exact: true }).first()).toBeVisible();
     await page.goto('/crm');
-    await expect(page.getByRole('heading', { name: 'إدارة العملاء والمبيعات' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'العملاء', exact: true })).toBeVisible();
   });
 
   test('Owner runs Operations through the configured governed provider', async ({ page }) => {

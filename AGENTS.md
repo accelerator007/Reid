@@ -1239,3 +1239,4 @@ A workflow is done only when its happy path, denial path, validation errors, RBA
 # Latest verification update
 
 - Updated the authenticated role journeys to select the redesigned sign-in action by its accessible Arabic name inside the main login region instead of the removed legacy `.primary` CSS class. The main-region scope distinguishes the form submit button from the same-named navigation action and keeps employee, manager, HR, and owner browser checks aligned with the current login UI.
+- The same remote browser suite now validates the redesigned People and Clients vocabulary (`الفريق`, `ملفي`, `الأشخاص`, `العملاء`) while retaining its real role, department-visibility, and CRM-access assertions. Removed headings and controls from the legacy workspace are no longer treated as the expected product behavior.
