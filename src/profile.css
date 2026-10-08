@@ -14,3 +14,27 @@
 .profile-form .os-primary { width: fit-content; }
 .profile-redesign > [role="status"] { padding: 12px 15px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--brand-fill); }
 @media (max-width: 680px) { .profile-redesign .os-page-heading { flex-direction: column; } .profile-redesign .os-page-heading .os-secondary { width: 100%; } .profile-card { align-items: flex-start; } .profile-form { grid-template-columns: minmax(0, 1fr); } .profile-form .wide { grid-column: auto; } }
+.account-security { margin-top: 22px; padding: clamp(20px, 3vw, 32px); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--card); box-shadow: var(--shadow-os); }
+.account-security > header { display: flex; align-items: flex-start; gap: 13px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+.account-security h2, .account-security h3 { margin: 0; font-size: 17px; }
+.account-security header p, .account-security__setup p, .account-security__enroll p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.account-security__method, .account-security__factors > div, .account-security__setup { display: flex; align-items: center; gap: 12px; padding: 17px 0; border-bottom: 1px solid var(--line); }
+.account-security__method > div, .account-security__factors > div > span { display: flex; align-items: center; gap: 10px; flex: 1; }
+.account-security__method svg, .account-security__factors svg { width: 18px; color: var(--brand-400); }
+.account-security__method b, .account-security__method small, .account-security__factors b, .account-security__factors small { display: block; }
+.account-security__method small, .account-security__factors small { color: var(--muted); font-size: 10px; margin-top: 2px; }
+.account-security__method > i, .account-security__factors i { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: var(--radius-pill); background: var(--good-fill); color: var(--good); font: normal 9px/1 system-ui; }
+.account-security__method > i svg, .account-security__factors i svg { width: 12px; color: currentColor; }
+.account-security__setup { justify-content: space-between; border-bottom: 0; }
+.account-security__enroll { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 18px 26px; align-items: start; padding-top: 24px; }
+.account-security__enroll > div:first-child { grid-column: 1 / -1; }
+.account-security__enroll img { width: 190px; min-height: 190px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: white; }
+.account-security__enroll details, .account-security__enroll label { display: grid; gap: 8px; }
+.account-security__enroll summary, .account-security__enroll label span { color: var(--muted); font-size: 11px; cursor: pointer; }
+.account-security__enroll code { display: block; padding: 10px; margin-top: 10px; overflow-wrap: anywhere; border-radius: var(--radius-xs); background: var(--bg); font-size: 10px; }
+.account-security__enroll input { width: 100%; padding: 13px; border: 1px solid var(--line); border-radius: var(--radius-xs); background: var(--bg); color: var(--ink); font-size: 19px; letter-spacing: .25em; }
+.account-security__enroll > div:last-child { display: flex; align-items: center; gap: 12px; grid-column: 2; }
+.account-security__message { margin: 14px 0 0; padding: 11px 13px; border-radius: var(--radius-xs); background: var(--brand-fill); color: var(--ink); font-size: 11px; }
+.account-security .spin { animation: account-security-spin 1s linear infinite; }
+@keyframes account-security-spin { to { transform: rotate(360deg); } }
+@media (max-width: 680px) { .account-security__setup { align-items: stretch; flex-direction: column; } .account-security__enroll { grid-template-columns: minmax(0, 1fr); } .account-security__enroll > div:first-child, .account-security__enroll > div:last-child { grid-column: auto; } .account-security__enroll img { justify-self: center; } }

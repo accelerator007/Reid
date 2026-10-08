@@ -61,7 +61,7 @@ function FormsHome({ lang, navigate }: { lang: Lang; navigate: Navigate }) {
   const [tab, setTab] = React.useState<'mine' | 'shared'>('mine');
   const [query, setQuery] = React.useState('');
   const [status, setStatus] = React.useState<Status>('all');
-  const [templates, setTemplates] = React.useState(false);
+  const [templates, setTemplates] = React.useState(() => new URLSearchParams(location.search).get('new') === 'form');
   const [sharing, setSharing] = React.useState<Form | null>(null);
   const [access, setAccess] = React.useState<Form | null>(null);
   const [deleting, setDeleting] = React.useState<Form | null>(null);
@@ -75,6 +75,11 @@ function FormsHome({ lang, navigate }: { lang: Lang; navigate: Navigate }) {
     setError(result.error);
   }, [user]);
   React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => {
+    const follow = () => { if (new URLSearchParams(location.search).get('new') === 'form') setTemplates(true); };
+    addEventListener('popstate', follow);
+    return () => removeEventListener('popstate', follow);
+  }, []);
   React.useEffect(() => {
     let last = scrollY;
     const onScroll = () => { setFabSmall(scrollY > last && scrollY > 80); last = scrollY; };

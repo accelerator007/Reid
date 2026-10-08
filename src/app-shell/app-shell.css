@@ -124,6 +124,21 @@
 .shell-search span { flex: 1; text-align: start; }
 .shell-search-icon { display: none; }
 .shell-topbar__tools { display: flex; align-items: center; gap: var(--space-2); }
+.shell-create { position: relative; }
+.shell-create__button {
+  display: inline-flex; align-items: center; gap: var(--space-2); height: 38px; padding: 0 var(--space-3);
+  border: 0; border-radius: var(--radius-sm); background: var(--primary); color: var(--on-primary);
+  font: 650 var(--text-sm)/1 var(--font-sans); cursor: pointer;
+}
+.shell-create__button svg { width: 17px; height: 17px; }
+.shell-create__menu {
+  position: absolute; z-index: 80; inset-block-start: calc(100% + var(--space-2)); inset-inline-end: 0;
+  display: grid; min-width: 210px; padding: var(--space-2); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); background: var(--surface-raised); box-shadow: var(--shadow-3);
+}
+.shell-create__menu button { display: flex; align-items: center; gap: var(--space-3); min-height: 42px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text); font: inherit; cursor: pointer; text-align: start; }
+.shell-create__menu button:hover { background: var(--surface-hover); }
+.shell-create__menu svg { width: 18px; height: 18px; color: var(--primary-text); }
 .shell-agents {
   display: inline-flex; align-items: center; gap: var(--space-2); height: 38px; padding: 0 var(--space-3);
   border: 1px solid var(--primary-border); border-radius: var(--radius-sm);
@@ -209,6 +224,8 @@
   .shell-search { display: none; }
   .shell-search-icon { display: inline-grid; margin-inline-start: auto; }
   .shell-agents { display: none; }
+  .shell-create__button span { display: none; }
+  .shell-create__button { width: 38px; justify-content: center; padding: 0; }
 
   .shell-content { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
   .shell-bottom-nav {

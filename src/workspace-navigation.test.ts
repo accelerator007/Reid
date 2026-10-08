@@ -10,7 +10,7 @@ describe('Reid workspace information architecture', () => {
 
   it('opens on the overview, with the agent team in the first group', () => {
     expect(workspaceNavGroups[0].id).toBe('center');
-    expect(workspaceNavGroups[0].pages).toEqual(['owner', 'today', 'assistant']);
+    expect(workspaceNavGroups[0].pages).toEqual(['owner', 'today']);
   });
 
   it('offers every authenticated destination exactly once', () => {
@@ -29,15 +29,15 @@ describe('Reid workspace information architecture', () => {
   });
 
   it('uses clear labels in both languages, short ones on the phone', () => {
-    expect(workspaceLabel('assistant', 'ar')).toBe('فريق ريّد');
+    expect(workspaceLabel('assistant', 'ar')).toBe('ريّد');
     expect(workspaceLabel('dashboard', 'en')).toBe('Agent setup');
-    expect(workspaceLabel('operations', 'ar')).toBe('المهام');
-    expect(workspaceShortLabel('operations', 'ar')).toBe('المهام');
-    expect(workspaceShortLabel('projects', 'en')).toBe('Projects');
+    expect(workspaceLabel('operations', 'ar')).toBe('الطلبات');
+    expect(workspaceShortLabel('operations', 'ar')).toBe('الطلبات');
+    expect(workspaceShortLabel('projects', 'en')).toBe('Work');
   });
 
   it('knows which group a page belongs to', () => {
-    expect(workspaceGroupOf('crm')?.id).toBe('work');
+    expect(workspaceGroupOf('crm')?.id).toBe('company');
     expect(workspaceGroupOf('profile')).toBeUndefined();
   });
 });

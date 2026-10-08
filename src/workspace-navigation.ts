@@ -11,24 +11,28 @@ export type WorkspaceNavGroup = {
 // are filtered by useNavigation before anything is shown, so a role never sees
 // a destination the gate would refuse.
 export const workspaceNavGroups: readonly WorkspaceNavGroup[] = [
-  { id: 'center', label: { ar: 'ابدأ من هنا', en: 'Start here' }, pages: ['owner', 'today', 'assistant'] },
-  { id: 'work', label: { ar: 'الشغل اليومي', en: 'Daily work' }, pages: ['operations', 'projects', 'crm', 'research', 'workshops'] },
-  { id: 'company', label: { ar: 'الناس والتواصل', en: 'People & messages' }, pages: ['workspace', 'inbox'] },
-  { id: 'administration', label: { ar: 'الإعدادات', en: 'Settings' }, pages: ['admin', 'connections', 'dashboard', 'forms'] },
+  { id: 'center', label: { ar: 'ابدأ', en: 'Start' }, pages: ['owner', 'today'] },
+  { id: 'work', label: { ar: 'العمل', en: 'Work' }, pages: ['projects', 'assistant', 'inbox'] },
+  { id: 'company', label: { ar: 'كل الأدوات', en: 'All tools' }, pages: ['crm', 'operations', 'workspace', 'research', 'workshops', 'forms'] },
+  { id: 'administration', label: { ar: 'الإدارة', en: 'Administration' }, pages: ['admin', 'connections', 'dashboard'] },
 ] as const;
+
+/** The deliberately small everyday sidebar. Everything else stays searchable. */
+export const primaryWorkspacePages: readonly Page[] = ['owner', 'today', 'projects', 'assistant', 'inbox', 'admin'];
+export const moreWorkspacePages: readonly Page[] = ['crm', 'operations', 'workspace', 'research', 'workshops', 'forms', 'connections', 'dashboard'];
 
 /** Pinned below the groups, next to sign-out. */
 export const accountPages: readonly Page[] = ['profile'];
 
 /** The phone's bottom bar; everything else lives in the drawer behind "More". */
-export const mobilePrimaryPages: readonly Page[] = ['owner', 'today', 'assistant', 'operations', 'projects'];
+export const mobilePrimaryPages: readonly Page[] = ['owner', 'today', 'projects', 'assistant', 'inbox'];
 
 const labels: Partial<Record<Page, { ar: string; en: string }>> = {
-  owner: { ar: 'نظرة عامة', en: 'Overview' },
-  today: { ar: 'يومي', en: 'My day' },
-  assistant: { ar: 'فريق ريّد', en: 'Reid team' },
-  operations: { ar: 'المهام', en: 'Tasks' },
-  projects: { ar: 'المشاريع', en: 'Projects' },
+  owner: { ar: 'الرئيسية', en: 'Home' },
+  today: { ar: 'الرئيسية', en: 'Home' },
+  assistant: { ar: 'ريّد', en: 'Reid' },
+  operations: { ar: 'الطلبات', en: 'Requests' },
+  projects: { ar: 'العمل', en: 'Work' },
   crm: { ar: 'العملاء', en: 'Clients' },
   research: { ar: 'الأبحاث', en: 'Research' },
   workshops: { ar: 'الورش', en: 'Workshops' },
@@ -36,7 +40,7 @@ const labels: Partial<Record<Page, { ar: string; en: string }>> = {
   inbox: { ar: 'واتساب', en: 'WhatsApp' },
   dashboard: { ar: 'إعداد الوكلاء', en: 'Agent setup' },
   forms: { ar: 'النماذج', en: 'Forms' },
-  admin: { ar: 'المستخدمون والصلاحيات', en: 'Users & access' },
+  admin: { ar: 'الإدارة', en: 'Administration' },
   connections: { ar: 'الربط والتكاملات', en: 'Connections' },
   profile: { ar: 'حسابي', en: 'My account' },
 };
@@ -44,8 +48,8 @@ const labels: Partial<Record<Page, { ar: string; en: string }>> = {
 /** Short labels for the phone's bottom bar, where space is tight. */
 const shortLabels: Partial<Record<Page, { ar: string; en: string }>> = {
   owner: { ar: 'الرئيسية', en: 'Home' },
-  assistant: { ar: 'الوكلاء', en: 'Agents' },
-  operations: { ar: 'المهام', en: 'Tasks' },
+  assistant: { ar: 'ريّد', en: 'Reid' },
+  operations: { ar: 'الطلبات', en: 'Requests' },
 };
 
 export function workspaceLabel(page: Page, lang: 'ar' | 'en'): string {

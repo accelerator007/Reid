@@ -37,6 +37,7 @@ export function OwnerOverview({ lang, go }: { lang: Lang; go: (page: Page) => vo
   const [team, setTeam] = React.useState<Team | null>(null);
   const [error, setError] = React.useState<AppError | null>(null);
   const [busy, setBusy] = React.useState(true);
+  const [brief, setBrief] = React.useState('');
 
   const load = React.useCallback(async () => {
     if (!supabase) return;
@@ -68,6 +69,14 @@ export function OwnerOverview({ lang, go }: { lang: Lang; go: (page: Page) => vo
     history.replaceState({}, '', `/projects/${id}`);
     dispatchEvent(new PopStateEvent('popstate'));
   };
+  const askReid = (event: React.FormEvent) => {
+    event.preventDefault();
+    const value = brief.trim();
+    if (!value) return;
+    go('assistant');
+    history.replaceState({}, '', `/assistant?q=${encodeURIComponent(value)}`);
+    dispatchEvent(new PopStateEvent('popstate'));
+  };
 
   return (
     <main className="overview" aria-busy={busy}>
@@ -91,6 +100,23 @@ export function OwnerOverview({ lang, go }: { lang: Lang; go: (page: Page) => vo
         <InlineAlert action={<Button size="sm" onClick={() => void load()}>{tr(lang, 'إعادة المحاولة', 'Try again')}</Button>}>
           {messageFor(error, lang)}
         </InlineAlert>
+      )}
+
+      <form className="overview-ask" onSubmit={askReid}>
+        <span aria-hidden="true"><Sparkles /></span>
+        <label>
+          <b>{tr(lang, 'وش تبي ريّد يسوي؟', 'What should Reid do?')}</b>
+          <input value={brief} onChange={event => setBrief(event.target.value)} maxLength={1200}
+            placeholder={tr(lang, 'مثال: رتّب أولويات اليوم، ابحث عن موضوع، أو جهّز تقريرًا…', 'For example: set today’s priorities, research a topic, or prepare a report…')} />
+        </label>
+        <Button variant="primary" type="submit" disabled={!brief.trim()}>{tr(lang, 'ابدأ', 'Start')}</Button>
+      </form>
+
+      {!busy && snapshot && snapshot.metrics.active_projects === 0 && (
+        <Card className="overview-first-step">
+          <div><FolderKanban aria-hidden="true" /><span><h2>{tr(lang, 'ابدأ العمل الحقيقي', 'Start the real work')}</h2><p>{tr(lang, 'المساحة نظيفة الآن. أضف أول مشروع أو أول عميل، وبعدها تعرض الرئيسية ما يحتاج انتباهك فقط.', 'The workspace is clean. Add the first project or client, then Home will show only what needs attention.')}</p></span></div>
+          <div><Button variant="primary" onClick={() => { go('projects'); history.replaceState({}, '', '/projects?new=project'); dispatchEvent(new PopStateEvent('popstate')); }}>{tr(lang, 'مشروع جديد', 'New project')}</Button><Button variant="ghost" onClick={() => { go('crm'); history.replaceState({}, '', '/crm?new=lead'); dispatchEvent(new PopStateEvent('popstate')); }}>{tr(lang, 'إضافة عميل', 'Add client')}</Button></div>
+        </Card>
       )}
 
       <section className="overview-stats" aria-label={tr(lang, 'مؤشرات الشركة', 'Company indicators')}>

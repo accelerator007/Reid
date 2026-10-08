@@ -31,7 +31,7 @@ export function CrmWorkspace({ lang, user }: { lang: Lang; user: User }) {
   const [data, setData] = React.useState<api.ClientsData | null>(null);
   const [error, setError] = React.useState<AppError | null>(null);
   const [tab, setTab] = React.useState<Tab>('pipeline');
-  const [dialog, setDialog] = React.useState<ClientDialog>(null);
+  const [dialog, setDialog] = React.useState<ClientDialog>(() => new URLSearchParams(location.search).get('new') === 'lead' ? 'lead' : null);
   const [query, setQuery] = React.useState('');
   const [busy, setBusy] = React.useState(false);
 
@@ -41,6 +41,11 @@ export function CrmWorkspace({ lang, user }: { lang: Lang; user: User }) {
     setError(result.error);
   }, []);
   React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => {
+    const follow = () => { if (new URLSearchParams(location.search).get('new') === 'lead') setDialog('lead'); };
+    addEventListener('popstate', follow);
+    return () => removeEventListener('popstate', follow);
+  }, []);
   const act = async (write: Promise<Result<unknown>>) => {
     const result = await write;
     if (!result.ok) setError(result.error);
