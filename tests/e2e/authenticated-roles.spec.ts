@@ -53,7 +53,7 @@ test.describe('authenticated employee role journeys', () => {
     await page.goto('/workspace');
     await page.locator('input[name="email"]').fill(users[label].email);
     await page.locator('input[name="password"]').fill(password);
-    await page.getByRole('button', { name: 'تسجيل الدخول', exact: true }).click();
+    await page.getByRole('main').getByRole('button', { name: 'تسجيل الدخول', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'مساحة عمل الموظفين' })).toBeVisible();
     await expect(page.locator('[role="status"]').filter({ hasText: /تعذر|انتهت الجلسة|غير مصرح/i })).toHaveCount(0);
   };
@@ -111,7 +111,7 @@ test.describe('authenticated employee role journeys', () => {
     await page.goto('/dashboard');
     await page.locator('input[name="email"]').fill(users.owner.email);
     await page.locator('input[name="password"]').fill(password);
-    await page.getByRole('button', { name: 'تسجيل الدخول', exact: true }).click();
+    await page.getByRole('main').getByRole('button', { name: 'تسجيل الدخول', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'إدارة الوكلاء' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'مركز قيادة النظام' })).toBeVisible();
     const runnerCard=page.locator('.runner-card');
