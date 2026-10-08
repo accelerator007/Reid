@@ -13,6 +13,7 @@ import {
 } from "./shell";
 import type { Page } from "./routes";
 import { PublicHome } from "./public-home";
+import { AccountSecurity } from "./account-security";
 import { workspaceLabel, workspacePages } from "./workspace-navigation";
 import { AppShell } from "./app-shell/app-shell";
 import { Building2, Crown, FolderKanban, FlaskConical, GraduationCap, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X, CalendarDays, Settings2, BriefcaseBusiness, Search, ShieldCheck, PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -551,6 +552,7 @@ function Profile({
         </button>
       </form>
       {message && <p role="status">{message}</p>}
+      <AccountSecurity lang={lang} provider={user.app_metadata?.provider} />
     </main>
   );
 }

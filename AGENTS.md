@@ -2,6 +2,15 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-10-08 simplified product shell and account security
+
+- The everyday workspace navigation is intentionally small: Home, Work, Reid, WhatsApp and Administration. Owners do not see duplicate Home/Today entries. CRM, requests, people, research, workshops, forms, connections and agent setup remain permission-filtered and accessible through **All tools** and `Ctrl/Cmd+K`; do not restore them all to the primary sidebar.
+- The global **Create** menu opens real project, request, lead, Reid brief and form flows through query-string entry points. Those pages listen for same-session `popstate` changes so creation also works when the destination is already mounted. The Owner home includes a direct “What should Reid do?” brief and a useful first-work empty state.
+- `/admin` is the single administration entry point and links to connections, agent approvals/setup and people/applications. Existing permission gates and routes remain unchanged; this is information-architecture consolidation rather than data-access broadening.
+- `/profile` now includes Supabase TOTP enrollment, verification, factor listing and removal. Abandoned unverified factors are cleared before a fresh enrollment. Google/email identity remains visible and password changes keep the existing eight-character minimum.
+- The public home removes decorative clutter, shows three grounded capabilities of the actual Reid system, and has a short bilingual project brief that opens WhatsApp with structured context. No public form data is stored in the database.
+- Verification for this work: all 365 Vitest checks across 23 files and the TypeScript/Vite production build pass in `node:22-bookworm-slim`. Production deployment details must be appended after activation.
+
 ## 2026-10-06 WhatsApp documents, durable group speakers and deep monitoring — production migration applied
 
 - GitHub Actions is authenticated again, the manually-disabled uptime workflow is enabled, and `SUPABASE_ACCESS_TOKEN` is now stored as a repository secret without exposing its value. A GitHub-hosted probe confirmed that Cloudflare challenges GitHub runner IPs with 403 even while the live deep endpoint returns healthy. Migration `202610060003_public_operations_heartbeat.sql` therefore adds a service-role-only heartbeat row and a fail-closed public RPC containing only the same six booleans. The API refreshes it every two minutes; GitHub uses it only when Cloudflare challenges the primary route, and rejects it after ten minutes.

@@ -1,0 +1,18 @@
+.reid-proof{padding:clamp(70px,9vw,130px) clamp(22px,7vw,110px);background:var(--ink);color:var(--card)}
+.reid-proof__intro{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr);align-items:end;gap:36px;max-width:1240px;margin:0 auto 42px}
+.reid-proof__intro .os-eyebrow{grid-column:1/-1;color:var(--brand-300)}
+.reid-proof__intro h2{margin:0;font-family:a,sans-serif;font-size:clamp(34px,5vw,66px);line-height:1.2;letter-spacing:-.04em}
+.reid-proof__intro p{margin:0;color:color-mix(in srgb,var(--card) 67%,transparent);font-size:16px;line-height:1.9}
+.reid-proof__cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;max-width:1240px;margin:auto;background:color-mix(in srgb,var(--card) 14%,transparent);border:1px solid color-mix(in srgb,var(--card) 14%,transparent);border-radius:22px;overflow:hidden}
+.reid-proof__cards article{display:grid;align-content:start;gap:13px;min-height:250px;padding:34px;background:var(--ink)}
+.reid-proof__cards svg{width:27px;height:27px;color:var(--brand-300)}
+.reid-proof__cards b{font-size:18px}
+.reid-proof__cards p{margin:0;color:color-mix(in srgb,var(--card) 64%,transparent);font-size:13px;line-height:1.85}
+.reid-invitation#contact{display:grid;justify-items:center;text-align:center;padding-inline:clamp(20px,6vw,90px)}
+.reid-contact-brief{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;width:min(760px,100%);margin:28px auto 20px;text-align:start}
+.reid-contact-brief label{display:grid;gap:7px;color:var(--muted);font-size:12px}
+.reid-contact-brief label:nth-child(3){grid-column:1/-1}
+.reid-contact-brief input,.reid-contact-brief textarea{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:var(--radius-xs);background:var(--card);color:var(--ink);font:inherit;resize:vertical}
+.reid-contact-brief input:focus,.reid-contact-brief textarea:focus{outline:2px solid var(--brand-400);outline-offset:2px}
+.reid-contact-brief .os-primary{grid-column:1/-1;justify-self:center;border:0;cursor:pointer}
+@media(max-width:760px){.reid-proof__intro,.reid-proof__cards,.reid-contact-brief{grid-template-columns:minmax(0,1fr)}.reid-proof__intro .os-eyebrow,.reid-contact-brief label:nth-child(3),.reid-contact-brief .os-primary{grid-column:auto}.reid-proof__cards article{min-height:0}.reid-hero-art .tag-two{display:none}}

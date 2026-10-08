@@ -38,7 +38,13 @@ export function AgentTeamRoom({ lang }: { lang: Lang }) {
   const [query, setQuery] = React.useState('');
   const [sender, setSender] = React.useState('all');
   const listRef = React.useRef<HTMLDivElement>(null);
-  const [draft, setDraft] = React.useState('');
+  const [draft, setDraft] = React.useState(() => new URLSearchParams(location.search).get('q') || '');
+
+  React.useEffect(() => {
+    const follow = () => { const q = new URLSearchParams(location.search).get('q'); if (q) setDraft(q); };
+    addEventListener('popstate', follow);
+    return () => removeEventListener('popstate', follow);
+  }, []);
 
   const visible = team.messages.filter(message =>
     (sender === 'all' || message.sender_agent_id === sender || (sender === 'owner' && message.sender_kind === 'user'))
@@ -297,6 +303,7 @@ function Composer({ lang, agents, busy, disabled, draft, setDraft, send }: {
         </button>
         <textarea
           ref={areaRef} rows={1} maxLength={8000} value={draft} disabled={disabled}
+          autoFocus={new URLSearchParams(location.search).get('focus') === 'compose'}
           onChange={event => setDraft(event.target.value)} onKeyDown={onKeyDown}
           placeholder={tr(lang, 'اكتب المهمة، واستخدم @ لاختيار المختص…', 'Describe the work; use @ to pick a specialist…')}
           aria-label={tr(lang, 'رسالتك لفريق الوكلاء', 'Message the agent team')}

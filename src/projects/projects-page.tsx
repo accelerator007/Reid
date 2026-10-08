@@ -19,6 +19,7 @@ import './projects.css';
 
 const tr = (lang: Lang, ar: string, en: string) => (lang === 'ar' ? ar : en);
 const selectedFromUrl = () => location.pathname.split('/')[2] || null;
+const createFromUrl = () => new URLSearchParams(location.search).get('new') === 'project';
 
 export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
   const { roles } = useSession();
@@ -26,7 +27,7 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
   const [directory, setDirectory] = React.useState<Directory | null>(null);
   const [error, setError] = React.useState<AppError | null>(null);
   const [selected, setSelected] = React.useState<string | null>(selectedFromUrl);
-  const [creating, setCreating] = React.useState(false);
+  const [creating, setCreating] = React.useState(createFromUrl);
 
   const reload = React.useCallback(async () => {
     const result = await loadDirectory();
@@ -36,7 +37,7 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
   React.useEffect(() => { void reload(); }, [reload]);
   // Other pages open a project by rewriting the URL; follow it.
   React.useEffect(() => {
-    const follow = () => setSelected(selectedFromUrl());
+    const follow = () => { setSelected(selectedFromUrl()); if (createFromUrl()) setCreating(true); };
     addEventListener('popstate', follow);
     return () => removeEventListener('popstate', follow);
   }, []);
@@ -56,7 +57,7 @@ export function ProjectWorkspace({ lang, user }: { lang: Lang; user: User }) {
         open={open} create={() => setCreating(true)} retry={() => void reload()}
       />
       <ProjectForm
-        lang={lang} open={creating} onClose={() => setCreating(false)} people={directory?.people ?? []}
+        lang={lang} open={creating} onClose={() => { setCreating(false); if (createFromUrl()) history.replaceState({}, '', '/projects'); }} people={directory?.people ?? []}
         save={async (fields, managerId) => {
           const result = await createProject(fields, managerId);
           if (result.ok && result.data) { await reload(); open(result.data.id); }

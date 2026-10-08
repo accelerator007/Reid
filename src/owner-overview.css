@@ -22,6 +22,8 @@
 .overview-hero__actions { display: flex; align-items: center; gap: var(--space-2); }
 
 .overview-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+.overview-ask{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3);border:1px solid var(--primary-border);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-1)}.overview-ask>span{display:grid;place-items:center;width:42px;height:42px;flex:0 0 auto;border-radius:var(--radius-md);background:var(--primary-soft);color:var(--primary-text)}.overview-ask>span svg{width:20px}.overview-ask label{display:grid;gap:2px;flex:1;min-width:0}.overview-ask label b{font-size:var(--text-sm)}.overview-ask input{width:100%;padding:0;border:0;background:transparent;color:var(--text);font:inherit;outline:0}.overview-ask input::placeholder{color:var(--text-subtle)}
+.overview-first-step{display:flex;align-items:center;justify-content:space-between;gap:var(--space-5);background:linear-gradient(135deg,var(--primary-soft),var(--surface) 68%)}.overview-first-step>div{display:flex;align-items:center;gap:var(--space-3)}.overview-first-step>div:first-child>svg{width:30px;height:30px;color:var(--primary-text)}.overview-first-step h2,.overview-first-step p{margin:0}.overview-first-step h2{font-size:var(--text-lg)}.overview-first-step p{margin-top:var(--space-1);color:var(--text-muted);font-size:var(--text-sm);line-height:1.6}
 
 .overview-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr); gap: var(--space-6); align-items: start; }
 .overview-grid__main, .overview-grid__side { display: grid; gap: var(--space-6); min-width: 0; }
@@ -58,4 +60,5 @@
   .overview-stats { gap: var(--space-3); }
   .overview-stats .ui-stat { padding: var(--space-4); }
   .overview-stats .ui-stat__value { font-size: 1.6rem; }
+  .overview-ask{align-items:stretch;flex-wrap:wrap}.overview-ask label{min-width:calc(100% - 58px)}.overview-ask>.ui-button{width:100%}.overview-first-step{align-items:flex-start;flex-direction:column}.overview-first-step>div:last-child{width:100%;flex-wrap:wrap}.overview-first-step>div:last-child .ui-button{flex:1}
 }

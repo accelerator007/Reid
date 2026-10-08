@@ -28,7 +28,7 @@ export function Operations({ lang }: { lang: Lang }) {
   const [records, setRecords] = React.useState<WorkRecord[] | null>(null);
   const [people, setPeople] = React.useState<Record<string, string>>({});
   const [error, setError] = React.useState<AppError | null>(null);
-  const [creating, setCreating] = React.useState(false);
+  const [creating, setCreating] = React.useState(() => new URLSearchParams(location.search).has('new'));
 
   const load = React.useCallback(async () => {
     if (!supabase) return;
@@ -43,6 +43,11 @@ export function Operations({ lang }: { lang: Lang }) {
     setError(rows.ok ? null : rows.error);
   }, [kindsKey]);
   React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => {
+    const follow = () => { if (new URLSearchParams(location.search).has('new')) setCreating(true); };
+    addEventListener('popstate', follow);
+    return () => removeEventListener('popstate', follow);
+  }, []);
 
   const change = async (record: WorkRecord, next: WorkStatus) => {
     if (!supabase) return;

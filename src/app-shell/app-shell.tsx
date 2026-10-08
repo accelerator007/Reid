@@ -3,14 +3,14 @@
 // it unchanged, and permissions still come from routes.ts via useNavigation.
 import React from 'react';
 import {
-  Bot, CalendarCheck, CircleUserRound, ClipboardList, FlaskConical, FolderKanban, GraduationCap, Handshake, House, ListChecks,
-  LogOut, Menu, MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plug, Search,
+  Bot, CalendarCheck, CircleUserRound, ClipboardList, FilePlus2, FlaskConical, FolderKanban, GraduationCap, Handshake, House, ListChecks,
+  LogOut, Menu, MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plug, Plus, Search,
   ShieldCheck, Sparkles, Sun, UsersRound, X,
 } from 'lucide-react';
 import type { Page } from '../routes';
 import type { useNavigation } from '../shell';
 import {
-  accountPages, mobilePrimaryPages, workspaceGroupOf, workspaceLabel, workspaceNavGroups, workspaceShortLabel,
+  accountPages, mobilePrimaryPages, moreWorkspacePages, primaryWorkspacePages, workspaceGroupOf, workspaceLabel, workspaceNavGroups, workspaceShortLabel,
 } from '../workspace-navigation';
 import { CommandMenu, type CommandItem } from './command-menu';
 import { Kbd } from '../ui';
@@ -49,10 +49,11 @@ export function AppShell({ lang, page, navigation, userName, dark, logo, go, tog
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(readCollapsed);
   const [commandOpen, setCommandOpen] = React.useState(false);
+  const [createOpen, setCreateOpen] = React.useState(false);
   const allowed = React.useMemo(() => new Set<Page>(navigation.map(route => route.page)), [navigation]);
   const rtl = lang === 'ar';
 
-  React.useEffect(() => { setDrawerOpen(false); setCommandOpen(false); }, [page]);
+  React.useEffect(() => { setDrawerOpen(false); setCommandOpen(false); setCreateOpen(false); }, [page]);
   React.useEffect(() => {
     try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch { /* per-viewer convenience only */ }
   }, [collapsed]);
@@ -63,6 +64,7 @@ export function AppShell({ lang, page, navigation, userName, dark, logo, go, tog
         setCommandOpen(open => !open);
       } else if (event.key === 'Escape') {
         setDrawerOpen(false);
+        setCreateOpen(false);
       }
     };
     addEventListener('keydown', onKey);
@@ -70,6 +72,19 @@ export function AppShell({ lang, page, navigation, userName, dark, logo, go, tog
   }, []);
 
   const navigate = (target: Page) => { setDrawerOpen(false); go(target); };
+  const openPath = (target: Page, path: string) => {
+    setCreateOpen(false);
+    go(target);
+    history.replaceState({}, '', path);
+    dispatchEvent(new PopStateEvent('popstate'));
+  };
+  const quick = [
+    { page: 'projects' as Page, path: '/projects?new=project', icon: <FolderKanban />, ar: 'مشروع جديد', en: 'New project' },
+    { page: 'operations' as Page, path: '/operations?new=request', icon: <ListChecks />, ar: 'طلب أو مهمة', en: 'Task or request' },
+    { page: 'crm' as Page, path: '/crm?new=lead', icon: <Handshake />, ar: 'عميل أو فرصة', en: 'Client or lead' },
+    { page: 'assistant' as Page, path: '/assistant?focus=compose', icon: <Sparkles />, ar: 'تكليف ريّد', en: 'Brief Reid' },
+    { page: 'forms' as Page, path: '/forms?new=form', icon: <FilePlus2 />, ar: 'نموذج', en: 'Form' },
+  ].filter(item => allowed.has(item.page));
   const commands: CommandItem[] = workspaceNavGroups.flatMap(group =>
     group.pages.filter(target => allowed.has(target)).map(target => ({
       id: target, label: workspaceLabel(target, lang), group: group.label[lang], icon: pageIcons[target],
@@ -85,7 +100,7 @@ export function AppShell({ lang, page, navigation, userName, dark, logo, go, tog
       <a className="shell-skip" href="#shell-content">{rtl ? 'تخطَّ إلى المحتوى' : 'Skip to content'}</a>
       <Sidebar
         lang={lang} page={page} allowed={allowed} logo={logo} userName={userName} collapsed={collapsed}
-        toggleCollapsed={() => setCollapsed(value => !value)} navigate={navigate} signOut={signOut}
+        toggleCollapsed={() => setCollapsed(value => !value)} navigate={navigate} signOut={signOut} openTools={() => setCommandOpen(true)}
       />
       {drawerOpen && <button type="button" className="shell-scrim" aria-label={rtl ? 'إغلاق القائمة' : 'Close menu'} onClick={() => setDrawerOpen(false)} />}
       <div className="shell-main">
@@ -103,6 +118,14 @@ export function AppShell({ lang, page, navigation, userName, dark, logo, go, tog
             <Kbd>{mac ? '⌘' : 'Ctrl'} K</Kbd>
           </button>
           <div className="shell-topbar__tools">
+            {!!quick.length && <div className="shell-create">
+              <button type="button" className="shell-create__button" aria-expanded={createOpen} onClick={() => setCreateOpen(value => !value)}>
+                <Plus aria-hidden="true" /><span>{rtl ? 'إنشاء' : 'Create'}</span>
+              </button>
+              {createOpen && <div className="shell-create__menu" role="menu" aria-label={rtl ? 'إنشاء جديد' : 'Create new'}>
+                {quick.map(item => <button type="button" role="menuitem" key={item.path} onClick={() => openPath(item.page, item.path)}>{item.icon}<span>{rtl ? item.ar : item.en}</span></button>)}
+              </div>}
+            </div>}
             {allowed.has('assistant') && page !== 'assistant' && (
               <button type="button" className="shell-agents" onClick={() => go('assistant')}>
                 <Sparkles aria-hidden="true" /><span>{rtl ? 'اسأل الفريق' : 'Ask the team'}</span>
@@ -127,10 +150,10 @@ export function AppShell({ lang, page, navigation, userName, dark, logo, go, tog
 
 type SidebarProps = {
   lang: Lang; page: Page; allowed: Set<Page>; logo: string; userName: string; collapsed: boolean;
-  toggleCollapsed: () => void; navigate: (page: Page) => void; signOut: () => void;
+  toggleCollapsed: () => void; navigate: (page: Page) => void; signOut: () => void; openTools: () => void;
 };
 
-function Sidebar({ lang, page, allowed, logo, userName, collapsed, toggleCollapsed, navigate, signOut }: SidebarProps) {
+function Sidebar({ lang, page, allowed, logo, userName, collapsed, toggleCollapsed, navigate, signOut, openTools }: SidebarProps) {
   const rtl = lang === 'ar';
   const navRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
@@ -153,7 +176,7 @@ function Sidebar({ lang, page, allowed, logo, userName, collapsed, toggleCollaps
       </div>
       <div className="shell-nav" ref={navRef}>
         {workspaceNavGroups.map(group => {
-          const pages = group.pages.filter(target => allowed.has(target));
+          const pages = group.pages.filter(target => allowed.has(target) && primaryWorkspacePages.includes(target) && !(target === 'today' && allowed.has('owner')));
           if (!pages.length) return null;
           return (
             <div className="shell-nav__group" key={group.id} role="group" aria-label={group.label[lang]}>
@@ -165,6 +188,9 @@ function Sidebar({ lang, page, allowed, logo, userName, collapsed, toggleCollaps
             </div>
           );
         })}
+        {moreWorkspacePages.some(target => allowed.has(target)) && <button type="button" className="shell-nav__item shell-nav__more" onClick={openTools}>
+          <span className="shell-nav__icon" aria-hidden="true"><Menu /></span><span className="shell-nav__text">{rtl ? 'كل الأدوات' : 'All tools'}</span>
+        </button>}
       </div>
       <div className="shell-account">
         {accountPages.filter(target => allowed.has(target)).map(target => (
