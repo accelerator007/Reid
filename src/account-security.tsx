@@ -61,3 +61,30 @@ export function AccountSecurity({lang,provider}:{lang:Lang;provider?:string}) {
     {message&&<p className="account-security__message" role="status">{message}</p>}
   </section>;
 }
+
+export function MfaChallenge({lang,complete,signOut}:{lang:Lang;complete:()=>void;signOut:()=>void}) {
+  const ar=lang==='ar';
+  const [factors,setFactors]=React.useState<Factor[]>([]);
+  const [factorId,setFactorId]=React.useState('');
+  const [code,setCode]=React.useState('');
+  const [busy,setBusy]=React.useState(true);
+  const [message,setMessage]=React.useState('');
+  React.useEffect(()=>{
+    void (async()=>{
+      if(!supabase)return;
+      const {data,error}=await supabase.auth.mfa.listFactors();
+      const verified=((data?.totp||[]) as Factor[]).filter(factor=>factor.status==='verified');
+      setFactors(verified);setFactorId(verified[0]?.id||'');setMessage(error?.message||'');setBusy(false);
+    })();
+  },[]);
+  const verify=async(event:React.FormEvent)=>{
+    event.preventDefault();
+    if(!supabase||!factorId||code.length!==6||busy)return;
+    setBusy(true);setMessage('');
+    const {error}=await supabase.auth.mfa.challengeAndVerify({factorId,code});
+    setBusy(false);
+    if(error){setMessage(ar?'الرمز غير صحيح أو انتهت صلاحيته. حاول برمز جديد.':'The code is invalid or expired. Try a new code.');return;}
+    complete();
+  };
+  return <main className="mfa-challenge"><section><span className="mfa-challenge__mark"><ShieldCheck/></span><span className="os-eyebrow">REID / SECURE SIGN-IN</span><h1>{ar?'أكد أنه أنت':'Confirm it’s you'}</h1><p>{ar?'افتح تطبيق المصادقة وأدخل الرمز الحالي لإكمال تسجيل الدخول إلى ريّد.':'Open your authenticator app and enter the current code to finish signing in to Reid.'}</p>{!busy&&!factors.length?<div className="mfa-challenge__error" role="alert">{ar?'لم نجد طريقة مصادقة صالحة لهذا الحساب. سجّل الخروج وتواصل مع المالك.':'No valid authentication method was found. Sign out and contact the owner.'}</div>:<form onSubmit={verify}>{factors.length>1&&<label><span>{ar?'طريقة المصادقة':'Authenticator'}</span><select value={factorId} onChange={event=>setFactorId(event.target.value)}>{factors.map(factor=><option value={factor.id} key={factor.id}>{factor.friendly_name||factor.id.slice(0,8)}</option>)}</select></label>}<label><span>{ar?'رمز من 6 أرقام':'6-digit code'}</span><input autoFocus required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={event=>setCode(event.target.value.replace(/\D/g,''))}/></label><button className="os-primary" disabled={busy||code.length!==6}>{busy?<LoaderCircle className="spin"/>:null}{ar?'متابعة':'Continue'}</button></form>}{message&&<div className="mfa-challenge__error" role="alert">{message}</div>}<button type="button" className="os-text-link" onClick={signOut}>{ar?'تسجيل الخروج':'Sign out'}</button></section></main>;
+}

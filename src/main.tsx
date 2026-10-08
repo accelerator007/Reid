@@ -2,7 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-import { installIdleTimeout } from "./session";
+import { installIdleTimeout, requiresMfa } from "./session";
 import { landingPage, pathFor, resolvePage } from "./routes";
 import {
   accessForPage,
@@ -13,7 +13,7 @@ import {
 } from "./shell";
 import type { Page } from "./routes";
 import { PublicHome } from "./public-home";
-import { AccountSecurity } from "./account-security";
+import { AccountSecurity, MfaChallenge } from "./account-security";
 import { workspaceLabel, workspacePages } from "./workspace-navigation";
 import { AppShell } from "./app-shell/app-shell";
 import { Building2, Crown, FolderKanban, FlaskConical, GraduationCap, Handshake, Headphones, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageCircle, Send, Sparkles, UserRound, UsersRound, X, CalendarDays, Settings2, BriefcaseBusiness, Search, ShieldCheck, PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -685,16 +685,28 @@ function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
 
 function App() {
   const [session, setSession] = React.useState<Session | null>(null);
-  React.useEffect(() => {
-    supabase?.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase?.auth.onAuthStateChange((_e, s) =>
-      setSession(s),
-    ) || { data: null };
-    return () => data?.subscription.unsubscribe();
+  const [mfaState, setMfaState] = React.useState<"checking" | "required" | "satisfied">("satisfied");
+  const checkMfa = React.useCallback(async (nextSession: Session | null) => {
+    setSession(nextSession);
+    if (!nextSession || !supabase) { setMfaState("satisfied"); return; }
+    setMfaState("checking");
+    const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    setMfaState(requiresMfa(data?.currentLevel ?? null, data?.nextLevel ?? null, !!error || !data) ? "required" : "satisfied");
   }, []);
+  React.useEffect(() => {
+    supabase?.auth.getSession().then(({ data }) => void checkMfa(data.session));
+    const { data } = supabase?.auth.onAuthStateChange((_e, s) => {
+      // Supabase warns against awaiting another auth call inside this callback.
+      // Defer the assurance-level check to the next task instead.
+      setTimeout(() => void checkMfa(s), 0);
+    }) || { data: null };
+    return () => data?.subscription.unsubscribe();
+  }, [checkMfa]);
   return (
     <SessionProvider user={session?.user || null}>
-      <Chrome session={session} />
+      {session && mfaState === "checking" ? <main className="workspace-page-loading"><LoaderCircle/><span>…</span></main>
+        : session && mfaState === "required" ? <MfaChallenge lang={remembered("reid-lang") === "en" ? "en" : "ar"} complete={() => setMfaState("satisfied")} signOut={() => { void supabase?.auth.signOut(); }} />
+        : <Chrome session={session} />}
     </SessionProvider>
   );
 }

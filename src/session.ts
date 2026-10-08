@@ -4,6 +4,10 @@ export function isSessionIdle(lastActivity: number, now = Date.now(), timeout = 
   return now - lastActivity >= timeout;
 }
 
+export function requiresMfa(currentLevel: string | null, nextLevel: string | null, failed = false) {
+  return failed || (nextLevel === 'aal2' && currentLevel !== 'aal2');
+}
+
 export function installIdleTimeout(onIdle: () => void, timeout = IDLE_TIMEOUT_MS) {
   let timer = window.setTimeout(onIdle, timeout);
   const reset = () => {
@@ -17,4 +21,3 @@ export function installIdleTimeout(onIdle: () => void, timeout = IDLE_TIMEOUT_MS
     events.forEach(event => window.removeEventListener(event, reset));
   };
 }
-
