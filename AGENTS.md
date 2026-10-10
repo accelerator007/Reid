@@ -9,6 +9,7 @@ This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers
 - Runtime settings are enforced in `processJob`: a disabled assistant cancels automatic work, a disabled customer channel leaves unknown direct contacts stored without a reply, and customer voice/style settings become part of the actual reply decision and system prompt. Customer authority remains fixed and cannot be widened by custom instructions.
 - Bulk handover and activation update conversation modes through an Owner-only endpoint. Handover also cancels queued/running jobs and queued bot replies; uncertain sends are never retried. The dashboard shows real conversation/queue totals, service health and the recent governed action ledger.
 - Verification: 241/241 service tests and 372/372 frontend tests pass, followed by a clean TypeScript/Vite Production build and the complete isolated PostgreSQL migration/RLS harness.
+- Live since 09:03 UTC from main commit `d0b8b34`: migration `202610100001_whatsapp_control_center.sql` is applied, the API and web containers are healthy, WhatsApp re-linked, and the authenticated internal status reports all six components healthy. Public `/healthz`, `/inbox`, and `/connections` return 200 while the settings API rejects anonymous access with 401. The cutover began with zero queued/running jobs and zero queued/sending/uncertain outbox rows; no test message was sent. Rollback images: `reid-services:pre-whatsapp-control-20261010090247` and `reid-web:pre-web-202610100903`.
 
 ## 2026-10-10 customer WhatsApp classification and media fallback
 
