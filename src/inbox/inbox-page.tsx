@@ -12,7 +12,7 @@ import type { Page } from '../routes';
 import { Badge, Button, EmptyState, InlineAlert, PageHeader, Skeleton } from '../ui';
 import * as api from './api';
 import {
-  MESSAGE_LIMIT, avatarLetter, chatName, clock, connectionLabel, connectionStates, deliveryLabel, filterChats, formatPhone,
+  MESSAGE_LIMIT, avatarLetter, chatName, clock, connectionLabel, connectionStates, contactKindLabel, deliveryLabel, filterChats, formatPhone,
   groupByDay, isGroup, listStamp, moodLabel, moodTones, pendingOutbox, phoneOf,
   type Chat, type ChatFilter, type ChatMessage, type Connection, type Lang, type OutboxItem,
 } from './model';
@@ -104,7 +104,7 @@ export function Inbox({ lang, go }: { lang: Lang; go: (page: Page) => void }) {
                 <Avatar chat={chat} />
                 <span className="inbox-chat__text">
                   <span className="inbox-chat__top">
-                    <strong><bdi>{chatName(chat, lang)}</bdi></strong>
+                    <strong><bdi>{chatName(chat, lang)}</bdi> <span className="inbox-contact-kind" data-kind={chat.contact_kind}>{contactKindLabel(chat.contact_kind,lang)}</span></strong>
                     <small>{listStamp(chat.updated_at, now, lang)}</small>
                   </span>
                   <span className="inbox-chat__preview">
@@ -216,6 +216,7 @@ function Thread({ lang, chat, connected, outbox, now, back, onChanged, onMode }:
             {isGroup(chat.jid) ? tr(lang, 'مجموعة · يرد المساعد عند ذكر «ريد» فقط', 'Group · the assistant replies only when addressed') : <bdi dir="ltr">{phone}</bdi>}
           </small>
         </div>
+        <Badge tone={chat.contact_kind==='internal'?'success':chat.contact_kind==='group'?'info':'neutral'}>{contactKindLabel(chat.contact_kind,lang)}</Badge>
         <Badge tone={assistant ? 'brand' : 'neutral'} dot>{assistant ? tr(lang, 'المساعد يرد', 'Assistant replies') : tr(lang, 'الفريق يرد', 'Team replies')}</Badge>
         <Button size="sm" variant={assistant ? 'secondary' : 'primary'} icon={assistant ? <UserRound /> : <Bot />} busy={busy === 'mode'} disabled={!!busy} onClick={() => void toggle()}>
           {assistant ? tr(lang, 'استلم المحادثة', 'Take over') : tr(lang, 'خلّ المساعد يرد', 'Hand to assistant')}

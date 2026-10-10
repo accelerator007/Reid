@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  avatarLetter, chatName, dayLabel, deliveryLabel, filterChats, formatPhone, groupByDay, isGroup, listStamp, pendingOutbox, phoneOf,
+  avatarLetter, chatName, contactKindLabel, dayLabel, deliveryLabel, filterChats, formatPhone, groupByDay, isGroup, listStamp, pendingOutbox, phoneOf,
   type Chat, type ChatMessage,
 } from './model';
 
@@ -33,6 +33,12 @@ describe('who a chat is with', () => {
     expect(avatarLetter({ display_name: 'عائشة' })).toBe('ع');
     expect(avatarLetter({ display_name: '+968' })).toBe('');
     expect(avatarLetter({ display_name: '' })).toBe('');
+  });
+
+  it('labels unknown direct chats as customers and linked accounts as the Reid team',()=>{
+    expect(contactKindLabel('customer','ar')).toBe('عميل');
+    expect(contactKindLabel('internal','en')).toBe('Reid team');
+    expect(contactKindLabel('group','ar')).toBe('مجموعة');
   });
 });
 

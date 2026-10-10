@@ -2,6 +2,13 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-10-10 customer WhatsApp classification and media fallback
+
+- A direct number without an enabled `whatsapp_admin_profiles` mapping is a customer, never an employee. The Owner inbox receives an explicit Customer / Reid team / Group label computed by the service; this is display context only and does not broaden authorization.
+- Customer replies answer the immediate question or image first, ask at most one useful intake question, gradually collect project goal/audience/outcome, and offer the existing `موظف` handoff. They cannot use internal data or administrative tools even if the sender claims to be an employee.
+- If local AI or vision fails after a customer message, the job is still recorded as failed but the customer receives a deduplicated retry/human-handoff message instead of silence. Internal error detail stays in structured service logs and is never sent to WhatsApp.
+- Verification: 238/238 service tests and 369/369 frontend tests pass, followed by a clean TypeScript/Vite Production build.
+
 ## 2026-10-08 simplified product shell and account security
 
 - The everyday workspace navigation is intentionally small: Home, Work, Reid, WhatsApp and Administration. Owners do not see duplicate Home/Today entries. CRM, requests, people, research, workshops, forms, connections and agent setup remain permission-filtered and accessible through **All tools** and `Ctrl/Cmd+K`; do not restore them all to the primary sidebar.

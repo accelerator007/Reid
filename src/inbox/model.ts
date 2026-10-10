@@ -8,7 +8,7 @@ type Label = { ar: string; en: string };
 export type Connection = { connection: string; qr: string | null; number: string | null; lastError: string | null };
 export type Chat = {
   id: string; jid: string; display_name: string; bot_mode: 'active' | 'human'; last_message: string; updated_at: string;
-  summary?: string; mood?: string; message_count?: number;
+  summary?: string; mood?: string; message_count?: number; contact_kind?: 'customer' | 'internal' | 'group';
 };
 export type ChatMessage = {
   id: string; direction: 'inbound' | 'outbound'; body: string; status: string; created_at: string;
@@ -17,6 +17,12 @@ export type ChatMessage = {
 export type OutboxItem = { id: string; conversation_id: string; status: string; origin?: 'human' | 'bot'; error: string | null; created_at: string };
 
 export const isGroup = (jid: string) => jid.endsWith('@g.us');
+
+export function contactKindLabel(kind: Chat['contact_kind'], lang: Lang) {
+  if(kind==='internal')return lang==='ar'?'فريق ريّد':'Reid team';
+  if(kind==='group')return lang==='ar'?'مجموعة':'Group';
+  return lang==='ar'?'عميل':'Customer';
+}
 
 /** The digits before the @ of a person's chat; groups have no phone. */
 export const phoneOf = (jid: string) => (isGroup(jid) ? null : jid.split('@')[0].split(':')[0].replace(/\D/g, '') || null);
