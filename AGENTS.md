@@ -8,6 +8,7 @@ This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers
 - Customer replies answer the immediate question or image first, ask at most one useful intake question, gradually collect project goal/audience/outcome, and offer the existing `موظف` handoff. They cannot use internal data or administrative tools even if the sender claims to be an employee.
 - If local AI or vision fails after a customer message, the job is still recorded as failed but the customer receives a deduplicated retry/human-handoff message instead of silence. Internal error detail stays in structured service logs and is never sent to WhatsApp.
 - Verification: 238/238 service tests and 369/369 frontend tests pass, followed by a clean TypeScript/Vite Production build.
+- Live since 08:38 UTC from main commit `5e5f0f1`: the API and web containers are healthy, WhatsApp reconnected, all six operations components report healthy, public `/healthz`, `/whatsapp`, and `/owner` return 200, and the production conversation from the unlinked image sender resolves to `customer`. No outbound test message was sent. Rollback images: `reid-services:pre-customer-20261010083717` and `reid-web:pre-web-202610100837`.
 
 ## 2026-10-08 simplified product shell and account security
 
