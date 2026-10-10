@@ -24,6 +24,9 @@ select public.t_visible('whatsapp','Owner reads inbound events','select 1 from p
 select public.t_visible('whatsapp','Owner reads command queue','select 1 from public.whatsapp_commands',1);
 select public.t_visible('whatsapp','Owner reads inbox conversations','select 1 from public.whatsapp_conversations',1);
 select public.t_visible('whatsapp','Owner reads inbox messages','select 1 from public.whatsapp_messages',1);
+select public.t_visible('whatsapp','Owner reads the WhatsApp assistant settings','select 1 from public.whatsapp_assistant_settings',1);
+select public.t_changed('whatsapp','Owner cannot bypass the audited API to change WhatsApp assistant settings',
+  $$update public.whatsapp_assistant_settings set assistant_enabled=false where id=true$$,0);
 insert into public.whatsapp_admin_profiles(user_id,phone_e164,created_by) values
   ('70000000-0000-0000-0000-000000000001','96890000001','70000000-0000-0000-0000-000000000001'),
   ('70000000-0000-0000-0000-000000000002','96890000002','70000000-0000-0000-0000-000000000001');
@@ -41,6 +44,7 @@ select public.t_visible('whatsapp','Admin cannot read owner WhatsApp events','se
 select public.t_visible('whatsapp','Admin cannot read owner command queue','select 1 from public.whatsapp_commands',0);
 select public.t_visible('whatsapp','Admin cannot read owner inbox','select 1 from public.whatsapp_conversations',0);
 select public.t_visible('whatsapp','Admin cannot read owner messages','select 1 from public.whatsapp_messages',0);
+select public.t_visible('whatsapp','Admin cannot read WhatsApp assistant settings','select 1 from public.whatsapp_assistant_settings',0);
 select public.t_rejected('whatsapp','Admin cannot inject a WhatsApp command',
   $$insert into public.whatsapp_commands(sender_phone,message_id,command_text) values ('x','fake','forbidden')$$);
 select public.t_visible('whatsapp','Admin reads only their own WhatsApp identity','select 1 from public.whatsapp_admin_profiles',1);
@@ -55,6 +59,7 @@ select public.t_visible('whatsapp','Anonymous user sees no WhatsApp events','sel
 select public.t_visible('whatsapp','Anonymous user sees no WhatsApp commands','select 1 from public.whatsapp_commands',0);
 select public.t_visible('whatsapp','Anonymous user sees no WhatsApp inbox','select 1 from public.whatsapp_conversations',0);
 select public.t_visible('whatsapp','Anonymous user sees no WhatsApp messages','select 1 from public.whatsapp_messages',0);
+select public.t_visible('whatsapp','Anonymous user sees no WhatsApp assistant settings','select 1 from public.whatsapp_assistant_settings',0);
 select public.t_visible('whatsapp','Anonymous user sees no administrator bindings','select 1 from public.whatsapp_admin_profiles',0);
 select public.t_visible('whatsapp','Anonymous user sees no Owner QR groups','select 1 from public.whatsapp_qr_groups',0);
 

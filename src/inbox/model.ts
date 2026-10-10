@@ -15,6 +15,18 @@ export type ChatMessage = {
   media_kind?: 'audio' | 'image' | 'document' | null; sender_phone?: string | null; sender_name?: string | null; quality_score?: number | null;
 };
 export type OutboxItem = { id: string; conversation_id: string; status: string; origin?: 'human' | 'bot'; error: string | null; created_at: string };
+export type WhatsappSettings = {
+  assistant_enabled: boolean; customer_auto_reply: boolean; customer_voice_enabled: boolean;
+  customer_reply_mode: 'text'|'voice'; customer_tone: 'natural'|'friendly'|'professional';
+  customer_dialect: 'omani'|'auto'|'standard'; response_length: 'short'|'balanced'|'detailed';
+  custom_instructions: string; fallback_message: string; updated_at?: string;
+};
+export type AssistantAction = {
+  id: string; kind: string; preview: string; status: string; recipient_name: string|null;
+  output_summary: string|null; error_code: string|null; created_at: string;
+};
+export type AiHealth = { online: boolean; model: string; latencyMs: number|null; capabilities: string[] };
+export type OperationsHealth = { components?: Record<string,{status?:string;detail?:string}> };
 
 export const isGroup = (jid: string) => jid.endsWith('@g.us');
 
@@ -132,3 +144,14 @@ const moodEnglish: Record<string, string> = { 'محايد': 'Neutral', 'ودّي
 export const moodLabel = (mood: string, lang: Lang) => (lang === 'ar' ? mood : moodEnglish[mood] ?? mood);
 
 export const MESSAGE_LIMIT = 8000;
+
+export function whatsappControlCounts(chats: readonly Chat[],outbox: readonly OutboxItem[]) {
+  return {
+    total:chats.length,
+    customers:chats.filter(chat=>chat.contact_kind==='customer').length,
+    assistant:chats.filter(chat=>chat.bot_mode==='active').length,
+    human:chats.filter(chat=>chat.bot_mode==='human').length,
+    queued:outbox.filter(item=>['queued','sending'].includes(item.status)).length,
+    failed:outbox.filter(item=>['failed','uncertain'].includes(item.status)).length,
+  };
+}

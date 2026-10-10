@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  avatarLetter, chatName, contactKindLabel, dayLabel, deliveryLabel, filterChats, formatPhone, groupByDay, isGroup, listStamp, pendingOutbox, phoneOf,
+  avatarLetter, chatName, contactKindLabel, dayLabel, deliveryLabel, filterChats, formatPhone, groupByDay, isGroup, listStamp, pendingOutbox, phoneOf, whatsappControlCounts,
   type Chat, type ChatMessage,
 } from './model';
 
@@ -64,6 +64,20 @@ describe('searching chats', () => {
   it('filters by who replies', () => {
     expect(ids(filterChats(chats, '', 'assistant'))).toEqual(['a']);
     expect(ids(filterChats(chats, '', 'team'))).toEqual(['b', 'c']);
+  });
+});
+
+describe('WhatsApp control totals',()=>{
+  it('separates customers, reply ownership, and queue failures',()=>{
+    const chats=[
+      chat({id:'1',contact_kind:'customer',bot_mode:'active'}),
+      chat({id:'2',contact_kind:'internal',bot_mode:'human'}),
+    ];
+    const outbox=[
+      {id:'o1',conversation_id:'1',status:'queued',error:null,created_at:''},
+      {id:'o2',conversation_id:'2',status:'uncertain',error:'timeout',created_at:''},
+    ];
+    expect(whatsappControlCounts(chats,outbox)).toEqual({total:2,customers:1,assistant:1,human:1,queued:1,failed:1});
   });
 });
 

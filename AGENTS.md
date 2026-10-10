@@ -2,6 +2,14 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-10-10 WhatsApp control center
+
+- The Owner WhatsApp page has two top-level views: conversations and a professional control center. The control center is deliberately split into Overview, Reid behavior, and Management & access tabs so daily health, runtime preferences, and advanced administration are not mixed into one long page.
+- `whatsapp_assistant_settings` is the singleton source of truth for the global assistant switch and customer auto-reply, voice, reply format, tone, Arabic style, response length, bounded custom instructions, and the customer failure message. Only the service role writes it through the Owner-only host API; Owner reads use RLS and every update is written to `audit_logs`.
+- Runtime settings are enforced in `processJob`: a disabled assistant cancels automatic work, a disabled customer channel leaves unknown direct contacts stored without a reply, and customer voice/style settings become part of the actual reply decision and system prompt. Customer authority remains fixed and cannot be widened by custom instructions.
+- Bulk handover and activation update conversation modes through an Owner-only endpoint. Handover also cancels queued/running jobs and queued bot replies; uncertain sends are never retried. The dashboard shows real conversation/queue totals, service health and the recent governed action ledger.
+- Verification: 241/241 service tests and 372/372 frontend tests pass, followed by a clean TypeScript/Vite Production build and the complete isolated PostgreSQL migration/RLS harness.
+
 ## 2026-10-10 customer WhatsApp classification and media fallback
 
 - A direct number without an enabled `whatsapp_admin_profiles` mapping is a customer, never an employee. The Owner inbox receives an explicit Customer / Reid team / Group label computed by the service; this is display context only and does not broaden authorization.
