@@ -275,10 +275,10 @@ export function respondForPreview(route) {
 
 // The WhatsApp service on the Reid host (/api/*), answered the same way.
 const chats = [
-  { id: 'chat-1', jid: '96891234567@s.whatsapp.net', display_name: 'أحمد البلوشي', bot_mode: 'active', last_message: 'تمام، متى نقدر نبدأ؟', updated_at: iso(-0.2), summary: 'أحمد مدير مدرسة النور الخاصة. يسأل عن بوابة أولياء الأمور وسعر المرحلة الأولى، ويفضّل التواصل صباحًا. وُعد بعرض مفصل هذا الأسبوع.', mood: 'مستعجل', message_count: 14 },
-  { id: 'chat-2', jid: '96899887766@s.whatsapp.net', display_name: 'Fatma', bot_mode: 'human', last_message: 'Thanks, I will review the proposal tonight.', updated_at: iso(-3), summary: '', mood: 'محايد', message_count: 6 },
-  { id: 'chat-3', jid: '120363412585944970@g.us', display_name: 'مجموعة الملاك', bot_mode: 'active', last_message: 'ريد، لخص لنا اجتماع اليوم', updated_at: iso(-26), summary: '', mood: 'محايد', message_count: 40 },
-  { id: 'chat-4', jid: '96893334444@s.whatsapp.net', display_name: '', bot_mode: 'human', last_message: 'السلام عليكم', updated_at: iso(-80), summary: '', mood: 'محايد', message_count: 1 },
+  { id: 'chat-1', jid: '96891234567@s.whatsapp.net', display_name: 'أحمد البلوشي', bot_mode: 'active', contact_kind: 'customer', last_message: 'تمام، متى نقدر نبدأ؟', updated_at: iso(-0.2), summary: 'أحمد مدير مدرسة النور الخاصة. يسأل عن بوابة أولياء الأمور وسعر المرحلة الأولى، ويفضّل التواصل صباحًا. وُعد بعرض مفصل هذا الأسبوع.', mood: 'مستعجل', message_count: 14 },
+  { id: 'chat-2', jid: '96899887766@s.whatsapp.net', display_name: 'Fatma', bot_mode: 'human', contact_kind: 'internal', last_message: 'Thanks, I will review the proposal tonight.', updated_at: iso(-3), summary: '', mood: 'محايد', message_count: 6 },
+  { id: 'chat-3', jid: '120363412585944970@g.us', display_name: 'مجموعة الملاك', bot_mode: 'active', contact_kind: 'group', last_message: 'ريد، لخص لنا اجتماع اليوم', updated_at: iso(-26), summary: '', mood: 'محايد', message_count: 40 },
+  { id: 'chat-4', jid: '96893334444@s.whatsapp.net', display_name: '', bot_mode: 'human', contact_kind: 'customer', last_message: 'السلام عليكم', updated_at: iso(-80), summary: '', mood: 'محايد', message_count: 1 },
 ];
 const threads = {
   'chat-1': [
@@ -297,7 +297,9 @@ export function respondForLocalApi(route) {
   if (path === 'whatsapp/conversations') return json(chats);
   if (path === 'whatsapp/outbox') return json([]);
   if (path === 'whatsapp/actions') return json([]);
-  if (path === 'ai/health') return json({ online: true, model: 'gemma4:12b' });
+  if (path === 'whatsapp/settings') return json({ assistant_enabled:true,customer_auto_reply:true,customer_voice_enabled:true,customer_reply_mode:'text',customer_tone:'natural',customer_dialect:'omani',response_length:'balanced',custom_instructions:'',fallback_message:'وصلتني رسالتك، لكن ما قدرت أعالجها الآن. أعد إرسالها بعد شوي، وإذا تبي أحد من فريق ريّد يتابع معك اكتب «موظف».' });
+  if (path === 'ai/health') return json({ online: true, model: 'gemma4:12b',latencyMs:640,capabilities:['chat','vision'] });
+  if (path === 'operations/status') return json({components:{website:{status:'healthy'},ai:{status:'healthy'},tts:{status:'healthy'},database:{status:'healthy'},whatsapp:{status:'healthy'},runner:{status:'healthy'}}});
   const thread = path.match(/^whatsapp\/conversations\/([^/]+)\/messages$/);
   if (thread) return json([...(threads[thread[1]] ?? [])].reverse());
   return json({ ok: true });

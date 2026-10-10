@@ -5,12 +5,13 @@
 import React from 'react';
 import {
   ArrowLeft, ArrowRight, Bot, ChevronDown, FileText, Image as ImageIcon, LoaderCircle, MessageCircle, Mic, QrCode, Search, Send,
-  UserRound, UsersRound, Wifi, X,
+  Settings2, UserRound, UsersRound, Wifi, X,
 } from 'lucide-react';
 import { localError } from '../local-api';
 import type { Page } from '../routes';
 import { Badge, Button, EmptyState, InlineAlert, PageHeader, Skeleton } from '../ui';
 import * as api from './api';
+import { WhatsappControl } from './control-panel';
 import {
   MESSAGE_LIMIT, avatarLetter, chatName, clock, connectionLabel, connectionStates, contactKindLabel, deliveryLabel, filterChats, formatPhone,
   groupByDay, isGroup, listStamp, moodLabel, moodTones, pendingOutbox, phoneOf,
@@ -20,6 +21,7 @@ import './inbox.css';
 
 const tr = (lang: Lang, ar: string, en: string) => (lang === 'ar' ? ar : en);
 const chatFromUrl = () => new URLSearchParams(location.search).get('chat');
+const viewFromUrl = () => new URLSearchParams(location.search).get('view') === 'control' ? 'control' : 'chats';
 
 /** Runs fn now and every `ms` while the tab is visible; catches up when it returns. */
 function usePoll(fn: () => Promise<void>, ms: number, enabled = true) {
@@ -42,6 +44,7 @@ export function Inbox({ lang, go }: { lang: Lang; go: (page: Page) => void }) {
   const [outbox, setOutbox] = React.useState<OutboxItem[]>([]);
   const [error, setError] = React.useState('');
   const [selected, setSelected] = React.useState<string | null>(chatFromUrl);
+  const [view,setView]=React.useState<'chats'|'control'>(viewFromUrl);
   const [query, setQuery] = React.useState('');
   const [filter, setFilter] = React.useState<ChatFilter>('all');
   const [now, setNow] = React.useState(() => new Date());
@@ -54,25 +57,28 @@ export function Inbox({ lang, go }: { lang: Lang; go: (page: Page) => void }) {
   }, [lang]);
   usePoll(refresh, 5000);
   React.useEffect(() => {
-    const follow = () => setSelected(chatFromUrl());
+    const follow = () => {setSelected(chatFromUrl());setView(viewFromUrl());};
     addEventListener('popstate', follow);
     return () => removeEventListener('popstate', follow);
   }, []);
 
   const open = (id: string) => { history.pushState({}, '', `/inbox?chat=${id}`); setSelected(id); };
   const close = () => { history.pushState({}, '', '/inbox'); setSelected(null); };
+  const show=(next:'chats'|'control')=>{history.pushState({},'',next==='control'?'/inbox?view=control':'/inbox');setSelected(null);setView(next);};
   const active = chats?.find(chat => chat.id === selected) ?? null;
   const connected = status?.connection === 'connected';
   const shown = chats ? filterChats(chats, query, filter) : [];
   const counts = { all: chats?.length ?? 0, assistant: chats?.filter(chat => chat.bot_mode === 'active').length ?? 0, team: chats?.filter(chat => chat.bot_mode === 'human').length ?? 0 };
 
   return (
-    <main className="inbox" data-thread={!!active}>
+    <main className={`inbox${view==='control'?' inbox--control':''}`} data-thread={view==='chats'&&!!active}>
       <PageHeader
-        title={tr(lang, 'محادثات واتساب', 'WhatsApp inbox')}
-        description={tr(lang, 'رسائل رقم الشركة. رد بنفسك أو خلّ المساعد يرد، محادثة محادثة.', 'Messages to the company number. Reply yourself or let the assistant answer, chat by chat.')}
+        title={view==='control'?tr(lang,'تحكم واتساب وريد','WhatsApp & Reid control'):tr(lang, 'محادثات واتساب', 'WhatsApp inbox')}
+        description={view==='control'?tr(lang,'شغّل الوكيل واضبط سلوكه وراقب الرسائل والخدمات من مكان واحد.','Run the agent, tune its behavior, and monitor messages and services in one place.'):tr(lang, 'رسائل رقم الشركة. رد بنفسك أو خلّ المساعد يرد، محادثة محادثة.', 'Messages to the company number. Reply yourself or let the assistant answer, chat by chat.')}
         actions={<>
           {status && <Badge tone={connectionStates[status.connection]?.tone ?? 'danger'} dot>{connectionLabel(status.connection, lang)}{status.number ? <> · <bdi dir="ltr">{formatPhone(status.number)}</bdi></> : null}</Badge>}
+          <Button variant={view==='chats'?'primary':'secondary'} icon={<MessageCircle/>} onClick={()=>show('chats')}>{tr(lang,'المحادثات','Chats')}</Button>
+          <Button variant={view==='control'?'primary':'secondary'} icon={<Settings2/>} onClick={()=>show('control')}>{tr(lang,'مركز التحكم','Control center')}</Button>
           <Button icon={<Wifi />} onClick={() => go('connections')}>{tr(lang, 'إدارة الاتصال', 'Connection')}</Button>
         </>}
       />
@@ -83,7 +89,7 @@ export function Inbox({ lang, go }: { lang: Lang; go: (page: Page) => void }) {
         </InlineAlert>
       )}
 
-      <div className="inbox-layout">
+      {view==='control'?<WhatsappControl lang={lang} go={go} status={status} chats={chats||[]} outbox={outbox} onChanged={refresh}/>:<div className="inbox-layout">
         <aside className="inbox-list" aria-label={tr(lang, 'المحادثات', 'Conversations')}>
           <div className="inbox-list__tools">
             <label className="inbox-search">
@@ -129,7 +135,7 @@ export function Inbox({ lang, go }: { lang: Lang; go: (page: Page) => void }) {
             : <EmptyState icon={<MessageCircle />} title={tr(lang, 'اختر محادثة', 'Choose a conversation')}
                 description={tr(lang, 'اقرأ وتابع ورد باسم ريّد.', 'Read, follow up and reply as Reid.')} />}
         </section>
-      </div>
+      </div>}
     </main>
   );
 }
