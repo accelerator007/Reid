@@ -16,10 +16,25 @@ export type ChatMessage = {
 };
 export type OutboxItem = { id: string; conversation_id: string; status: string; origin?: 'human' | 'bot'; error: string | null; created_at: string };
 export type WhatsappSettings = {
-  assistant_enabled: boolean; customer_auto_reply: boolean; customer_voice_enabled: boolean;
+  assistant_enabled: boolean; customer_auto_reply: boolean; customer_handoff_enabled: boolean; customer_voice_enabled: boolean;
   customer_reply_mode: 'text'|'voice'; customer_tone: 'natural'|'friendly'|'professional';
   customer_dialect: 'omani'|'auto'|'standard'; response_length: 'short'|'balanced'|'detailed';
   custom_instructions: string; fallback_message: string; updated_at?: string;
+};
+export type WhatsappUserAccess = {
+  user_id:string; phone_e164:string; display_name:string; email:string; role:string; enabled:boolean;
+  memory_enabled:boolean; style_learning_enabled:boolean; outbound_scope:'none'|'company'|'any'; artifacts_enabled:boolean;
+  workshops_enabled:boolean; notes_enabled:boolean; proactive_enabled:boolean; voice_enabled:boolean; reply_mode:'text'|'voice';
+  handoff_notifications_enabled:boolean;
+};
+export type WhatsappGroupAccess = {
+  jid:string; display_name:string; enabled:boolean; respond_to_all:boolean; guest_chat_enabled:boolean;
+  reply_mode:'text'|'voice'; known_participants:number; created_at:string; updated_at:string;
+};
+export type WhatsappAccess = {users:WhatsappUserAccess[];groups:WhatsappGroupAccess[]};
+export type WhatsappHandoff = {
+  id:string; conversation_id:string; requester_phone:string; requester_name:string; message_excerpt:string;
+  status:'pending'|'resolved'; notified_user_ids:string[]; resolved_by:string|null; resolved_at:string|null; created_at:string;
 };
 export type AssistantAction = {
   id: string; kind: string; preview: string; status: string; recipient_name: string|null;

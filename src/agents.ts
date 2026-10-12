@@ -63,10 +63,32 @@ export type ProviderRow = {
   id: string;
   name: string;
   kind: 'external' | 'local';
+  api_style?: 'google_gemini'|'openai_compatible'|'ollama';
+  model_mode?:'fixed'|'auto';
+  last_model_resolved_at?:string|null;
+  endpoint?: string;
   chat_model: string;
+  embedding_model?:string|null;
   max_classification: Classification;
   retains_data: boolean;
   enabled: boolean;
+  requests_per_hour?:number;
+  requests_per_day?:number;
+  notes?:string|null;
+  has_api_key?:boolean;
+  last_tested_at?:string|null;
+  last_test_status?:'untested'|'success'|'failed';
+  last_test_latency_ms?:number|null;
+  last_test_error?:string|null;
+  created_at?:string;
+  updated_at?:string;
+  usage?:ProviderUsage;
+};
+
+export type ProviderUsage = {
+  requests_24h:number;tokens_24h:number;requests_30d:number;succeeded_30d:number;failed_30d:number;
+  prompt_tokens_30d:number;completion_tokens_30d:number;total_tokens_30d:number;average_latency_ms_30d:number|null;
+  requests_total:number;total_tokens_total:number;last_used_at:string|null;
 };
 
 export type RunRow = {

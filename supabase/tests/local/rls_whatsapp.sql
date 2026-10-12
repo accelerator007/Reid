@@ -18,6 +18,11 @@ values ('96800000000','wamid.test','اعرض حالة المشاريع');
 insert into public.whatsapp_conversations(sender_phone,display_name) values ('96800000000','Owner test');
 insert into public.whatsapp_messages(conversation_id,meta_message_id,direction,body)
 select id,'wamid.inbox.test','inbound','مساعدة' from public.whatsapp_conversations where sender_phone='96800000000';
+insert into public.qr_conversations(jid,display_name,bot_mode)
+values ('96800000000@s.whatsapp.net','Customer','human');
+insert into public.whatsapp_customer_handoffs(conversation_id,message_id,requester_phone,requester_name,message_excerpt)
+select id,'wamid.handoff.test','96800000000','Customer','أريد التواصل مع شخص'
+from public.qr_conversations where jid='96800000000@s.whatsapp.net';
 
 select public.test_sign_in('70000000-0000-0000-0000-000000000001');
 select public.t_visible('whatsapp','Owner reads inbound events','select 1 from public.whatsapp_events',1);
@@ -25,6 +30,9 @@ select public.t_visible('whatsapp','Owner reads command queue','select 1 from pu
 select public.t_visible('whatsapp','Owner reads inbox conversations','select 1 from public.whatsapp_conversations',1);
 select public.t_visible('whatsapp','Owner reads inbox messages','select 1 from public.whatsapp_messages',1);
 select public.t_visible('whatsapp','Owner reads the WhatsApp assistant settings','select 1 from public.whatsapp_assistant_settings',1);
+select public.t_visible('whatsapp','Owner reads pending customer handoffs','select 1 from public.whatsapp_customer_handoffs',1);
+select public.t_changed('whatsapp','Owner cannot bypass the audited API to resolve a handoff',
+  $$update public.whatsapp_customer_handoffs set message_excerpt='changed'$$,0);
 select public.t_changed('whatsapp','Owner cannot bypass the audited API to change WhatsApp assistant settings',
   $$update public.whatsapp_assistant_settings set assistant_enabled=false where id=true$$,0);
 insert into public.whatsapp_admin_profiles(user_id,phone_e164,created_by) values
@@ -34,8 +42,10 @@ select public.t_visible('whatsapp','Owner manages every linked administrator','s
 insert into public.whatsapp_qr_groups(jid,display_name,created_by) values
   ('120363000000001@g.us','Reid_Owner','70000000-0000-0000-0000-000000000001');
 select public.t_visible('whatsapp','Owner reads the exact QR group allow-list','select 1 from public.whatsapp_qr_groups',1);
+select public.t_true('whatsapp','A newly discovered group starts with AI disabled',
+  $$select not enabled from public.whatsapp_qr_groups where jid='120363000000001@g.us'$$);
 select public.t_changed('whatsapp','Owner controls ambient participation and group voice mode',
-  $$update public.whatsapp_qr_groups set respond_to_all=true,guest_chat_enabled=true,reply_mode='voice' where jid='120363000000001@g.us'$$,1);
+  $$update public.whatsapp_qr_groups set enabled=true,respond_to_all=true,guest_chat_enabled=true,reply_mode='voice' where jid='120363000000001@g.us'$$,1);
 select public.t_true('whatsapp','Group mode settings persist together',
   $$select respond_to_all and guest_chat_enabled and reply_mode='voice' from public.whatsapp_qr_groups where jid='120363000000001@g.us'$$);
 
@@ -45,6 +55,7 @@ select public.t_visible('whatsapp','Admin cannot read owner command queue','sele
 select public.t_visible('whatsapp','Admin cannot read owner inbox','select 1 from public.whatsapp_conversations',0);
 select public.t_visible('whatsapp','Admin cannot read owner messages','select 1 from public.whatsapp_messages',0);
 select public.t_visible('whatsapp','Admin cannot read WhatsApp assistant settings','select 1 from public.whatsapp_assistant_settings',0);
+select public.t_visible('whatsapp','Admin cannot read customer handoffs','select 1 from public.whatsapp_customer_handoffs',0);
 select public.t_rejected('whatsapp','Admin cannot inject a WhatsApp command',
   $$insert into public.whatsapp_commands(sender_phone,message_id,command_text) values ('x','fake','forbidden')$$);
 select public.t_visible('whatsapp','Admin reads only their own WhatsApp identity','select 1 from public.whatsapp_admin_profiles',1);
@@ -60,6 +71,7 @@ select public.t_visible('whatsapp','Anonymous user sees no WhatsApp commands','s
 select public.t_visible('whatsapp','Anonymous user sees no WhatsApp inbox','select 1 from public.whatsapp_conversations',0);
 select public.t_visible('whatsapp','Anonymous user sees no WhatsApp messages','select 1 from public.whatsapp_messages',0);
 select public.t_visible('whatsapp','Anonymous user sees no WhatsApp assistant settings','select 1 from public.whatsapp_assistant_settings',0);
+select public.t_visible('whatsapp','Anonymous user sees no customer handoffs','select 1 from public.whatsapp_customer_handoffs',0);
 select public.t_visible('whatsapp','Anonymous user sees no administrator bindings','select 1 from public.whatsapp_admin_profiles',0);
 select public.t_visible('whatsapp','Anonymous user sees no Owner QR groups','select 1 from public.whatsapp_qr_groups',0);
 

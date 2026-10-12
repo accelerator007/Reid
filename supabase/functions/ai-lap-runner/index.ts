@@ -223,6 +223,7 @@ async function completeWithGeminiFallback(admin: ReturnType<typeof createClient>
   if(!quality.passed) throw new Error(`gemini_fallback_quality_failed:${quality.flags.join(',')}`);
   const updated=await admin.from('agent_runs').update({
     provider_id:'gemini',run_state:'succeeded',status:'succeeded',token_usage:result?.usageMetadata?.totalTokenCount??null,
+    prompt_tokens:result?.usageMetadata?.promptTokenCount??null,completion_tokens:result?.usageMetadata?.candidatesTokenCount??null,
     output_preview:output.slice(0,280),error:null,finished_at:new Date().toISOString(),
     quality_score:quality.score,quality_flags:quality.flags,quality_version:quality.version,revision_count:0,
     logs:[{at:new Date().toISOString(),event:'local_failed_gemini_fallback',local_error:localError.slice(0,180)}],
@@ -307,6 +308,7 @@ Deno.serve(async request => {
       if(!isChat && !embedding) throw new Error('runner_embedding_required');
       const updated = await admin.from('agent_runs').update({
         run_state:'succeeded',status:'succeeded',latency_ms:Number(body.latencyMs)||null,token_usage:Number(body.tokenUsage)||null,
+        prompt_tokens:Number(body.promptTokens)||null,completion_tokens:Number(body.completionTokens)||null,
         output_preview:output.slice(0,280),quality_score:isChat?qualityScore:null,quality_flags:isChat?qualityFlags:[],
         quality_version:isChat?qualityVersion:null,revision_count:isChat?revisionCount:0,finished_at:new Date().toISOString(),
       }).eq('id',run.data.id);

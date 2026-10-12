@@ -1,6 +1,7 @@
 export const whatsappSettingsDefaults=Object.freeze({
   assistant_enabled:true,
   customer_auto_reply:true,
+  customer_handoff_enabled:true,
   customer_voice_enabled:true,
   customer_reply_mode:'text',
   customer_tone:'natural',
@@ -16,7 +17,7 @@ const choices={
   customer_dialect:new Set(['omani','auto','standard']),
   response_length:new Set(['short','balanced','detailed']),
 };
-const booleans=new Set(['assistant_enabled','customer_auto_reply','customer_voice_enabled']);
+const booleans=new Set(['assistant_enabled','customer_auto_reply','customer_handoff_enabled','customer_voice_enabled']);
 
 export function normalizeWhatsappSettings(row={}) {
   const merged={...whatsappSettingsDefaults,...(row||{})};

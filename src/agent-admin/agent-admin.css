@@ -96,7 +96,16 @@
 .run__actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 
 /* ---- providers ------------------------------------------------------------------- */
+.providers-title { display:flex;align-items:end;justify-content:space-between;gap:var(--space-3); }
+.providers-title h2 { margin:0;color:var(--text);font:650 var(--text-xl)/1.3 var(--font-display); }
+.providers-title p { margin:3px 0 0;color:var(--text-muted);font-size:var(--text-sm); }
 .providers { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: var(--space-4); margin-top: var(--space-4); }
+.provider-summary { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3);margin-top:var(--space-4); }
+.provider-summary>div { display:grid;gap:5px;padding:var(--space-3) var(--space-4);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);background:var(--surface-raised); }
+.provider-summary span { color:var(--text-muted);font-size:var(--text-xs); }
+.provider-summary strong { color:var(--text);font:650 var(--text-xl)/1.1 var(--font-display); }
+.provider-summary strong small { color:var(--text-subtle);font-size:var(--text-sm); }
+.provider-summary [data-alert="true"] strong { color:var(--danger-text); }
 .provider { display: grid; align-content: start; gap: var(--space-4); }
 .provider[data-risk="true"] { border-color: var(--warning-border); }
 .provider__head { display: flex; align-items: center; gap: var(--space-3); }
@@ -109,6 +118,21 @@
 .provider__facts div { display: grid; gap: 2px; }
 .provider__facts dt { color: var(--text-subtle); font-size: var(--text-xs); }
 .provider__facts dd { margin: 0; color: var(--text); font-size: var(--text-sm); font-weight: 600; }
+.provider__connection { display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2);padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);background:var(--surface-sunken); }
+.provider__connection>span:first-child { display:flex;align-items:center;gap:var(--space-2);color:var(--text-muted);font-size:var(--text-xs); }
+.provider__connection svg { width:14px;height:14px; }
+.provider__agents { display:flex;flex-wrap:wrap;gap:var(--space-1); }
+.provider__agents span { padding:4px 9px;border-radius:var(--radius-pill);background:var(--primary-soft);color:var(--primary-text);font-size:var(--text-xs); }
+.provider__usage { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;padding:1px;overflow:hidden;border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:var(--border-subtle); }
+.provider__usage>div { display:grid;gap:3px;padding:10px 12px;background:var(--surface-raised); }
+.provider__usage span { color:var(--text-subtle);font-size:var(--text-xs); }
+.provider__usage strong { color:var(--text);font-size:var(--text-sm);font-weight:650;overflow-wrap:anywhere; }
+.provider__actions { display:flex;flex-wrap:wrap;gap:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--border-subtle); }
+.provider-check { display:flex;align-items:flex-start;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:var(--surface-sunken);color:var(--text-muted);font-size:var(--text-sm);line-height:var(--leading-arabic); }
+.provider-check input { margin-top:3px;accent-color:var(--primary); }
+.agent-provider-choice { display:grid;gap:var(--space-3); }
+.agent-provider-choice>div:last-child { display:flex;align-items:center;gap:var(--space-2); }
+.agent-provider-choice select { flex:1;min-width:0; }
 
 /* ---- one agent ------------------------------------------------------------------- */
 .agent-hero { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-4) var(--space-5); }
@@ -165,6 +189,10 @@
 }
 @media (max-width: 640px) {
   .agents-admin, .agent-page { padding-top: var(--space-5); }
+  .provider-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .providers-title { align-items:stretch;flex-direction:column; }
+  .provider__actions .ui-button { flex:1 1 calc(50% - var(--space-2)); }
+  .agent-provider-choice>div:last-child { align-items:stretch;flex-direction:column; }
   .agent-hero__side { justify-items: start; inline-size: 100%; }
   .run__head small { margin-inline-start: 0; inline-size: 100%; }
 }
