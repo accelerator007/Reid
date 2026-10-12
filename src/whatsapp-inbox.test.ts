@@ -11,6 +11,7 @@ const reminderDispatch = readFileSync(new URL("../supabase/functions/reminder-di
 const adminMemoryMigration = readFileSync(new URL("../supabase/migrations/202609120002_whatsapp_admin_memory.sql", import.meta.url), "utf8");
 const ownerGroupMigration = readFileSync(new URL("../supabase/migrations/202609120003_owner_whatsapp_group.sql", import.meta.url), "utf8");
 const ownerGroupPinned = readFileSync(new URL("../supabase/migrations/202609120004_owner_group_always_active.sql", import.meta.url), "utf8");
+const whatsappAccessMigration = readFileSync(new URL("../supabase/migrations/202610100002_whatsapp_access_and_handoffs.sql", import.meta.url), "utf8");
 const qrPolicy = readFileSync(new URL("../server/policy.mjs", import.meta.url), "utf8");
 const qrService = readFileSync(new URL("../server/index.mjs", import.meta.url), "utf8");
 const qrInbound = readFileSync(new URL("../server/inbound.mjs", import.meta.url), "utf8");
@@ -79,10 +80,13 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(webhook).not.toContain("WHATSAPP_OWNER_USER_ID");
   });
 
-  it("keeps the exact Owner group invocation-only for mapped Owners", () => {
+  it("keeps new groups silent until the Owner enables bounded permissions", () => {
     expect(ownerGroupMigration).toContain("whatsapp_qr_groups");
-    expect(qrService).toContain("REID_QR_BOOTSTRAP_GROUP_NAME");
-    expect(qrService).toContain("authorizedGroupOwner");
+    expect(whatsappAccessMigration).toContain("alter column enabled set default false");
+    expect(qrService).toContain("discoveredGroup");
+    expect(qrService).toContain("syncWhatsappGroups");
+    expect(qrService).toContain("if(!registered.enabled||(!registered.respond_to_all&&!item.addressed))return null");
+    expect(qrService).toContain("if(!identity&&!registered.guest_chat_enabled)");
     expect(qrPolicy).toContain("reid|ري[ّ]?د");
     expect(qrPolicy).toContain("mentionedJid");
     expect(qrTransport).toContain("targetQrConversation");
@@ -95,7 +99,6 @@ describe("WhatsApp Owner inbox contract", () => {
     expect(ownerGroupPinned).toContain("120363412585944970@g.us");
     expect(qrPolicy).toContain("repliedToBot");
     expect(qrPolicy).toContain("addressed=mentioned||reidName.test(text)||repliedToBot");
-    expect(qrService).toContain("if(!item.addressed)");
     expect(qrInbound).toContain("async function persistInbound");
     expect(qrService).toContain("setTimeout(resolve,300)");
   });

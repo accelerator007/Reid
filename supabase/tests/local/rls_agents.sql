@@ -30,6 +30,11 @@ insert into public.user_roles(user_id, role) values
   (:'owner_id', 'owner'), (:'admin_id', 'admin'),
   (:'employee_id', 'employee'), (:'hr_id', 'hr');
 
+-- The registry migration intentionally disables an untested legacy external
+-- connection. This suite explicitly marks its synthetic Gemini fixture tested
+-- and enabled so the independent clearance-trigger assertions remain useful.
+update public.llm_providers set enabled=true,last_tested_at=now(),last_test_status='success',last_test_latency_ms=1,last_test_error=null where id='gemini';
+
 -- ---------------------------------------------------------------- seeded state
 select t_true(:'suite', 'the Owner-approved Gemini runtime accepts all classifications',
   $q$select max_classification = 'restricted' and kind = 'external' and enabled
@@ -112,6 +117,8 @@ select t_visible(:'suite', 'an admin cannot read transient payloads',
   'select 1 from public.agent_run_payloads', 0);
 select t_visible(:'suite', 'an admin reads runner health',
   'select 1 from public.agent_runner_status', 1);
+select t_visible(:'suite', 'an admin cannot read content-free provider usage events directly',
+  'select 1 from public.llm_provider_usage_events', 0);
 
 select test_sign_out();
 select t_visible(:'suite', 'an anonymous visitor sees no agents',
@@ -126,6 +133,8 @@ select t_visible(:'suite', 'an anonymous visitor sees no governed tools',
   'select 1 from public.agent_tools', 0);
 select t_visible(:'suite', 'an anonymous visitor sees no runner health',
   'select 1 from public.agent_runner_status', 0);
+select t_visible(:'suite', 'an anonymous visitor sees no provider usage events',
+  'select 1 from public.llm_provider_usage_events', 0);
 
 -- ----------------------------------------------------------------- agent control
 select test_sign_in(:'admin_id');
@@ -139,10 +148,12 @@ select t_changed(:'suite', 'an employee cannot pause an agent',
   $q$update public.agents set status = 'paused' where id = 'content'$q$, 0);
 
 select test_sign_in(:'owner_id');
-select t_changed(:'suite', 'the Owner can lower a provider ceiling',
-  $q$update public.llm_providers set max_classification = 'internal' where id = 'gemini'$q$, 1);
-select t_changed(:'suite', 'the Owner can restore the approved restricted ceiling',
-  $q$update public.llm_providers set max_classification = 'restricted' where id = 'gemini'$q$, 1);
+select t_changed(:'suite', 'the Owner cannot bypass the governed provider API',
+  $q$update public.llm_providers set max_classification = 'internal' where id = 'gemini'$q$, 0);
+select t_rejected(:'suite', 'the Owner cannot read an LLM key from Vault',
+  $q$select public.read_llm_provider_secret('gemini')$q$, '42501');
+select t_rejected(:'suite', 'the Owner cannot read the service-only provider usage aggregate',
+  $q$select * from public.llm_provider_usage()$q$, '42501');
 
 -- ---------------------------------------------------------------- approval engine
 select test_sign_in(:'employee_id');

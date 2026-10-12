@@ -62,18 +62,18 @@ def main():
       started=time.monotonic()
       try:
         if job['action']=='embed':
-          emb=adapter('/api/embeddings',{'prompt':job['input']}).get('embedding',[]); output=''; tokens=0
+          emb=adapter('/api/embeddings',{'prompt':job['input']}).get('embedding',[]); output=''; tokens=0; prompt_tokens=0; completion_tokens=0
         else:
           messages=[]
           if job.get('system_prompt'): messages.append({'role':'system','content':job['system_prompt']})
           messages.append({'role':'user','content':job['input']})
-          result=adapter('/api/chat',{'messages':messages}); output=result.get('message',{}).get('content','').strip(); tokens=(result.get('prompt_eval_count',0)+result.get('eval_count',0)); quality=assess(job['input'],output); revisions=0
+          result=adapter('/api/chat',{'messages':messages}); output=result.get('message',{}).get('content','').strip(); prompt_tokens=result.get('prompt_eval_count',0); completion_tokens=result.get('eval_count',0); tokens=prompt_tokens+completion_tokens; quality=assess(job['input'],output); revisions=0
           if not quality['passed']:
             request,_=subject(job['input']); messages.extend([{'role':'assistant','content':output},{'role':'user','content':revision_instruction(quality,language(request))}])
-            revised=adapter('/api/chat',{'messages':messages}); output=revised.get('message',{}).get('content','').strip(); tokens+=(revised.get('prompt_eval_count',0)+revised.get('eval_count',0)); quality=assess(job['input'],output); revisions=1
+            revised=adapter('/api/chat',{'messages':messages}); output=revised.get('message',{}).get('content','').strip(); prompt_tokens+=revised.get('prompt_eval_count',0); completion_tokens+=revised.get('eval_count',0); tokens=prompt_tokens+completion_tokens; quality=assess(job['input'],output); revisions=1
           if not quality['passed']: raise RuntimeError('response_quality_failed:'+','.join(quality['flags']))
           emb=adapter('/api/embeddings',{'prompt':output[:4000]}).get('embedding',[])
-        payload={'action':'complete','runId':job['id'],'output':output,'embedding':emb,'tokenUsage':tokens,'latencyMs':round((time.monotonic()-started)*1000)}
+        payload={'action':'complete','runId':job['id'],'output':output,'embedding':emb,'tokenUsage':tokens,'promptTokens':prompt_tokens,'completionTokens':completion_tokens,'latencyMs':round((time.monotonic()-started)*1000)}
         if job['action']!='embed': payload.update(qualityScore=quality['score'],qualityFlags=quality['flags'],qualityVersion=quality['version'],revisionCount=revisions)
         post(RUNNER_URL,payload)
       except Exception as error: post(RUNNER_URL,{'action':'fail','runId':job['id'],'error':type(error).__name__})

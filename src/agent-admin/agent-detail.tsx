@@ -4,9 +4,10 @@ import React from 'react';
 import { ArrowLeft, ArrowRight, Bot, BrainCircuit, CirclePause, Play, Power, ShieldAlert, Wrench } from 'lucide-react';
 import { canRun, operationalState, providerAccepts, runAgent, runAgentTool, setAgentState, topologyFor, type AgentRow, type AgentToolRow, type ProviderRow } from '../agents';
 import { messageForRaw } from '../db';
+import { localError } from '../local-api';
 import { useSession } from '../shell';
-import { Badge, Button, Card, Dialog, EmptyState, Field, FormGrid, InlineAlert, SectionHeader, TextArea, TextInput } from '../ui';
-import type { AgentAdminData, RunWithRequester } from './api';
+import { Badge, Button, Card, Dialog, EmptyState, Field, FormGrid, InlineAlert, SectionHeader, Select, TextArea, TextInput } from '../ui';
+import { assignAgentProvider, type AgentAdminData, type RunWithRequester } from './api';
 import { DecideDialog, RunRowView } from './agent-parts';
 import {
   agentName, agentStates, blockReason, blockReasons, canToggleAgents, classificationLabels, describeToolResult, domainLabels,
@@ -35,6 +36,8 @@ export function AgentDetail({ lang, agent, provider, data, back, reload }: {
   const [tool, setTool] = React.useState<AgentToolRow | null>(null);
   const [deciding, setDeciding] = React.useState<RunWithRequester | null>(null);
   const [disabling, setDisabling] = React.useState(false);
+  const [providerChoice,setProviderChoice]=React.useState(agent.provider_id);
+  const [providerBusy,setProviderBusy]=React.useState(false);
   const name = agentName(agent, lang);
   const queued = runs.filter(openRun).length;
   const measured = runs.filter(item => item.quality_score != null);
@@ -108,6 +111,8 @@ export function AgentDetail({ lang, agent, provider, data, back, reload }: {
         <Fact label={tr(lang, 'متوسط المدة', 'Average time')} value={latency != null ? `${latency.toFixed(1)}s` : '—'} hint={runs.length ? lastRunsLine(runs.length, lang) : undefined} />
         <Fact label={tr(lang, 'جودة الردود', 'Answer quality')} value={quality != null ? `${quality}/100` : '—'} hint={tr(lang, 'فحص الدقة والمراجع قبل العرض', 'Checked for accuracy and grounding')} />
       </div>
+
+      {owner&&<Card className="agent-provider-choice"><SectionHeader title={tr(lang,'المزوّد والنموذج الفعّال','Active provider and model')} description={tr(lang,'يعرض فقط المزوّدين المفعّلين والمسموح لهم بتصنيف بيانات هذا الوكيل.','Only enabled providers cleared for this agent’s data are available.')} /><div><Select value={providerChoice} onChange={event=>setProviderChoice(event.target.value)}>{data.providers.filter(item=>providerAccepts(item,agent.classification)).map(item=><option key={item.id} value={item.id}>{item.name} · {item.chat_model}</option>)}</Select><Button variant="primary" busy={providerBusy} disabled={providerChoice===agent.provider_id} onClick={async()=>{setProviderBusy(true);setResult(null);try{await assignAgentProvider(agent.id,providerChoice);await reload();setResult({tone:'success',text:tr(lang,'تم تغيير المزوّد والنموذج لهذا الوكيل.','Provider and model changed for this agent.')});}catch(thrown){setResult({tone:'danger',text:localError(thrown,lang)});}finally{setProviderBusy(false);}}}>{tr(lang,'تطبيق','Apply')}</Button></div></Card>}
 
       <div className="agent-columns">
         <div className="agent-main">

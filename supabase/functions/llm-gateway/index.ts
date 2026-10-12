@@ -3,8 +3,9 @@
 // levels L0-L4, refuses to route data above the provider's clearance, and
 // records every attempt in `agent_runs`.
 //
-// Provider credentials live only in Edge Function secrets:
-//   supabase secrets set GEMINI_API_KEY=...
+// Provider credentials live in Supabase Vault and are available only through a
+// service-role RPC. The legacy GEMINI_API_KEY remains a fallback during the
+// migration of the built-in Gemini provider.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { assessAgentResponse, buildGovernedPrompt, normalizeHistory, qualitySubject } from '../_shared/agent-quality.ts';
 
@@ -14,6 +15,7 @@ const PREVIEW_LIMIT = 280;
 type Provider = {
   id: string;
   kind: 'external' | 'local';
+  api_style: 'google_gemini' | 'openai_compatible' | 'ollama';
   endpoint: string;
   chat_model: string;
   embedding_model: string | null;
@@ -138,8 +140,13 @@ async function governedWeb<T>(admin: DbClient, call: () => Promise<T>) {
   }
 }
 
-async function callGemini(provider: Provider, systemPrompt: string | null, input: string, googleSearch = false) {
-  const key = Deno.env.get('GEMINI_API_KEY');
+async function providerKey(admin: DbClient, provider: Provider) {
+  const stored = await admin.rpc('read_llm_provider_secret', { target_provider:provider.id });
+  if (!stored.error && typeof stored.data === 'string' && stored.data) return stored.data;
+  return provider.id === 'gemini' ? Deno.env.get('GEMINI_API_KEY') : null;
+}
+
+async function callGemini(provider: Provider, key: string | null, systemPrompt: string | null, input: string, googleSearch = false) {
   if (!key) throw new Error('provider_key_missing');
   const response = await fetch(`${provider.endpoint}/models/${provider.chat_model}:generateContent`, {
     method: 'POST',
@@ -161,7 +168,25 @@ async function callGemini(provider: Provider, systemPrompt: string | null, input
   const sourceText = sources.length
     ? `\n\nالمصادر:\n${sources.map((source: { title?: string; uri?: string }) => `- ${source.title || 'مصدر'}: ${source.uri}`).join('\n')}`
     : '';
-  return { text: `${text}${sourceText}`, tokens: payload?.usageMetadata?.totalTokenCount ?? null };
+  return {
+    text: `${text}${sourceText}`,
+    tokens: payload?.usageMetadata?.totalTokenCount ?? null,
+    promptTokens: payload?.usageMetadata?.promptTokenCount ?? null,
+    completionTokens: payload?.usageMetadata?.candidatesTokenCount ?? null,
+  };
+}
+
+async function callOpenAI(provider: Provider, key: string | null, systemPrompt: string | null, input: string) {
+  if (!key) throw new Error('provider_key_missing');
+  const response = await fetch(`${provider.endpoint.replace(/\/+$/,'')}/chat/completions`, {
+    method:'POST',
+    headers:{'content-type':'application/json',authorization:`Bearer ${key}`},
+    body:JSON.stringify({model:provider.chat_model,messages:[...(systemPrompt?[{role:'system',content:systemPrompt}]:[]),{role:'user',content:input}],temperature:0.2}),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(`provider_http_${response.status}`);
+  const text = payload?.choices?.[0]?.message?.content || '';
+  return { text, tokens:payload?.usage?.total_tokens ?? null,promptTokens:payload?.usage?.prompt_tokens??null,completionTokens:payload?.usage?.completion_tokens??null };
 }
 
 async function callOllama(provider: Provider, systemPrompt: string | null, input: string) {
@@ -189,10 +214,10 @@ async function callOllama(provider: Provider, systemPrompt: string | null, input
   if (!response.ok) throw new Error(payload?.error || `provider_http_${response.status}`);
   const promptTokens = payload?.prompt_eval_count ?? 0;
   const answerTokens = payload?.eval_count ?? 0;
-  return { text: payload?.message?.content || '', tokens: promptTokens + answerTokens || null };
+  return { text: payload?.message?.content || '', tokens: promptTokens + answerTokens || null,promptTokens:promptTokens||null,completionTokens:answerTokens||null };
 }
 
-async function embed(provider: Provider, input: string) {
+async function embed(admin: DbClient, provider: Provider, input: string) {
   if (!provider.embedding_model) throw new Error('provider_has_no_embedding_model');
   if (provider.id === 'ollama') {
     const originToken = Deno.env.get('OLLAMA_ORIGIN_TOKEN');
@@ -210,8 +235,14 @@ async function embed(provider: Provider, input: string) {
     if (!response.ok) throw new Error(payload?.error || `provider_http_${response.status}`);
     return payload.embedding as number[];
   }
-  const key = Deno.env.get('GEMINI_API_KEY');
+  const key = await providerKey(admin,provider);
   if (!key) throw new Error('provider_key_missing');
+  if(provider.api_style==='openai_compatible'){
+    const response=await fetch(`${provider.endpoint.replace(/\/+$/,'')}/embeddings`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${key}`},body:JSON.stringify({model:provider.embedding_model,input})});
+    const payload=await response.json();
+    if(!response.ok)throw new Error(`provider_http_${response.status}`);
+    return payload?.data?.[0]?.embedding as number[];
+  }
   const response = await fetch(`${provider.endpoint}/models/${provider.embedding_model}:embedContent`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
@@ -396,7 +427,7 @@ async function executeRun(admin: DbClient, run: Run, agent: Agent, provider: Pro
   }).eq('id', run.id);
 
   if (action === 'embed') {
-    const vector = await embed(provider, input);
+    const vector = await embed(admin, provider, input);
     await admin.from('agent_runs').update({
       run_state: 'succeeded', status: 'succeeded', latency_ms: Date.now() - startedAt,
       finished_at: new Date().toISOString(),
@@ -419,13 +450,15 @@ async function executeRun(admin: DbClient, run: Run, agent: Agent, provider: Pro
   const groundedAgent = ['marketing', 'content', 'competitor', 'knowledge'].includes(agent.id);
   const result = provider.kind === 'local'
     ? await callOllama(provider, agent.system_prompt, input)
-    : await callGemini(provider, agent.system_prompt, input, groundedAgent);
+    : provider.api_style === 'openai_compatible'
+      ? await callOpenAI(provider,await providerKey(admin,provider),agent.system_prompt,input)
+      : await callGemini(provider,await providerKey(admin,provider),agent.system_prompt,input,groundedAgent);
   const latency = Date.now() - startedAt;
   const subject = qualitySubject(input);
   const quality = assessAgentResponse({ ...subject, output: result.text });
   await admin.from('agent_runs').update({
     run_state: 'succeeded', status: 'succeeded', latency_ms: latency,
-    token_usage: result.tokens, output_preview: result.text.slice(0, PREVIEW_LIMIT),
+    token_usage: result.tokens,prompt_tokens:result.promptTokens,completion_tokens:result.completionTokens,output_preview: result.text.slice(0, PREVIEW_LIMIT),
     quality_score: quality.score, quality_flags: quality.flags, quality_version: quality.version,
     finished_at: new Date().toISOString(),
   }).eq('id', run.id);
@@ -433,13 +466,13 @@ async function executeRun(admin: DbClient, run: Run, agent: Agent, provider: Pro
   // completed model run into a false failure, so it is recorded best-effort.
   try {
     if (!quality.passed) throw new Error('response_quality_below_memory_threshold');
-    const vector = await embed(provider, result.text.slice(0, 4000));
+    const vector = await embed(admin, provider, result.text.slice(0, 4000));
     await admin.from('memories').insert({
       scope: 'agent', scope_id: agent.id, content: result.text.slice(0, 4000), title: `Run ${run.id}`,
       embedding: vector, classification: run.classification, created_by: run.requested_by, source_run_id: run.id,
     });
   } catch (_) { /* run output remains authoritative */ }
-  return { runId: run.id, output: result.text, latencyMs: latency, tokenUsage: result.tokens, provider: provider.id, quality };
+  return { runId: run.id, output: result.text, latencyMs: latency, tokenUsage: result.tokens,promptTokens:result.promptTokens,completionTokens:result.completionTokens,provider: provider.id, quality };
 }
 
 async function updateTeamRoomMessage(admin:DbClient,runId:string,state:'queued'|'running'|'completed'|'failed'|'cancelled',body?:string,error?:string|null) {
@@ -546,7 +579,7 @@ Deno.serve(async (request) => {
 
       const [{ data: resumedAgent, error: resumedAgentError }, { data: resumedProvider, error: resumedProviderError }, { data: payload, error: payloadError }] = await Promise.all([
         admin.from('agents').select('id,name,status,enabled,provider_id,classification,approval_level,system_prompt').eq('id', approved.agent_id).single(),
-        admin.from('llm_providers').select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day').eq('id', approved.provider_id).single(),
+        admin.from('llm_providers').select('id,kind,api_style,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day').eq('id', approved.provider_id).single(),
         admin.from('agent_run_payloads').select('action,input').eq('run_id', approved.id).single(),
       ]);
       if (resumedAgentError) throw resumedAgentError;
@@ -585,7 +618,7 @@ Deno.serve(async (request) => {
 
     const { data: providerRow, error: providerError } = await admin
       .from('llm_providers')
-      .select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day')
+      .select('id,kind,api_style,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day')
       .eq('id', agent.provider_id)
       .maybeSingle();
     if (providerError) throw providerError;
@@ -604,7 +637,7 @@ Deno.serve(async (request) => {
       if (!fresh) {
         if(Deno.env.get('REID_LOCAL_AI_ONLY')==='1') throw new Error('local_provider_offline');
         const fallback = await admin.from('llm_providers')
-          .select('id,kind,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day')
+          .select('id,kind,api_style,endpoint,chat_model,embedding_model,max_classification,enabled,requests_per_hour,requests_per_day')
           .eq('id','gemini').eq('enabled',true).maybeSingle();
         if (fallback.error || !fallback.data) throw new Error('local_provider_offline');
         provider = fallback.data as Provider;

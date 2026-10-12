@@ -19,11 +19,37 @@ end $$;
 create schema if not exists auth;
 create schema if not exists extensions;
 create schema if not exists storage;
+create schema if not exists vault;
 
 -- pgvector is not installable in the harness image. `memories.embedding` is the
 -- only consumer and no RLS policy reads it, so a shim domain keeps the real
 -- migration text runnable. Production uses the genuine extension.
 create domain extensions.vector as text;
+
+-- Supabase Vault is not part of the stock PostgreSQL image used by this
+-- throwaway harness. This local-only shim preserves the function/view contract
+-- needed by the real migration; Production uses Supabase Vault's authenticated
+-- encryption and never this plaintext test table.
+create table if not exists vault.secrets (
+  id uuid primary key default gen_random_uuid(),
+  name text unique,
+  description text,
+  secret text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create or replace view vault.decrypted_secrets as
+select id,name,description,secret,decrypted_secret,created_at,updated_at
+from (select id,name,description,secret,secret as decrypted_secret,created_at,updated_at from vault.secrets) value;
+create or replace function vault.create_secret(new_secret text, new_name text default null, new_description text default null)
+returns uuid language plpgsql as $$ declare secret_id uuid; begin
+  insert into vault.secrets(secret,name,description) values(new_secret,new_name,new_description) returning id into secret_id;
+  return secret_id;
+end $$;
+create or replace function vault.update_secret(secret_id uuid, new_secret text default null, new_name text default null, new_description text default null)
+returns void language plpgsql as $$ begin
+  update vault.secrets set secret=coalesce(new_secret,secret),name=coalesce(new_name,name),description=coalesce(new_description,description),updated_at=now() where id=secret_id;
+end $$;
 
 create table if not exists auth.users (
   id uuid primary key default gen_random_uuid(),
@@ -69,12 +95,15 @@ do $$ begin
 end $$;
 
 grant usage on schema public, auth, storage, extensions to anon, authenticated, service_role;
+grant usage on schema vault to service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 grant all on all tables in schema storage to anon, authenticated, service_role;
 grant execute on all functions in schema auth to anon, authenticated, service_role;
 grant execute on all functions in schema storage to anon, authenticated, service_role;
+grant all on all tables in schema vault to service_role;
+grant execute on all functions in schema vault to service_role;
 
 -- Impersonation helpers used by the allow/deny suites.
 create or replace function public.test_sign_in(actor uuid) returns void language plpgsql as $$ begin

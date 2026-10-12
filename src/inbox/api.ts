@@ -2,7 +2,7 @@
 // which holds the linked phone. The service checks the owner role on every
 // request; nothing here reaches the phone directly.
 import { localApi } from '../local-api';
-import type { AiHealth, AssistantAction, Chat, ChatMessage, Connection, OperationsHealth, OutboxItem, WhatsappSettings } from './model';
+import type { AiHealth, AssistantAction, Chat, ChatMessage, Connection, OperationsHealth, OutboxItem, WhatsappAccess, WhatsappGroupAccess, WhatsappHandoff, WhatsappSettings, WhatsappUserAccess } from './model';
 
 export const loadStatus = () => localApi<Connection>('whatsapp/status');
 export const loadChats = () => localApi<Chat[]>('whatsapp/conversations');
@@ -11,12 +11,17 @@ export const loadActions = () => localApi<AssistantAction[]>('whatsapp/actions')
 export const loadSettings = () => localApi<WhatsappSettings>('whatsapp/settings');
 export const loadAiHealth = () => localApi<AiHealth>('ai/health');
 export const loadOperationsHealth = () => localApi<OperationsHealth>('operations/status');
+export const loadAccess = () => localApi<WhatsappAccess>('whatsapp/access');
+export const loadHandoffs = () => localApi<WhatsappHandoff[]>('whatsapp/handoffs');
 export const saveSettings = (settings: WhatsappSettings) => localApi<WhatsappSettings>('whatsapp/settings',{
-  assistant_enabled:settings.assistant_enabled,customer_auto_reply:settings.customer_auto_reply,
+  assistant_enabled:settings.assistant_enabled,customer_auto_reply:settings.customer_auto_reply,customer_handoff_enabled:settings.customer_handoff_enabled,
   customer_voice_enabled:settings.customer_voice_enabled,customer_reply_mode:settings.customer_reply_mode,
   customer_tone:settings.customer_tone,customer_dialect:settings.customer_dialect,response_length:settings.response_length,
   custom_instructions:settings.custom_instructions,fallback_message:settings.fallback_message,
 },'PATCH');
+export const updateUserAccess=(id:string,patch:Partial<WhatsappUserAccess>)=>localApi<WhatsappAccess>(`whatsapp/users/${id}`,patch,'PATCH');
+export const updateGroupAccess=(jid:string,patch:Partial<WhatsappGroupAccess>)=>localApi<WhatsappAccess>(`whatsapp/groups/${encodeURIComponent(jid)}`,patch,'PATCH');
+export const resolveHandoff=(id:string)=>localApi<{ok:boolean}>(`whatsapp/handoffs/${id}`,{status:'resolved'},'PATCH');
 export const setAllModes = (mode:'active'|'human',scope:'all'|'customer'|'internal'|'group'='all') =>
   localApi<{ok:boolean;count:number}>('whatsapp/conversations/bulk-mode',{mode,scope});
 
