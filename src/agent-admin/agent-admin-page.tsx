@@ -208,7 +208,7 @@ function Approvals({ lang, data, reload, manage }: { lang: Lang; data: api.Agent
           </Card>
         ))}
       </div>
-      <DecideDialog lang={lang} run={deciding} agentLabel={deciding ? label(deciding.agent_id) : ''} onClose={() => setDeciding(null)} onDone={reload} />
+      <DecideDialog lang={lang} run={deciding} agentLabel={deciding ? label(deciding.agent_id) : ''} tools={data.tools} onClose={() => setDeciding(null)} onDone={reload} />
     </>
   );
 }

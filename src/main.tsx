@@ -39,9 +39,9 @@ const OwnerOverview=React.lazy(()=>import('./owner-overview').then(module=>({def
 const Today=React.lazy(()=>import('./work/today-page').then(module=>({default:module.Today})));
 const Operations=React.lazy(()=>import('./work/operations-page').then(module=>({default:module.Operations})));
 const AssistantWorkspace=React.lazy(()=>import('./agent-team/agent-team-page').then(module=>({default:module.AgentTeamRoom})));
-const Connections=React.lazy(()=>import('./qr-workspace').then(module=>({default:module.Connections})));
+const Connections=React.lazy(()=>import('./connections/connections-page').then(module=>({default:module.Connections})));
 const Inbox=React.lazy(()=>import('./inbox/inbox-page').then(module=>({default:module.Inbox})));
-const ResearchWorkspace=React.lazy(()=>import('./research').then(module=>({default:module.ResearchWorkspace})));
+const ResearchWorkspace=React.lazy(()=>import('./research/research-page').then(module=>({default:module.ResearchWorkspace})));
 const CrmWorkspace=React.lazy(()=>import('./clients/clients-page').then(module=>({default:module.CrmWorkspace})));
 const Workshops=React.lazy(()=>import('./workshops').then(module=>({default:module.Workshops})));
 const FormsWorkspace=React.lazy(()=>import('./forms/forms-workspace').then(module=>({default:module.FormsWorkspace})));
