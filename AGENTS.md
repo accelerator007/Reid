@@ -2,6 +2,14 @@
 
 This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
 
+## 2026-10-13 Modular research workspace, connections rebuild, and agent approval transparency
+
+- The research workspace (`/research`) is modularized from the legacy single-file component into `src/research/` matching the project architecture pattern: dedicated models, pure domain access rules, isolated Supabase/storage API client, sub-components for overview/metrics, Kanban tasks, dataset catalogue, experiment hypotheses, ethics approvals, publications with DOI links, restricted document permissions with signed URLs, and activity audit logging.
+- Connections (`/connections`) is rebuilt from the legacy workspace into `src/connections/` with modern cards, tabbed views, and zero horizontal overflow.
+- Agent tool approval transparency: `DecideDialog` and run logs now display the requested tool identifier, operation name, domain badge, and structured arguments summary so decision-makers (Ali / Sheikha / HR) have full context before approving or rejecting execution.
+- Transactional Arabic email templates (`src/email-templates.ts`) added for application received alerts, applicant welcome & magic link activation, polite rejection notices, and customer WhatsApp intake notifications.
+- Release verification: live since 13:07 UTC from main commit `90e1d7f`. Frontend Vitest passes 388/388 across 25 files; service suite passes 250/250; complete PostgreSQL RLS harness passes; TypeScript/Vite production build passes. Live public `/healthz`, `/`, `/owner`, `/projects`, `/assistant`, and `/today` return 200 and serve entry `assets/index-t5HHj-CK.js`. Rollback tag: `reid-web:pre-web-202610131305`.
+
 ## 2026-10-10 WhatsApp group and user access control
 
 - The Owner control center is the source of truth for WhatsApp group participation and linked-user capabilities. It shows the number of discovered groups and linked users, then exposes bounded controls for each group (`enabled`, invocation-only or ambient replies, unlinked-member chat, text or voice) and each linked account (enabled, handoff alerts, memory, style, files, workshops, notes, proactive updates, voice, reply format and outbound scope). All writes pass the Owner-only host API, allow-list validation and `audit_logs`; the browser cannot write these tables directly.
