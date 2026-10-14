@@ -57,6 +57,7 @@ const fixtures = {
     { id: 'ts2', user_id: 'u-maryam', task_id: null, minutes: 390, work_date: '2026-09-28', notes: 'مراجعة مكونات الواجهة' },
     { id: 'ts3', user_id: 'u-maryam', task_id: null, minutes: 300, work_date: '2026-09-27', notes: null },
   ],
+  owner_action_items: [{id:'handoff:1',kind:'handoff',title:'أحمد البلوشي',due_at:iso(-2),href:'/inbox?chat=chat-1'},{id:'task:1',kind:'task',title:'متابعة متطلبات المشروع',due_at:iso(-24),href:'/today?task=t1'}],
   owner_company_snapshot: {
     as_of: iso(0),
     metrics: { active_people: 14, active_projects: 5 },
@@ -304,6 +305,11 @@ export function respondForLocalApi(route) {
     {id:'ollama',name:'Reid ai-lap',kind:'local',api_style:'ollama',model_mode:'auto',last_model_resolved_at:iso(-1),endpoint:'outbound://ai-lap',chat_model:'gemma4:12b',embedding_model:'nomic-embed-text:latest',max_classification:'restricted',retains_data:false,enabled:true,requests_per_hour:120,requests_per_day:2000,notes:'Primary local runtime',has_api_key:false,last_tested_at:iso(-1),last_test_status:'success',last_test_latency_ms:640,last_test_error:null,usage:{requests_24h:34,tokens_24h:18240,requests_30d:416,succeeded_30d:402,failed_30d:14,prompt_tokens_30d:142600,completion_tokens_30d:78120,total_tokens_30d:220720,average_latency_ms_30d:1740,requests_total:1288,total_tokens_total:681400,last_used_at:iso(-0.02)},created_at:iso(-500),updated_at:iso(-1)},
     {id:'gemini',name:'Google Gemini API',kind:'external',api_style:'google_gemini',model_mode:'fixed',last_model_resolved_at:null,endpoint:'https://generativelanguage.googleapis.com/v1beta',chat_model:'gemini-3.6-flash',embedding_model:'gemini-embedding-001',max_classification:'public',retains_data:true,enabled:false,requests_per_hour:20,requests_per_day:250,notes:'Public-data fallback',has_api_key:true,last_tested_at:iso(-2),last_test_status:'success',last_test_latency_ms:820,last_test_error:null,usage:{requests_24h:0,tokens_24h:0,requests_30d:18,succeeded_30d:17,failed_30d:1,prompt_tokens_30d:5400,completion_tokens_30d:2300,total_tokens_30d:7700,average_latency_ms_30d:980,requests_total:94,total_tokens_total:41280,last_used_at:iso(-36)},created_at:iso(-500),updated_at:iso(-2)},
   ]);
+  if(path==='ai/runtime')return json({active:0,maxConcurrent:3,circuit:'closed',retryAfterMs:0,windowRequests:40,windowFailures:2,p50Ms:1200,p95Ms:3500,externalFallback:false});
+  if(path==='meet/status')return json({googleAppConfigured:true,googleConnected:false,googleEmail:null,voiceProviderConfigured:false,transcriptionConfigured:false,ready:false,active:null});
+  if(path==='meet/preflight')return json({checkedAt:new Date().toISOString(),ready:false,checks:{google:false,voice:false,ai:true,tts:true,transcription:false},createsMeeting:false});
+  if(path.endsWith('/journey'))return json(null);
+  if(path==='whatsapp/journey-options')return json({contacts:[],projects:[],people:[{id:user.id,full_name:'شيخة المعمري'}]});
   if (path === 'ai/health') return json({ online: true, model: 'gemma4:12b',latencyMs:640,capabilities:['chat','vision'] });
   if (path === 'operations/status') return json({components:{website:{status:'healthy'},ai:{status:'healthy'},tts:{status:'healthy'},database:{status:'healthy'},whatsapp:{status:'healthy'},runner:{status:'healthy'}}});
   const thread = path.match(/^whatsapp\/conversations\/([^/]+)\/messages$/);

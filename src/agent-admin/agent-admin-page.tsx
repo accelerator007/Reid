@@ -11,6 +11,7 @@ import type { Page } from '../routes';
 import { useSession } from '../shell';
 import { Badge, Button, Card, Dialog, EmptyState, Field, FormGrid, InlineAlert, PageHeader, Select, Skeleton, StatCard, TabPanel, Tabs, TextArea, TextInput, type TabItem } from '../ui';
 import * as api from './api';
+import { RuntimeHealth } from './runtime-health';
 import { AgentDetail } from './agent-detail';
 import { DecideDialog, RunRowView, when } from './agent-parts';
 import {
@@ -105,6 +106,7 @@ export function AgentManagement({ lang, go }: { lang: Lang; go?: (page: Page) =>
         </div>
       )}
 
+      {owner && <RuntimeHealth lang={lang}/>}
       <Tabs items={tabs} value={tab} onChange={setTab} label={tr(lang, 'أقسام إدارة الوكلاء', 'Agent management sections')} dir={lang === 'ar' ? 'rtl' : 'ltr'} />
       <TabPanel id={tab}>
         {!data && !error && <Skeleton lines={6} />}

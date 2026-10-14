@@ -61,6 +61,7 @@ export function Connections({ lang, go }: { lang: Lang; go: (page: Page) => void
     latencyMs: number | null;
     capabilities: string[];
   } | null>(null);
+  const [preflight,setPreflight]=React.useState<{checkedAt:string;ready:boolean;checks:Record<string,boolean>}|null>(null);
   const [meet, setMeet] = React.useState<MeetStatus | null>(null);
   const [people, setPeople] = React.useState<AdminPerson[]>([]);
   const [links, setLinks] = React.useState<AdminLink[]>([]);
@@ -155,6 +156,7 @@ export function Connections({ lang, go }: { lang: Lang; go: (page: Page) => void
     }
   };
 
+  const verifyMeeting=async()=>{setBusy(true);try{setPreflight(await localApi('meet/preflight',{}));setError('');}catch(e){setError(localError(e,lang));}finally{setBusy(false);}};
   const connectMeet = async () => {
     setBusy(true);
     setError('');
@@ -581,8 +583,8 @@ export function Connections({ lang, go }: { lang: Lang; go: (page: Page) => void
                 <b>{tr(lang, 'دخول ريّد والاستماع المباشر', 'Live listening & Voice')}</b>
                 <small>
                   {meet?.voiceProviderConfigured && meet?.transcriptionConfigured
-                    ? tr(lang, 'الدخول والاستماع والرد الصوتي جاهزة', 'Join, listen and voice response ready')
-                    : tr(lang, 'يتطلب تفعيل RECALL_API_KEY و ElevenLabs', 'Requires RECALL_API_KEY and ElevenLabs')}
+                    ? tr(lang, 'إعدادات الدخول والاستماع موجودة؛ افحص الاتصال', 'Join and listening configured; check connections')
+                    : tr(lang, 'أكمل ربط خدمة الاجتماعات والاستماع مع مسؤول النظام', 'Complete meeting and listening setup with your administrator')}
                 </small>
               </div>
               {meet?.voiceProviderConfigured && meet?.transcriptionConfigured && (
@@ -591,6 +593,8 @@ export function Connections({ lang, go }: { lang: Lang; go: (page: Page) => void
             </div>
           </div>
 
+          <Button busy={busy} onClick={()=>void verifyMeeting()}>{tr(lang,'فحص اتصالات الاجتماع','Check meeting connections')}</Button>
+          {preflight&&<div role="status"><p>{tr(lang,'الفحص لا ينشئ اجتماعًا. نجاح الاتصالات يحتاج بعده تجربة اجتماع فعلية.','This check creates no meeting. Working connections still need a real meeting test.')}</p>{Object.entries(preflight.checks).map(([key,ok])=><p key={key}><Badge tone={ok?'success':'warning'}>{ok?tr(lang,'متصل / مضبوط','Connected / configured'):tr(lang,'يحتاج إعدادًا أو إصلاحًا','Setup or repair needed')}</Badge> {({google:'Google',voice:'Recall',ai:tr(lang,'الذكاء المحلي','Local AI'),tts:tr(lang,'الصوت','Voice'),transcription:tr(lang,'إعداد الاستماع','Listening configuration')} as Record<string,string>)[key]}</p>)}</div>}
           {meet?.active && (
             <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-4)', background: 'var(--surface-sunken)', borderRadius: 'var(--radius-md)' }}>
               <div>

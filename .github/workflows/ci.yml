@@ -14,6 +14,16 @@ jobs:
       - run: npm run check
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Connected operations browser journeys (synthetic data)
+        run: |
+          VITE_SUPABASE_URL=https://mock.supabase.test VITE_SUPABASE_ANON_KEY=anon npm run dev -- --host 127.0.0.1 --port 5178 > /tmp/connected-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5178/ > /dev/null; then break; fi
+            sleep 1
+          done
+          PREVIEW_URL=http://127.0.0.1:5178 node scripts/qa-connected-operations.mjs
 
   # The WhatsApp assistant runs from server/ and was never covered by CI, so its
   # tests never ran on a pull request.
