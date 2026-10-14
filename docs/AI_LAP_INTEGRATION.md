@@ -1,3 +1,5 @@
+> Historical plan. Current architecture and status are in [AGENTS.md](../AGENTS.md); current integration steps are in [INTEGRATION_ACTIVATION.md](../INTEGRATION_ACTIVATION.md). Pending items below describe the date of this plan.
+
 # ai-lap secure Ollama integration
 
 Status: Production active. Outbound runner 1.2.0, restricted adapter and Ollama services were healthy and passed the live 5-case quality gate at 100/100 on 2026-09-12.

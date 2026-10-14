@@ -1,9 +1,12 @@
-# Decisions
-1. Vite React preserves the simple Pages deployment; server concerns use Supabase Edge Functions.
-2. Supabase is source of truth; Workers are only for a narrow authenticated Ollama gateway if free allowance suffices.
-3. Requested model is recorded as `gemma4:12b`. `ai-lap`: RTX 3080 Ti 12GB, RAM 32GB, Ryzen 9 5950X. Gemma 4 is a real family, but the exact Ollama tag must be re-verified on the host.
-4. Supabase free requires a separate weekly logical backup.
-5. Model providers are data, not code. `llm_providers` holds the endpoint, model, and clearance ceiling; the gateway dispatches on `kind`. Restoring `ai-lap` is a row update, not a rewrite.
-6. Google Gemini is a temporary external provider while `ai-lap` is offline. The account is on the free tier, where content may be reused by Google, so it is capped at `public` data: only the three publishable agents run, and everything internal or above stays disabled. The cap is enforced by a database trigger so the gateway cannot be the only guard.
-7. Prompts are stored as a SHA-256 hash and answers as a 280-character preview. A run stays auditable without the database accumulating company text.
-8. Provider rows pin an explicit model, never a moving alias such as `gemini-flash-latest`. A model change is then a recorded decision rather than a silent shift in behaviour and cost.
+# Current architectural decisions
+
+1. Production web/API run on the Reid Ubuntu host behind Cloudflare Tunnel. Supabase remains the authoritative Auth/database/Storage system; old Pages/Worker assumptions are historical.
+2. Local ai-lap is the last verified enabled model provider. External provider activation is explicit and subject to testing and data clearance; outages never silently export company content.
+3. Provider definitions are data in `llm_providers`. Fixed models can be chosen, or `auto` resolved during an explicit provider test; normal requests use that concrete tested resolution.
+4. Provider keys stay in Vault and host runtime secrets stay outside the repository. Browser users never read a secret or Vault identifier.
+5. Chat diagnostics store aggregate latency/token/failure data, not prompts. Governed agent runs keep their established audit boundaries; conversation ledgers remain separately access-controlled.
+6. Client follow-up creation is one PostgreSQL transaction authorized by the real Owner session, with conversation locking for retry safety. Employee task access does not imply WhatsApp access.
+7. Public-table encrypted backup/restore is a tested recovery layer, not a substitute for full managed Auth/Storage recovery.
+8. Integration configuration, connectivity verification and a successful real user flow are separate states. Meetings and physical laptop installation must report their remaining prerequisites truthfully.
+
+Historical decisions remain in [the archive](docs/history/DECISIONS.md). Current release state is in [AGENTS.md](AGENTS.md).

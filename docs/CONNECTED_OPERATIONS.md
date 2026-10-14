@@ -1,6 +1,6 @@
 # Connected operations — 2026-10-14
 
-Status: implemented and verified locally; not deployed. Based on the deployed October 13 release (`df3ff3c` / application `90e1d7f`) so the research/Connections changes are preserved.
+Status: implemented and verified locally; not deployed. Review: [draft PR #156](https://github.com/accelerator007/Reid/pull/156). Based on the deployed October 13 release (`df3ff3c` / application `90e1d7f`) so the research/Connections changes are preserved.
 
 ## User behavior
 
@@ -33,8 +33,8 @@ Current architecture, release instructions and blockers are now separated from t
 - Full isolated PostgreSQL migration/RLS harness passes; customer journey suite passes 20/20 checks covering idempotent creation, notifications, linked status synchronization, owner/employee/anonymous access and concrete action links.
 - Eight browser combinations: Arabic/English, light/dark, desktop 1440px and mobile 390px. Exercised Home, follow-up form save/links and meeting preflight. No page errors or horizontal overflow; screenshots under `test-results/connected-operations/`. Fixtures are synthetic; this is not an authenticated production test.
 - Real local model: four synthetic cases pass (Omani intake, document date/source, no fabricated send receipt, absent document price). Latest successful sample took approximately 0.6–1.4 seconds per case after warm-up. This small sample is not a general accuracy or speed guarantee. Results in `test-results/reply-evaluation.json`.
-- Existing public browser suite: 9 passed; 6 live authenticated cases skipped without their opt-in credentials.
-- Secret scan: clean across 453 tracked files; no runtime credentials are included.
+- Existing public browser suite: 12 passed; 6 live authenticated cases skipped without their opt-in credentials.
+- Secret scan: clean across tracked source files; no runtime credentials are included.
 - Laptop Python suite: 18 tests pass. The candidate API also passes the Arabic PDF rendering check.
 - Candidate API image: `reid-services:candidate-connected-20261014`.
 
