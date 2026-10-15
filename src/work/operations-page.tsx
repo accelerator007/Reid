@@ -28,6 +28,7 @@ export function Operations({ lang }: { lang: Lang }) {
   const [records, setRecords] = React.useState<WorkRecord[] | null>(null);
   const [people, setPeople] = React.useState<Record<string, string>>({});
   const [error, setError] = React.useState<AppError | null>(null);
+  const [focusedRecord,setFocusedRecord]=React.useState<string|null>(()=>new URLSearchParams(location.search).get('record'));
   const [creating, setCreating] = React.useState(() => new URLSearchParams(location.search).has('new'));
 
   const load = React.useCallback(async () => {
@@ -44,11 +45,12 @@ export function Operations({ lang }: { lang: Lang }) {
   }, [kindsKey]);
   React.useEffect(() => { void load(); }, [load]);
   React.useEffect(() => {
-    const follow = () => { if (new URLSearchParams(location.search).has('new')) setCreating(true); };
+    const follow = () => { if (new URLSearchParams(location.search).has('new')) setCreating(true); setFocusedRecord(new URLSearchParams(location.search).get('record')); };
     addEventListener('popstate', follow);
     return () => removeEventListener('popstate', follow);
   }, []);
 
+  React.useEffect(()=>{const row=records?.find(item=>item.id===focusedRecord);if(row)setKind(row.kind);},[records,focusedRecord]);
   const change = async (record: WorkRecord, next: WorkStatus) => {
     if (!supabase) return;
     setRecords(current => current?.map(row => (row.id === record.id ? { ...row, status: next } : row)) ?? null);
@@ -58,7 +60,7 @@ export function Operations({ lang }: { lang: Lang }) {
   };
 
   const ofKind = (records ?? []).filter(record => record.kind === kind);
-  const visible = records ? filterRecords(records, kind, status, query) : [];
+  const visible = records ? filterRecords(records, kind, status, query).filter(row=>!focusedRecord||row.id===focusedRecord) : [];
   const now = new Date();
   const tabs: TabItem<WorkKind>[] = kinds.map(value => ({
     id: value, label: workKinds[value].label[lang], icon: kindIcons[value],
@@ -77,6 +79,7 @@ export function Operations({ lang }: { lang: Lang }) {
 
       {error && <InlineAlert action={<Button size="sm" onClick={() => void load()}>{tr(lang, 'تحديث', 'Refresh')}</Button>}>{messageFor(error, lang)}</InlineAlert>}
 
+      {focusedRecord&&<InlineAlert tone="info" action={<Button size="sm" onClick={()=>setFocusedRecord(null)}>{tr(lang,'عرض الكل','Show all')}</Button>}>{tr(lang,'الطلب المحدد للمتابعة','Selected follow-up request')}</InlineAlert>}
       <Tabs items={tabs} value={kind} onChange={value => { setKind(value); setStatus('all'); }} label={tr(lang, 'أنواع السجلات', 'Record types')} dir={lang === 'ar' ? 'rtl' : 'ltr'} />
       <TabPanel id={kind}>
         <div className="work-toolbar">

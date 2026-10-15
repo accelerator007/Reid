@@ -1,0 +1,1307 @@
+# Historical engineering log — through 2026-10-13
+
+Historical observations and superseded instructions. Current instructions and state are in ../../AGENTS.md. Do not use old pending lists as current deployment facts.
+
+# Reid Engineering Agent Guide and Permanent Status
+
+This is the primary handoff file for ChatGPT, Claude, Codex, and human engineers. Read it before changing the repository. It records architecture, rules, verified state, known defects, and the next work.
+
+## 2026-10-13 Modular research workspace, connections rebuild, and agent approval transparency
+
+- The research workspace (`/research`) is modularized from the legacy single-file component into `src/research/` matching the project architecture pattern: dedicated models, pure domain access rules, isolated Supabase/storage API client, sub-components for overview/metrics, Kanban tasks, dataset catalogue, experiment hypotheses, ethics approvals, publications with DOI links, restricted document permissions with signed URLs, and activity audit logging.
+- Connections (`/connections`) is rebuilt from the legacy workspace into `src/connections/` with modern cards, tabbed views, and zero horizontal overflow.
+- Agent tool approval transparency: `DecideDialog` and run logs now display the requested tool identifier, operation name, domain badge, and structured arguments summary so decision-makers (Ali / Sheikha / HR) have full context before approving or rejecting execution.
+- Transactional Arabic email templates (`src/email-templates.ts`) added for application received alerts, applicant welcome & magic link activation, polite rejection notices, and customer WhatsApp intake notifications.
+- Release verification: live since 13:07 UTC from main commit `90e1d7f`. Frontend Vitest passes 388/388 across 25 files; service suite passes 250/250; complete PostgreSQL RLS harness passes; TypeScript/Vite production build passes. Live public `/healthz`, `/`, `/owner`, `/projects`, `/assistant`, and `/today` return 200 and serve entry `assets/index-t5HHj-CK.js`. Rollback tag: `reid-web:pre-web-202610131305`.
+
+## 2026-10-10 WhatsApp group and user access control
+
+- The Owner control center is the source of truth for WhatsApp group participation and linked-user capabilities. It shows the number of discovered groups and linked users, then exposes bounded controls for each group (`enabled`, invocation-only or ambient replies, unlinked-member chat, text or voice) and each linked account (enabled, handoff alerts, memory, style, files, workshops, notes, proactive updates, voice, reply format and outbound scope). All writes pass the Owner-only host API, allow-list validation and `audit_logs`; the browser cannot write these tables directly.
+- Every group Reid belongs to is discovered from the linked WhatsApp session on connection and during control-center refresh. A new group is stored with `enabled=false`, mention-only, linked-members-only and text defaults. While disabled its messages stop before conversation, message or job persistence. Enabling a group is an explicit Owner decision. Disabling it also cancels any queued/running jobs and queued bot replies for that group.
+- Unknown direct numbers remain public customers with no company authority. Greetings and ordinary questions use the governed customer prompt. A clear Arabic or English request for a person creates one durable handoff, pauses that conversation, acknowledges the customer and queues deduplicated WhatsApp alerts to the linked recipients selected in the dashboard. Ali and Sheikha are the initial recipients; replying from the inbox resolves the pending handoff automatically.
+- Migration `202610100002_whatsapp_access_and_handoffs.sql` adds the handoff settings and ledger, keeps the existing enabled Owner group unchanged, and changes only the default for future groups. Handoffs are service-role written and Owner/Super Admin readable under RLS.
+- Pre-release verification: 245/245 service tests and 372/372 frontend tests pass; the complete PostgreSQL migration/RLS harness passes, including WhatsApp 33/33; the TypeScript/Vite production build passes. The authenticated Arabic/English light/dark desktop and mobile visual review covers the new management view and checks horizontal overflow. Production deployment status is recorded after activation; no outbound test message is sent as part of deployment.
+
+## 2026-10-12 Reid model center and governed API credentials
+
+- `/dashboard` Provider management is the Owner model center. Each connection can be created, copied, edited, tested, enabled/disabled and deleted through the Owner-only host API. Built-in connections can be edited or disabled but not deleted. Provider or model changes disable the connection and require a successful test within 24 hours before re-enabling it.
+- External keys are encrypted in Supabase Vault. The browser never reads a key or its Vault UUID, authenticated SQL clients cannot mutate provider rows directly, and service-role-only RPCs store/read/delete credentials. Provider endpoints must be public HTTPS and are resolved through the existing SSRF guard before tests.
+- Every connection supports `fixed` model selection or `auto`. Auto discovers the provider's text-generation catalogue during the explicit connection test, excludes embedding/image/audio/realtime models, chooses an efficient stable chat model, records the concrete model and then uses that fixed resolution for normal requests. Model selection does not add a catalogue request to every conversation.
+- The model center shows enabled state, key and test health, assigned agents, requests in 24 hours, token use and failures over 30 days, input/output token split for new calls, average latency, all-time requests and last use. Aggregates come from `agent_runs` through a service-only function and never include prompt or response content. Historical calls keep their total token count; the input/output split begins with this release.
+- Direct host calls used by WhatsApp, the public assistant and other Reid services write content-free usage events, so provider totals are not limited to the agent-management gateway. The physical ai-lap runner already reports total tokens; its versioned source now reports the split too, but installing that source on the laptop still requires a shell-capable credential because the Production SSH key is intentionally restricted to forwarding `127.0.0.1:11436`.
+- Release verification: the restricted SSH tunnel returned adapter health (`gemma4:12b`, `nomic-embed-text:latest`) and a real `SSH_MODEL_OK` completion with 21 input / 6 output tokens. The service suite passes 250/250, frontend 372/372, the full local migration/RLS harness and Production build pass, and Arabic/English light/dark desktop/mobile previews of the model center and add-API dialog have no page errors or horizontal overflow.
+
+## 2026-10-10 WhatsApp control center
+
+- The Owner WhatsApp page has two top-level views: conversations and a professional control center. The control center is deliberately split into Overview, Reid behavior, and Management & access tabs so daily health, runtime preferences, and advanced administration are not mixed into one long page.
+- `whatsapp_assistant_settings` is the singleton source of truth for the global assistant switch and customer auto-reply, voice, reply format, tone, Arabic style, response length, bounded custom instructions, and the customer failure message. Only the service role writes it through the Owner-only host API; Owner reads use RLS and every update is written to `audit_logs`.
+- Runtime settings are enforced in `processJob`: a disabled assistant cancels automatic work, a disabled customer channel leaves unknown direct contacts stored without a reply, and customer voice/style settings become part of the actual reply decision and system prompt. Customer authority remains fixed and cannot be widened by custom instructions.
+- Bulk handover and activation update conversation modes through an Owner-only endpoint. Handover also cancels queued/running jobs and queued bot replies; uncertain sends are never retried. The dashboard shows real conversation/queue totals, service health and the recent governed action ledger.
+- Verification: 241/241 service tests and 372/372 frontend tests pass, followed by a clean TypeScript/Vite Production build and the complete isolated PostgreSQL migration/RLS harness.
+- Live since 09:03 UTC from main commit `d0b8b34`: migration `202610100001_whatsapp_control_center.sql` is applied, the API and web containers are healthy, WhatsApp re-linked, and the authenticated internal status reports all six components healthy. Public `/healthz`, `/inbox`, and `/connections` return 200 while the settings API rejects anonymous access with 401. The cutover began with zero queued/running jobs and zero queued/sending/uncertain outbox rows; no test message was sent. Rollback images: `reid-services:pre-whatsapp-control-20261010090247` and `reid-web:pre-web-202610100903`.
+
+## 2026-10-10 customer WhatsApp classification and media fallback
+
+- A direct number without an enabled `whatsapp_admin_profiles` mapping is a customer, never an employee. The Owner inbox receives an explicit Customer / Reid team / Group label computed by the service; this is display context only and does not broaden authorization.
+- Customer replies answer the immediate question or image first, ask at most one useful intake question, gradually collect project goal/audience/outcome, and offer the existing `موظف` handoff. They cannot use internal data or administrative tools even if the sender claims to be an employee.
+- If local AI or vision fails after a customer message, the job is still recorded as failed but the customer receives a deduplicated retry/human-handoff message instead of silence. Internal error detail stays in structured service logs and is never sent to WhatsApp.
+- Verification: 238/238 service tests and 369/369 frontend tests pass, followed by a clean TypeScript/Vite Production build.
+- Live since 08:38 UTC from main commit `5e5f0f1`: the API and web containers are healthy, WhatsApp reconnected, all six operations components report healthy, public `/healthz`, `/whatsapp`, and `/owner` return 200, and the production conversation from the unlinked image sender resolves to `customer`. No outbound test message was sent. Rollback images: `reid-services:pre-customer-20261010083717` and `reid-web:pre-web-202610100837`.
+
+## 2026-10-08 simplified product shell and account security
+
+- The everyday workspace navigation is intentionally small: Home, Work, Reid, WhatsApp and Administration. Owners do not see duplicate Home/Today entries. CRM, requests, people, research, workshops, forms, connections and agent setup remain permission-filtered and accessible through **All tools** and `Ctrl/Cmd+K`; do not restore them all to the primary sidebar.
+- The global **Create** menu opens real project, request, lead, Reid brief and form flows through query-string entry points. Those pages listen for same-session `popstate` changes so creation also works when the destination is already mounted. The Owner home includes a direct “What should Reid do?” brief and a useful first-work empty state.
+- `/admin` is the single administration entry point and links to connections, agent approvals/setup and people/applications. Existing permission gates and routes remain unchanged; this is information-architecture consolidation rather than data-access broadening.
+- `/profile` now includes Supabase TOTP enrollment, verification, factor listing and removal. Abandoned unverified factors are cleared before a fresh enrollment. A session whose next assurance level is `aal2` is stopped at a full-page code challenge before any workspace content renders. Google/email identity remains visible and password changes keep the existing eight-character minimum.
+- The public home removes decorative clutter, shows three grounded capabilities of the actual Reid system, and has a short bilingual project brief that opens WhatsApp with structured context. No public form data is stored in the database.
+- Verification: 368/368 Vitest checks across 23 files, the authenticated browser suite, server suite, complete RLS harness, security job and the TypeScript/Vite production build passed. The hosted Supabase configuration confirms TOTP enrollment and verification are enabled. Final web commit `5435eee` was activated at 06:48 UTC as image `reid-web:candidate-5435eee`; the container and public `/healthz`, `/`, `/owner`, `/projects`, `/assistant` and `/today` probes returned 200, and the live bundle contains the project brief, TOTP setup and assurance-level gate. Rollback tag: `reid-web:pre-web-202610080647`.
+
+## 2026-10-06 WhatsApp documents, durable group speakers and deep monitoring — production migration applied
+
+- GitHub Actions is authenticated again, the manually-disabled uptime workflow is enabled, and `SUPABASE_ACCESS_TOKEN` is now stored as a repository secret without exposing its value. A GitHub-hosted probe confirmed that Cloudflare challenges GitHub runner IPs with 403 even while the live deep endpoint returns healthy. Migration `202610060003_public_operations_heartbeat.sql` therefore adds a service-role-only heartbeat row and a fail-closed public RPC containing only the same six booleans. The API refreshes it every two minutes; GitHub uses it only when Cloudflare challenges the primary route, and rejects it after ten minutes.
+- The first authenticated backup rehearsal exposed a CLI contract error rather than a credential failure: `supabase db dump` no longer accepts `--project-ref`. The workflow now runs `supabase link --project-ref cfxntjnewkmlvkogfxyu` once, followed by `db dump --linked`, matching the current CLI; the link command was proven from an otherwise empty temporary work directory.
+- Supabase's management authorization rejects the valid personal CLI token specifically from GitHub-hosted runners; both the historical default CLI 2.20.3 and the locally proven CLI 2.117.0 receive the same FGA denial there. Weekly backup therefore no longer depends on a personal management session or database password: `scripts/rest-backup.mjs` exports every base table in `public` through the service-role Data API with pagination, records row counts/byte counts/SHA-256 hashes, verifies every file, creates a fail-fast restore script, and restores all rows into a fresh Supabase Postgres service before encrypting the artifact. The archive carries the exact migrations and restore utility needed for recovery.
+- The restore proof builds a clean PostgreSQL 17 database from the local-only Supabase platform shim and every real migration, with the same vector-only compatibility substitution already used by the complete RLS harness. The shim-only `test_results` table is excluded from export; every listed table therefore corresponds to a real Production Data API resource.
+- A local end-to-end rehearsal against the live Production Data API exported and hash-verified 93 public tables / 15,221 rows, generated the recovery SQL, rebuilt the schema from every migration on PostgreSQL 17, and restored every table with exact row-count assertions. The backup helper's pagination, hash-tamper detection, fixed table-name grammar and restore generation also pass their focused Node tests.
+- GitHub run `37733929799` completed the encrypted weekly backup and restore proof successfully in 36 seconds, including artifact upload. With that successful backup in place, uptime run `37734008432` passed both the deep six-component health check and backup-freshness gate. The workflow now closes its generated incident automatically after a later successful run so a recovered service does not leave a stale open alert.
+- PR CI found two stale test fixtures after the redesign: the host-ops redaction test contained a literal fake PEM header that correctly tripped the repository secret scanner, and two anonymous-route E2E checks still expected the old Google button accessible name. The PEM sentinel is now assembled at runtime so the scanner remains strict, and the browser checks target the visible Google label used by the current bilingual sign-in component.
+- CI also found the newly disclosed high-severity librsvg advisory in Baileys' transitive `sharp` 0.35.4. The lockfile now resolves the compatible patched `sharp` 0.35.5; the exact rebuilt image passes the high-severity audit and 235/235 service tests. It is live, healthy, reconnected to WhatsApp and reports all six deep-health flags true. Rollback image: `reid-services:pre-sharp-20261008055246`.
+- Migration `202610060003` and the heartbeat-enabled API are live. The primary endpoint and anonymous fail-closed RPC both returned the same six healthy flags after deployment; the service reconnected to WhatsApp and is healthy. The exact candidate passed 235/235 service tests, and the complete PostgreSQL RLS harness passed. API rollback image: `reid-services:pre-healthbeat-20261006073502`.
+
+- Migration `202610060002_whatsapp_documents_and_speakers.sql` is applied to Production, and the API/web release is live from the two 2026-10-06 document-ingestion commits. `qr_messages` and `qr_jobs` now retain the sanitized WhatsApp display name separately from authenticated `sender_phone`; `whatsapp_group_participants` keeps the latest name per group member; Owner-only `qr_conversation_documents` retains bounded extracted text while raw uploads are never stored.
+- The QR service accepts PDF, DOCX and XLSX up to 12 MB, extracts at most 48,000 characters, makes the three latest documents available to follow-up turns under an explicit untrusted-content boundary, and identifies the file used in grounded answers. Encrypted, empty, malformed and unsupported documents fail with a useful Arabic retry message. Group history increased to sixteen turns and prefixes every inbound turn with the durable speaker name.
+- The Owner group currently has canonical linked identities for Ali Alajmi and Sheikha Almamari. Fatma is a known third group member but has not sent a stored group message yet; her next message will persist her WhatsApp name and number as a non-privileged participant. A display name never grants authorization.
+- `/api/monitor/health` exposes only pass/fail booleans for the site, database, WhatsApp connection, ai-lap runner/model, TTS and queues. The uptime workflow is enabled, checks every fifteen minutes and also fails when the latest weekly backup failed or is older than eight days. The new workflow definition and Supabase fallback still have to reach `main` before the scheduled run uses them.
+- `/admin` now opens with a plain-language active-user count and real-user cards, localized states and clearer access wording. Workspace navigation uses shorter task-based Arabic/English labels. The WhatsApp inbox shows a group sender's name and phone and marks extracted documents distinctly.
+- Verification: 362/362 frontend tests, clean TypeScript/Vite Production build, 234/234 service tests including real generated PDF/DOCX/XLSX extraction, complete throwaway PostgreSQL migration/RLS harness including the new document suite, and a clean migration dry run before the Production push.
+- Release validation commands: `docker run --rm -v "$PWD:/app" -w /app node:22-bookworm-slim npm run check`; `docker run --rm -v "$PWD/server:/service" -w /service node:22-bookworm-slim npm test`; `docker run --rm -v "$PWD:/repo" -w /repo postgres:16-bookworm bash scripts/rls-local.sh`; `scripts/uptime-check.sh` after the API/web deployment.
+
+## 2026-09-30 Production cleanup, forms and governed agent web tools — live
+
+- Workshop forms are fully active in Production. Migration `202609290001_workshop_forms.sql` is applied, `/forms` and public `/f/:id` are deployed from commit `5eb4971`, both storage buckets exist, and the empty state is real: there are currently no forms, responses or workshops. Public and authenticated form paths, server-side validation, themes, QR and XLSX export passed the release checks.
+- Migration `202609300001_cleanup_synthetic_data_and_enable_agent_web.sql` removed the thirteen exact QA Auth identities and their dependent application, research, employee, task, notification, agent-memory and QR test records. It deliberately uses UUID allow-lists rather than name/email wildcards. Production now has two real Auth accounts, zero applications, zero research rows, zero employee documents, and no projects/forms/workshops yet. The remaining single KPI, performance review and timesheet belong to real data and were preserved.
+- Every one of the ten enabled non-finance agents now has `web.search` and `web.read`. `llm-gateway` version 5 executes them through Tavily with an explicit-input-only request, daily shared quota, strict public-HTTPS URL checks, timeouts and bounded/deduplicated output. `TAVILY_API_KEY` is stored as an Edge secret. Finance remains intentionally disabled under the no-money product decision.
+- Production verification: Tavily returned 200 with a request ID; `llm-gateway` is ACTIVE; ai-lap runner 1.2.2 has a fresh online heartbeat; there are exactly 20 web-tool assignments; `/`, `/healthz`, `/workshops`, `/forms`, `/assistant` and `/dashboard` return 200. The migration list is synchronized through `202609300001`.
+- Verification log: clean TypeScript/Vite production build; 354/354 frontend tests across 23 files; Deno type check for `llm-gateway`; complete throwaway PostgreSQL migration/RLS harness, including forms 64/64 and workshops 17/17. The first Production migration attempt hit the research-delete activity-trigger defect and rolled back atomically; the migration was corrected, rerun through the full harness and then applied successfully.
+- Remaining redesign work: research, workshops catalogue, accounts/admin, connections, profile, sign-in/join and public home still use legacy page composition even though they inherit the new tokens, fonts and shell. Rebuild them one module at a time without changing their database contracts. Keep forms and workshops; they are production features, not demo content.
+
+## 2026-09-29 Workshop forms (admins only) — historical pre-deployment state
+
+- `/forms` (owner, super_admin, admin) and public `/f/:id` from `src/forms/`; migration `202609290001_workshop_forms.sql` (forms, form_collaborators, form_responses, `public_form`, `submit_form_response` with server-side validation, `form_overview`, buckets `form-uploads` private and `form-media` public). **Migration not applied to production; web not deployed.**
+- Checks: `rls_forms.sql` 64/64 (all RLS suites pass; harness `test_sign_out` now sets anon claims like PostgREST), vitest 351/351, tsc clean, `scripts/forms-preview.mjs` 17 screens × 8 widths no overflow, QR decodes at 3 sizes.
+- Left: review remaining screenshots (dialogs, responses, respond page on phones), dark-mode pass, `npm run build`, then apply the migration and `scripts/deploy-web.sh` with the owner's approval. Agent management + inbox (commit 3548c6c) are also not deployed yet.
+
+## 2026-09-29 Agent management and WhatsApp inbox rebuilt
+
+- `/dashboard` renders `src/agent-admin/` (agent management only): ai-lap health card, state summary, and tabs for the roster (one grid, domain on each card), approvals (decide dialog with a note), the run log (all / in progress / failed) and providers (ceiling, retention, and a warning for an external provider cleared above public data, including a disabled one such as the Gemini row). `?agent=id` opens one agent: why it is blocked, facts, a manual run, its tools as generated forms (from `agent_tools.input_schema`, replacing the `window.prompt` JSON), pause (admins), enable/disable with a reason (owner), and recent runs. HR (`can_approve_level(3)` but not `is_admin`) sees the approvals only. Retired: `agent-command.tsx`, `agents.css`.
+- The old dashboard's other parts moved: join applications are the "طلبات الانضمام" tab in People (`src/people/applications.tsx`, staff only, `?tab=applications`, `?review=id&decision=` still honoured and `/dashboard?review=` redirects there); accounts live in `/admin`; KPIs in the owner overview; notifications on `/today`.
+- Sign-in still returns to `/dashboard` (it is in the allowed redirect URLs). Anyone that page refuses is now redirected to `landingPage(roles)` (owner overview, else My day, else profile) instead of an access-denied gate.
+- `/inbox` renders `src/inbox/` against the QR WhatsApp service: searchable list (Arabic spelling variants, number fragments, assistant/team filter), thread by Muscat day, voice/photo markers, what the assistant remembers (summary and mood), take over / hand back, and a composer (Enter sends; a reply pauses the assistant). Polling pauses while the tab is hidden. Phone: one pane at a time with a back button. Retired: `QrInbox` in `qr-workspace.tsx`, and the unused Cloud-API `whatsapp-inbox.tsx`/`.css` (the contract test now reads the new inbox).
+- `messageForRaw` maps llm-gateway refusal codes (rate limit, ai-lap offline, paused, tool not assigned, run no longer pending…) to Arabic/English messages and accepts an `Error` whose message is the code.
+- Known gap: a run held for approval stores no tool id or input (only `prompt_hash`), so approvers decide without seeing what the agent will do. The gateway should record the requested tool and a redacted argument summary in `agent_runs.logs` when it creates a pending run.
+
+## 2026-09-29 Tasks & requests, My day, Clients and People rebuilt
+
+- **Live since 07:03 UTC** via `scripts/deploy-web.sh` from commit `a0648a7` (web container only; API, WhatsApp and the assistant untouched and healthy). The public site serves the new entry bundle and the rebuilt route chunks (`people-page`, `clients-page`, `today-page`, `operations-page`, `projects-page`, `agent-team-page`) with 200; `/crm`, `/workspace`, `/operations`, `/research` and `/dashboard` return 200. The agent room and projects rebuild shipped in the same release. Rollback: `docker tag reid-web:pre-web-202609290703 reid-web:local && docker compose up -d --no-deps web`.
+
+- `/operations` and `/today` render `src/work/`; `/crm` renders `src/clients/`; `/workspace` renders `src/people/`. Retired: `os-workspace.tsx`, `crm.tsx`, `crm.css`, `employee.tsx`, `employee.css` (the single `.workspace-message` rule research needs moved to `research.css`).
+- Each module has a tested model (labels in both languages, permission mirrors of `work_record_access`, the leave guard and the department-manager rule, Muscat-day grouping, the Saturday–Friday work week) and reads/writes only through `db.ts`. The People page previously subscribed to every table in `public`; it now follows its own nine tables. Stage and status values that showed as raw English are translated, and Arabic counts agree with their numbers.
+- People writes were checked against the old payloads: onboarding uses `assigned_by`, KPIs `set_by`, and company calendar events have no `user_id`.
+- Verification: 290/290 tests across 19 files, clean `tsc -b`, production build (main JS 85.5 KB gzip; route chunks 3–13 KB gzip). Preview captures of every tab in Arabic/English × light/dark × desktop/phone, and `scripts/find-overflow.mjs` reports no phone overflow on `/owner`, `/today`, `/assistant`, `/operations`, `/projects`, `/projects/:id`, `/crm`, `/workspace`, a person page, `/research`, `/dashboard`, `/admin` and `/profile`.
+- Not yet rebuilt: research, workshops, admin/accounts, agent management (`/dashboard`), WhatsApp inbox, connections, profile, sign-in/apply and the public home (all already on the new palette, fonts and shell).
+
+## 2026-09-29 agent team room and projects rebuilt (phase 3 start)
+
+- `/assistant` now renders `src/agent-team/` and `/projects` renders `src/projects/`; the old single-line `AssistantWorkspace` and the 1,100-line `projects.tsx` are removed (`projects.css` stays because `research.tsx` still imports it).
+- Agent room: the team turn is `src/agent-team/orchestration.ts` with injected dependencies and tests (one answer per agent, explicit handoffs only, at most three, failures reported while others continue, queued local runs awaited). The conversation scrolls inside its panel and opens on the latest message; majority-script direction and `<bdi>` mentions fix Arabic messages that began with an @mention.
+- Projects: every read/write goes through `db.ts`; live updates follow only the open project's tables (previously every table in `public`); stored enum values are translated; forms are stable dialogs with their own errors; activity uses gender-neutral verbal nouns.
+- UI kit gained an accessible `Dialog`, form fields and keyboard `Tabs`.
+- Verification: 274/274 tests, clean `tsc -b`, production build (main JS 85.2 KB gzip; projects chunk 13.2 KB, room chunk 8.7 KB). 64 preview captures of `/projects` and `/projects/:id` (every tab) in Arabic/English × light/dark × desktop/phone with no horizontal overflow, plus the room in all variants.
+- `scripts/deploy-web.sh` publishes only the web container from a clean commit, with build checks, a rollback tag and a public bundle check.
+
+## 2026-09-29 Production release: redesign + Reid Assistant (dry run)
+
+- At the Owner's instruction, `scripts/deploy-reid-assistant.sh` ran on the Reid host at 05:17 UTC from branch `feature/reid-2-foundation` (commit `807c2f9`). Migration `202609280002_reid_assistant_emergency.sql` is applied to `cfxntjnewkmlvkogfxyu` (3 `emergency_*` tables with RLS). `reid-web:local` is now the redesign candidate, `reid-services:local` carries `/internal/operations/status`, and `reid-assistant` runs from compose profile `assistant` with `REID_ASSISTANT_DRY_RUN=1` and telephony disabled (the dry run records simulated calls and queues no WhatsApp message). New secrets live only in `/home/reid/.config/reid-os/` (`assistant.env`, and `REID_OPS_STATUS_TOKEN` appended to `service.env` after a timestamped backup).
+- Verified live: all containers healthy; public `/healthz`, `/`, `/assistant` 200; `/api/operations/status` and `/assistant-api/v1/me` 401; unsigned `/voice/turn` 403; bundled fonts 200 and a real browser on `https://reidpro.com` loads IBM Plex Sans Arabic 400/600 and Alexandria (previously 404). WhatsApp re-linked after the API restart; the internal status endpoint reports WhatsApp healthy; the assistant's first monitor pass checked website, database, runner heartbeat, outbox, WhatsApp connection and inbound messages with no incident opened; no WhatsApp outbox item was created.
+- Rollback: `reid-services:pre-assistant-202609290517` and `reid-web:pre-assistant-202609290517` (retag as `:local`, `docker compose up -d --no-deps api web`, stop the `assistant` profile). The migration is additive and can stay.
+- Still open: no `emergency_contacts` rows, no Twilio account, dry run on; the ai-lap transcription language hint is not installed on ai-lap.
+
+## 2026-09-29 workspace redesign (phase 1 of the Reid 2.0 plan) — deployed 05:17 UTC
+
+- Design tokens v2 in `src/tokens.css`: brand/accent/neutral ramps derived from the logo, a semantic layer and legacy aliases, so every page adopts the new palette. Semantics are declared on `:root, .dark`; declaring them on `:root` alone froze them at light values under the `.dark` class. `tokens.test.ts` scans `src/**`, enforces dark ramps and checks 44 WCAG AA contrast pairs.
+- **Production font defect found:** `style.css` loaded fonts from absolute `/assets/fonts/...` URLs that Vite never emitted; Production returns 404 for them, so the site has been rendering in a fallback face. `src/fonts.css` now bundles IBM Plex Sans Arabic 300–600 and variable Alexandria with Arabic/Latin unicode ranges.
+- New shell `src/app-shell/` (sidebar, top bar, Ctrl/⌘K command menu with arrow-key navigation, phone drawer and bottom bar) replaces the two conflicting legacy shell stylesheets that clipped the desktop sidebar. Navigation IA in `src/workspace-navigation.ts`. UI kit in `src/ui/`. Owner overview rebuilt (`src/owner-overview*.ts[x]`) with correct Arabic number agreement. Bare `1fr` grid tracks became `minmax(0,1fr)`, removing phone horizontal scroll on `/today` (28 px) and `/assistant` (1299 px). Language and theme persist per browser.
+- Verification: 255/255 frontend tests, clean `tsc -b` and production build (main JS 83.9 KB gzip, +2.5 KB; CSS 20.9 KB gzip, +3.1 KB). `scripts/visual-preview.mjs` rendered `/`, `/owner`, `/today`, `/assistant`, `/projects` against a mocked Supabase in Arabic/English × light/dark × desktop/phone; `scripts/find-overflow.mjs` reports no phone overflow. Candidate `reid-web:candidate-redesign` serves the fonts with 200 `font/woff2`. `scripts/deploy-reid-assistant.sh` now promotes this candidate (override with `WEB_CANDIDATE`); it is live since 05:17 UTC.
+- Remaining legacy debt: the global `header`/`nav`/`footer` element rules in `style.css` still style every such element; they are neutralised case by case and should be removed as pages are rebuilt.
+
+## 2026-09-28 Reid Assistant (مساعد ريد) — deployed in dry run on 2026-09-29 (see above; the "not executed" notes below are the 2026-09-28 state)
+
+- At the Owner's request the J.A.R.V.I.S project (MIT, GauravSingh9356) was cloned and rebuilt as **Reid Assistant** in the sibling repository `/home/reid/reid-assistant` (upstream history kept, `LICENSE` preserved, `NOTICE.md` records what was kept and replaced). It is an Arabic-first assistant for key people (Owner/Super Admin/Admin): a desktop voice client, and a server that detects emergencies (website, database, ai-lap, WhatsApp connection/delivery, urgent customer WhatsApp messages screened by the local model), escalates by WhatsApp and **outbound phone calls**, and holds a spoken conversation on the call (acknowledge, repeat, WhatsApp details, escalate to the next person, snooze, switch language, free questions). Inbound calls require a per-person scrypt PIN.
+- Reid-web changes on branch `feature/reid-2-foundation`: migration `202609280002_reid_assistant_emergency.sql` (`emergency_contacts`, `emergency_incidents`, `emergency_notifications`, service-role-only `emergency_open_incident`/`emergency_append_transcript`; the existing `assistant_contacts` table belongs to the WhatsApp assistant and was not touched), RLS suite `rls_emergency.sql`, compose profile `assistant`, nginx `/voice/` and `/assistant-api/` routes with a lazily resolved upstream, a token-gated `GET /internal/operations/status` in reid-services (`REID_OPS_STATUS_TOKEN`, not proxied by nginx), and an optional `language` hint (`ar`/`en`) in the ai-lap `/api/transcribe` adapter.
+- Verification on 2026-09-28: reid-assistant 61/61 pytest; full RLS harness exit 0 in a network-isolated `postgres:16` container, including 27/27 emergency checks; server suite 195/195; frontend 194/194; ai-lap adapter 11/11; `nginx -t` passes without the assistant running; the hardened container (read-only, no capabilities, non-root) is healthy and returns 403 for unsigned webhooks and 401 without a Reid session. Against the live ai-lap: Gulf Arabic and English grounded answers (9.1 s cold, 0.7 s warm) and correct urgent/non-urgent screening. Robotic espeak Arabic was auto-detected as English by Whisper, which is why the language hint exists; the hint takes effect only after the adapter is installed on ai-lap.
+- Production promotion is prepared but **not executed**: the session's permission policy refused the Production migration, so nothing live changed. Candidates were built and verified instead: `reid-services:candidate-assistant` (repo `server/`, byte-identical to the running code apart from the new route; 195/195 tests inside the image as its runtime user, Arabic PDF verified), `reid-web:candidate-assistant` (the running `reid-web:local` plus the new `nginx.conf` only; site files hash-identical to Production) and `reid-assistant:local`. On an isolated Docker network the three passed: `/`, `/owner` and `/assistant` 200, `/assistant-api/v1/me` 401, unsigned `/voice/turn` 403, and with the assistant stopped the site stayed 200 while `/voice/` returned 502. `scripts/deploy-reid-assistant.sh` performs the pre-flight, migration, dry-run configuration, rollback tags, promotion and public verification in one reviewed run.
+- **Not done and must not be described as live:** the migration is not applied to Production, no image is deployed, no web/services image was rebuilt, no contacts or PINs exist, the ai-lap adapter change is not installed, and no real phone call has been placed. Real calls need an Owner-provided Twilio account, a voice-capable number with Oman geo-permission and the three `TWILIO_*` values in `/home/reid/.config/reid-os/assistant.env`. On a call, audio and the spoken alert title pass through Twilio (speech recognition `ar-OM`, voice `Polly.Hala-Neural`); desktop speech and all answers stay on ai-lap.
+
+## 2026-09-28 Reid 2.0 rebuild plan (proposed, not implemented)
+
+- `docs/REID_2_REBUILD_PLAN_20260928.md` proposes rebuilding the web app, agent runtime, design system and repository structure while keeping only the name, logo, Supabase data, accounts and governance model. It awaits Owner approval; nothing in it is implemented.
+- Its diagnosis records verified defects that remain open: agent orchestration runs in the browser (`src/os-workspace.tsx`), agents cannot call tools autonomously, gateway context reads use the service role and bypass requester RLS, memories are not semantically retrieved, agent definitions are duplicated across client, gateway and WhatsApp code, and the Production `gemini` provider row still allows `restricted` data despite the recorded free-tier `public` cap (the row is currently disabled, so the risk is latent). Measured baseline on 2026-09-28: ai-lap online; 62 succeeded, 5 failed and 1 cancelled agent runs in 30 days, all on ollama (p50 10.7 s, p95 29.3 s).
+
+## 2026-09-28 site restructure
+
+- The authenticated workspace now has one ordered navigation model shared by desktop, mobile and the command launcher. **Agent team** is the first destination after the Owner center, the desktop sidebar has bounded scrolling and a remembered collapsed state, the mobile layout has persistent primary navigation, and `Ctrl/Cmd+K` opens role-filtered quick navigation. Existing URLs, permissions and data contracts remain compatible.
+- `/owner` is the clear starting point with direct cards for the agent team, projects, tasks and CRM. `/assistant` is a durable team room with message search, sender filters, visible agent status, mention suggestions, reply context and handoff summaries. `/dashboard` remains the operational agent roster and is labelled **Agent management** to remove the former ambiguity.
+- Internal routes are loaded as independent Vite chunks while the public entry remains eager. This reduced the blank-environment main JavaScript bundle from roughly 480 KB to 256 KB (141 KB to 81 KB gzip) before route chunks. The implementation follows `docs/SITE_RESTRUCTURE_PLAN_20260928.md`.
+- Production image `sha256:6fce2076be32bd26e692f1dd0505e06441b8a1cdbb231a29f659c1c6ec879fd7` was activated at 18:03 UTC. The container is healthy; local and public health, `/owner` and `/assistant` probes return `200`; the served chunks contain the new Agent team and quick-navigation interfaces. The clean production build and all 194/194 frontend tests across 13 files passed. Rollback tag: `reid-web:pre-site-restructure-20260928` (the last retained pre-Agent-team image because Docker had already pruned the prior container image layers).
+
+## 2026-09-28 private agent team room
+
+- `/assistant` is now a durable, private **Agent team** room for Owner/Super Admin/Admin accounts. A user can assign one or several specialists with English or Arabic mentions (for example `@operations`, `@marketing @content`, `@التحليلات`, or `@الجميع`); a message without a mention goes to the CEO orchestrator. Replies show the verified agent identity, state and time and persist across sessions with Realtime updates.
+- Agents receive the last eight completed room turns and can hand a bounded task to a colleague using the explicit `[HANDOFF:@agent_id]` protocol. Only explicit handoffs run, each agent runs at most once per user turn, and automatic handoffs stop after three. This prevents accidental mentions, loops and uncontrolled quota use.
+- Migration `202609280001_agent_team_room.sql` creates the isolated room/message ledger. RLS limits every administrator to their own room, browser clients can insert only their own human messages, cross-room replies are rejected, and only the service-role gateway can attach an agent reply to a real `agent_runs` row. `llm-gateway` and `ai-lap-runner` keep queued/running/completed/failed/cancelled states and full replies synchronized. Sensitive tool actions continue through the existing approval flow.
+- Production project `cfxntjnewkmlvkogfxyu` received the migration and both Edge Functions. Web image `sha256:b7850dda26032b16022a2ec00e44b1ae3078785b919ea9d48c42911b1a5d5563` was activated at 17:09 UTC; local and public health checks return `200`, `/assistant` returns the security headers, and the live bundle contains the team room, handoff and message-ledger code. Rollback image: `reid-web:pre-agent-team-20260928`.
+- Verification: clean TypeScript/Vite production build; 189/189 frontend checks across 12 files; the full isolated PostgreSQL migration/RLS harness passed, including 11/11 agent-room isolation checks. The physical `ai-lap` remains unreachable as recorded below; eligible room work therefore uses the already governed Gemini fallback, subject to its clearance and quota.
+
+## 2026-09-28 agent operations interface simplified
+
+- At the Owner's request, the experimental Three.js desert world was removed from the Agent dashboard. The renderer, styles, benchmark, harness, dedicated unit/E2E suites, colour tokens, and `three`/`@types/three` dependencies were deleted rather than left as dormant production code.
+- `/dashboard` now presents the same live agent state, provider, approval level, queue count, tools, manual-run controls, pause/enable controls, and run history in a responsive card roster with a single selected-agent inspector. The inspector no longer creates a second internal scrollbar; it follows the page on desktop and returns to normal document flow on smaller screens.
+- The Production web image was rebuilt with the replacement Supabase build environment and activated at 16:49 UTC. `reid-web` and `reid-services` are healthy, local and public `/healthz` return `200`, `/dashboard` returns `200` with the security headers, the unauthenticated operations endpoint still returns `401`, and the deployed assets contain the new Arabic `إدارة الوكلاء` interface with no 3D-world artifact. Rollback image: `reid-web:pre-agent-roster-20260928`.
+- Verification: clean TypeScript/Vite production build; 180/180 frontend checks across 11 files; `npm ci` reported no vulnerabilities; deployed image `sha256:ab4108dbb479865dbf3d0c20ad6ec2d13b2e6e10045910c5cf88c27787429530` is healthy. No database, API, agent policy, or WhatsApp behavior changed.
+
+## 2026-09-26 replacement Supabase project — production migrated
+
+- Production switched at 18:24 UTC to Owner-selected `cfxntjnewkmlvkogfxyu`. Web, full candidate API, WhatsApp and the new relay queue worker use the new project. Original encrypted QR credentials were preserved and WhatsApp reconnected. The old source `pkogchbrknwmzefjklkr` remains intact; its management API is still inaccessible.
+- The Owner accepted new passwords after confirming source owner access was unavailable, then selected **Google and email/password** sign-in. Preserve 116 original account UUIDs/roles; no fresh-start reset. The Owner's account/role and scoped access were verified. On 2026-09-27 Google was enabled with its client ID/secret: a live authorization probe redirected to `accounts.google.com` with `email profile` scope and the exact new-project callback, and the migrated Owner already has Google and email identities. Email/password was verified with a deleted synthetic account. Microsoft/GitHub are disabled. Public signup remains disabled globally. No automatic account email or WhatsApp test message was sent.
+- Applied 54 migrations, including the source-only pending-send ledger; 79 public tables all enforce RLS. Imported 22,112 public records, 116 Auth users and 117 original identities plus one email identity. Copied and SHA-256 verified all 11 files in six private buckets, including downloads through the Owner's scoped session. Restore rehearsal, counts, foreign keys and final source/destination content comparisons passed. Finance/cloud-provider disabling is intentional and preserves historical data.
+- Source export is API recovery, not a full transactional database/Auth backup. Old web/API were stopped before final source comparison, which differed only in runner heartbeat. Password hashes, sessions, source OAuth secrets and exact Storage object owner/service metadata were unavailable. No verified MFA users were found. SMTP/invitation delivery and the final interactive Google consent/account-selection step remain unverified; do not describe every unavailable source setting as restored.
+- New `reid-agent-runner` uses the existing authenticated ai-lap relay and the new project's token. A real embedding job succeeded. Remote-adapter mode omits local hardware metrics; do not claim ai-lap CPU/RAM/GPU telemetry is available. The old physical ai-lap worker still polls the old project. Compose profile `migrated` starts the new worker.
+- Full API 192 tests, frontend 202 tests/build, SQL/RLS harness and runner quality/telemetry checks passed. Public authenticated operations status verified all components healthy and WhatsApp connected with zero pending/failed/uncertain work. Rollback images are `reid-services:pre-migration-20260926` and `reid-web:pre-migration-20260926`; reconcile post-cutover writes before any rollback.
+- On 2026-09-28 the Owner authorized a real WhatsApp status smoke test. Both status replies reached the Owner conversation with WhatsApp receipt IDs and the queues returned to zero. The test exposed that `ai-lap` at `10.162.46.208` had become unreachable while the relay worker still reported an online heartbeat. Runner v1.2.2 now authenticates to the adapter health route before every heartbeat, reports `degraded` when it is unreachable, and does not claim AI jobs until it recovers. The updated Edge Function is deployed and a second WhatsApp status response correctly reported AI unavailable and the runner needing attention. Website, database and WhatsApp remained available. Turning on or reconnecting `ai-lap` is still required to restore local inference.
+- Recovery/credentials and verification evidence stay private outside Git at `/home/reid/.local/state/reid-migration-20260926/`. See `docs/SUPABASE_MIGRATION_20260926.md` for current status and limitations. Older phase-1/pending-migration notes below are historical.
+
+## 2026-09-26 organising workspace without money, WhatsApp operations and assistant senses
+
+Branch `feature/whatsapp-site-operations-20260926`. Owner decisions on 2026-09-26: manage the website and monitor the servers from WhatsApp with every sensitive change previewed and confirmed; run Reid as an organising workspace with no money anywhere; enable every assistant capability that helps the company (research, photos, voice).
+
+No money in the product:
+
+- `/finance` and `/business` are removed from the route manifest, navigation and bundle (`finance-documents.tsx`, `business-flow.tsx` deleted); nginx redirects them to `/today` and `/crm`. The Owner brief shows people, projects, overdue tasks, approvals, applications and agent failures only.
+- CRM leads/deals, projects, research and workshops no longer collect or display value, budget, funding amount, currency or price. Database defaults keep inserts valid; historical rows are untouched for audit.
+- Migration `202609260001_organisation_without_money.sql` retires the Finance agent, disables `finance.budgets` and `projects.budget.update` and removes their assignments, and makes the executive report count deals instead of summing them. `llm-gateway` no longer places budgets, deal values, business cases or invoices in any agent context, `whatsapp-webhook` no longer routes to Finance, and the WhatsApp/website assistants no longer mention prices. The agent map now has ten agents.
+
+WhatsApp operations:
+
+- Owner/Super Admin status commands in private chat and the `Reid_Owner` group: `حالة النظام`, `حالة الموقع`, `حالة السيرفر`, `حالة واتساب`, `أوامر الإدارة` (English equivalents too). Sources are fixed in `server/operations-snapshot.mjs`; no message text becomes a URL, selector, path or command, and an unchecked component is reported as unverified. Reid host CPU/RAM/disk are read in-process from host-wide `/proc` and the Docker-backed root filesystem; ai-lap metrics come from its heartbeat. `GET /api/operations/status` is behind the Owner-only `/api` gate.
+- `أخف الورشة <name>` withdraws a workshop to draft after L2 confirmation; publish/cancel/hide require exactly one name match. Every approval re-resolves the sender's current permissions and cancels the preview if they were revoked.
+- Time and date questions are answered from the server clock in Muscat time (`server/clock.mjs`), and both the local chat prompt and the gateway context carry the current Muscat time. Previously the Owner group repeated a stale time taken from a memory record.
+- The send step strips `[Reid:collection:id]` grounding markers and rewrites Markdown into WhatsApp formatting; the markers remain for the quality gate only.
+- Fixed a Production defect: the first message from any new number threw `ReferenceError: display_name`, so it was never stored or answered (`server/inbound.mjs`).
+- Restart, deploy and backup remain unavailable from WhatsApp; they would need Docker-socket/root control behind an unofficial linked-device library.
+
+Assistant senses (merged from the undeployed 2026-09-14 branch `claude/whatsapp-bot-smart-interactive-c42ef8`): voice notes transcribed on ai-lap, photos answered by the local vision model (an authenticated administrator's photo now bypasses the text-only governed dispatcher, including in the Owner group), read receipts/reactions/typing, quoted and paced replies, intent routing into the existing handlers, semantic recall, reply-quality scoring and feedback, opt-in morning initiative, Arabic PDF/Word/Excel reports with charts, an image budget, and governed web search/read (off until a provider key is configured). The previously undocumented 2026-09-13 work (workshops, employee assistant actions, notes, contacts, artifacts, media outbox) is also on this branch and is already running in Production with migrations `202609130003`/`202609130004` applied.
+
+Verification on 2026-09-26:
+
+- Server suite 192/192 in a network-isolated container using the Production image's dependencies; `node --check server/index.mjs`.
+- `npm run check`: 202/202 Vitest checks and the Production TypeScript/Vite build (dependencies from the lockfile inside `node:22`).
+- A candidate API image (`reid-services:candidate`) built and passed `verify-pdf.mjs`. The rebuilt `reid-web:local` served `/healthz`, `/today`, `/owner`, `/crm` and `/workshops` with 200, redirected `/finance` and `/business` with relative 301s carrying the security headers, and its bundle contains none of the removed finance strings (subsequently activated in production).
+- Live ai-lap probes: the vision model identified a generated two-colour test image correctly; `/api/transcribe` answered 200.
+- A read-only Production operations snapshot reported site, database, AI, runner and WhatsApp healthy with an empty queue.
+- The full `scripts/rls-local.sh` migration/RLS harness passed in an isolated, network-disabled `postgres:16` container on 2026-09-26. The host does not need PostgreSQL binaries. Assistant learning passed 22/22, WhatsApp assistants 11/11, WhatsApp 22/22, and workshops 17/17; every suite exited successfully.
+- Production phase 1 was activated at approximately 15:18 UTC on 2026-09-26 using the already-built `reid-services:local` (`27949f413210`) and `reid-web:local` (`b73ced61ea60`) images, without rebuilding the migration-dependent API. Both containers became healthy, the preserved WhatsApp session emitted `WhatsApp linked`, the public health endpoint returned 200, the unauthenticated operations endpoint returned 401, and `/finance` and `/business` returned relative redirects to `/today` and `/crm`. A read-only live snapshot verified the database, AI adapter and runner; all pending/failed/uncertain counts were zero. No test WhatsApp message was sent.
+- The exact phase-1 image passed 61/61 tests with its branch's tests mounted read-only. The full candidate image initially failed four test files because root-owned mode-0600 modules could not be read by the runtime `node` user. `server/Dockerfile` now copies application files with `--chown=node:node`; CI additionally runs the entire suite inside the built image as its real runtime user. The rebuilt candidate passed all 192/192 server tests and the embedded Arabic PDF verification.
+
+Still open and must not be presented as complete:
+
+- Full candidate and migrations are now active on the selected replacement project; see the migration status above. The old project remains available as recovery material, not the active site backend.
+- Tavily web search was enabled on 2026-09-28 through private `service.env` values. The host Tavily CLI 0.1.8 is authenticated, all eight official Tavily Agent Skills are installed globally for Codex, a CLI search returned ten results with a request ID, and the running Reid service returned HTTPS results through its actual `createWebSearch` integration. The current Codex session loaded its skill inventory before installation, so a restart/rescan is required before the new skills appear active. The API key supplied in chat/screenshot is exposed and must be rotated in Tavily; replace both the Tavily CLI credential and `REID_WEB_SEARCH_KEY` together. The ai-lap adapter changes (decoding profiles, JSON mode) are in `infra/ai-lap/` but must be installed on ai-lap; until then those options are ignored.
+- The `gemini` provider row in Production has `max_classification = 'restricted'`, which contradicts the recorded free-tier cap of `public` above. It was observed, not changed; it needs an Owner decision.
+- Not merged through a PR yet.
+
+## 2026-09-12 governed agent quality and WhatsApp administrator memory
+
+- The Production QR service accepts group messages only from the exact database-registered `Reid_Owner` JID and only when the authenticated sender is an enabled active Owner. That immutable JID is pinned by migration `202609120004_owner_group_always_active.sql`; mutable WhatsApp display-subject normalization is no longer part of the live decision. For Ali and Sheikha, invocation requires standalone `ريد`/`ريّد`/`Reid`, an actual bot mention, or a reply to a message authored by Reid. Ordinary group conversation and every other sender/group remain silent.
+- Owner-group replies use natural Gulf/Omani Arabic, adaptive warmth and context-appropriate emoji. Mild reciprocal banter—including an insulting gesture—may appear only after clearly playful Owner context. The assistant never initiates abuse, threatens, targets protected classes, customers or employees, or uses that tone for finance, HR, crises or formal work. Private administrator chats and all customer chats retain the respectful profile.
+- The local `ai-lap` runner is version 1.2.0. Every chat answer is checked before delivery for language, grounded Reid citations, missing-evidence calibration, prompt leakage, fabricated external actions and invalid citations. A failed answer receives one automatic model revision; a second failure is stopped instead of being delivered. Embedding jobs use a separate completion contract.
+- `llm-gateway` now supplies the local queued runner with the governed Reid context and up to eight bounded recent conversation turns. Company claims require `[Reid:collection:id]` citations, context values are untrusted data, and chat cannot claim that an external action occurred.
+- QR WhatsApp administrator identity is database-managed. Ali and Sheikha are the two enabled Owner mappings. Owner/Super Admin can link enabled Owner/Super Admin/Admin accounts; each administrator can read only their own binding and cannot change it. Conversations remain in the QR/normalized message ledgers, explicit durable preferences are scoped to that administrator, and only aggregate style signals are learned per administrator.
+- Style learning records language, average message length, emoji rate, directness and tone; it does not copy raw message text into the style profile. Durable memory and style learning can be disabled independently in `/connections`. Verification codes, passwords and access-key-shaped text are excluded from memory/context handling.
+
+Verification on 2026-09-12:
+
+- `npm run check`: 209/209 application tests and the Production TypeScript/Vite build passed. The server suite passed 8/8, the isolated QR bridge passed 30/30, and the ai-lap Python quality/adapter suite passed 7/7.
+- The full throwaway PostgreSQL 16 migration/RLS harness passed, including WhatsApp 22/22, agents 48 checks, research 80 checks, business core 36/36, commercial documents 23/23 and CRM 15/15.
+- Migrations `202609120001_agent_quality_v2.sql` through `202609120004_owner_group_always_active.sql` are applied to Production. `llm-gateway`, `ai-lap-runner` and `whatsapp-webhook` were deployed; the Reid web container and both ai-lap services are healthy.
+- The live synthetic model gate passed 5/5 at 100/100 average: Arabic project evidence, English finance arithmetic, missing evidence, a read-only external-action request and context prompt injection.
+- Authenticated Production browser QA rendered every Reid OS page, both Owner WhatsApp identities and all isolated memory/style controls, found no page exceptions or mobile overflow, and cleaned its disposable Owner and finance records.
+
+Still open and must not be presented as complete:
+
+- Style learning begins with new inbound administrator messages; historical messages are preserved but are not retrospectively profiled. It learns presentation preferences, not personal identity, confidential facts or autonomous permissions.
+- QR automation uses an unofficial linked-device library and can require a fresh phone scan after a WhatsApp protocol/session change. The encrypted session was recovered from its existing identity and keys after a stale registration flag, backed up before repair, and reconnected without a new QR scan.
+
+## 2026-09-07 stability monitoring correction
+
+- Production monitoring now checks Supabase through the public GoTrue `/auth/v1/health` endpoint using only the browser-safe publishable `apikey`. The previous `/rest/v1/` root probe correctly returned `401` because this project restricts that endpoint to `service_role`; monitoring never uses or risks an administrative database credential.
+- Cloudflare's WAF challenge from GitHub-hosted runners is treated only as edge reachability. Application routes, security headers and authenticated behavior remain enforced independently by deployment and browser CI rather than being falsely reported as downtime.
+- GitHub `main` protection was reverified live: strict `test` status, one approving review, CODEOWNER review, stale-review dismissal, conversation resolution and admin enforcement are active; force-pushes and deletion are disabled.
+- The weekly encrypted restore drill remains blocked by a malformed `SUPABASE_DB_URL` GitHub secret. Replace it with the complete connection URI copied from Supabase **Connect** (do not paste the password into chat), then rerun `weekly-backup.yml` manually.
+
+## Mandatory status-update rule
+
+Every change must update this file before its PR is merged. At minimum update:
+
+1. `Last verified` date and relevant commit/deployment.
+2. `Implemented and verified` for newly working behavior.
+3. `Known defects and missing work` when anything remains incomplete.
+4. `Verification log` with the commands and real workflows tested.
+
+Never mark a feature complete because its UI exists. Complete means the UI, database/API, authorization, notifications, error handling, and tests work together in Production or Staging as stated. Do not remove an open item without evidence.
+
+## Mission and identity
+
+- Company name: `ريّد` in Arabic and `Reid` in English.
+- `COR` is a project name, not the company name.
+- Public domain: `https://reidpro.com`.
+- Staging domain: `https://staging.reidpro.com`.
+- UI: bilingual Arabic/English, RTL/LTR, purple identity, light/dark, responsive, Apple-like.
+- Repository: `https://github.com/accelerator007/Reid` (public).
+
+## Stack and environments
+
+- Client: React 19, Vite 7, TypeScript.
+- Data/auth: Supabase project `Reid`, ref `pkogchbrknwmzefjklkr`, Mumbai region.
+- Database: PostgreSQL with RLS, audit triggers, and pgvector.
+- Production hosting: the `Reid` Ubuntu host runs the web/API containers; Cloudflare Tunnel `reid-local` privately publishes them at `reidpro.com`. The old Worker is retained without the production custom-domain attachment for rollback.
+- Staging hosting: Cloudflare Pages project `reid-staging`, Git-connected to `develop`, custom domain `staging.reidpro.com`.
+- Branches: `feature/*` -> PR to `develop` -> verified PR to `main`.
+- Model providers are rows in `llm_providers`, not hard-coded hosts. `ollama` (local, `ai-lap`) is the preferred provider and ships disabled; `gemini` (external, Google Gemini API) is enabled as the temporary substitute while `ai-lap` is offline.
+- The Gemini account is on the **free tier**, confirmed by the Owner on 2026-09-04. Free-tier content may be reused to improve Google products, so the provider is capped at `public` data: only material that is already publishable may be sent. Raising the cap requires a paid tier and a recorded Owner decision.
+- Local AI: Ollama on `ai-lap`, exact model `gemma4:12b`. It is reached from Reid only through a restricted private SSH forward to the authenticated loopback adapter; neither Ollama nor the adapter is publicly exposed.
+
+## Critical paths
+
+- App entry: `src/main.tsx`.
+- Supabase browser client: `src/supabase.ts`.
+- Authorization policy helpers: `src/policy.ts`.
+- UI styling: `src/style.css`, `src/auth.css`, `src/profile.css`.
+- Agent gateway Edge Function: `supabase/functions/llm-gateway/index.ts`.
+- Agent gateway client and policy: `src/agents.ts`, `src/agent-command.tsx`.
+- Route manifest shared by the app and the Worker: `src/routes.ts`.
+- Typed data boundary and bilingual error mapping: `src/db.ts`.
+- Authenticated shell, access states and the single gate: `src/shell.tsx`.
+- Design tokens, the only file that names a colour: `src/tokens.css`.
+- Archived pre-React marketing content: `content/legacy/` (built by nothing, served by nothing).
+- Database migrations: `supabase/migrations/`.
+- Database pgTAP draft: `supabase/tests/rls.sql`.
+- Executable RLS allow/deny harness: `scripts/rls-local.sh`, `supabase/tests/local/`.
+- 3D agent world renderer, React stage and stylesheet: `src/agent-world-scene.ts`, `src/agent-world.tsx`, `src/agent-world.css`; design note in `docs/AGENT_WORLD_3D.md`.
+- Browser stage for the world, served only by the dev server and built by nothing: `tests/harness/world.html`.
+- CI: `.github/workflows/ci.yml`.
+- Backup workflow: `.github/workflows/weekly-backup.yml`.
+- Deployment documentation: `DEPLOYMENT.md`.
+- Security and permissions: `SECURITY.md`, `PERMISSIONS.md`.
+
+## Security and engineering rules
+
+- Never commit secrets, database passwords, OAuth secrets, service-role keys, tokens, CVs, HR files, or production exports.
+- Browser code may contain only the Supabase publishable key. Never expose the service-role key.
+- Enable and test RLS before exposing a table to the client.
+- HR files/CVs are limited to authorized humans and the HR agent. CV scoring must be explainable.
+- Never expose Ollama or port `11434` directly to the internet.
+- Model provider credentials are Edge Function secrets only. Never place a provider key in a `VITE_*` variable, because those are compiled into the public browser bundle, and never commit one to this public repository.
+- An external model provider may only receive data at or below its `max_classification`. HR, CV, finance, and CRM data are `confidential` or `restricted` and must never leave company control while only an external provider is enabled.
+- Approval levels: L0 read/analyze; L1 drafts/tasks; L2 configurable approval for external publish/email; L3 human approval for hiring/contracts/finance; L4 Owner approval and future MFA for payments/critical deletion.
+- The first Admin/HR decision must atomically finalize an application. Rejection reasons remain internal. Approval sends a Magic Link.
+- Work on `feature/*`. Run checks before PR. Do not push directly to `main`.
+- Preserve the public website identity and bilingual behavior. Do not rename the company to COR.
+- When changing schema, add a migration; do not edit an already-applied migration.
+- Read Supabase through `src/db.ts`. Never write `(result.data || [])`: it discards the error object, so an expired session, a network drop and an empty table all render as the same blank panel.
+- Never write a colour literal or a raw `border-radius` value in a component stylesheet. Use a token from `src/tokens.css`; `tokens.test.ts` fails the build otherwise, and every token needs a dark counterpart unless it is a named exemption.
+- Read the session through `useSession()`. Roles, suspension and profile completion are resolved once by `src/shell.tsx`; a component that re-reads `user_roles` for the current user is a bug.
+- Guard a page with `<Guarded>`, and declare who may open it in the route's `allow` list. Never hand-roll a gate: `routes.contract.test.ts` and `shell.test.ts` require every authenticated route to declare its roles, and prove the navigation never offers what the gate would refuse.
+- Add a route only in `src/routes.ts`. Both `src/main.tsx` and `src/worker.ts` derive from it, and `src/routes.contract.test.ts` fails if a path the app renders is not served by the edge.
+- Use accessible labels, keyboard behavior, loading/error states, and mobile QA for every new UI workflow.
+
+## Roles and intended permissions
+
+Users may have multiple roles: Owner, Super Admin, Admin, HR, Sales, Employee, Project Member, Research Member, Guest/External Collaborator.
+
+- Owner: strategic authority and L4 approvals.
+- Super Admin/Admin: administration and scoped approvals.
+- HR: applications, employees, onboarding, HR-only documents.
+- Sales: CRM access and sales agent workflows.
+- Employee: own profile, assigned work, documents, timesheets.
+- Project/Research members: only assigned project/research scope.
+- Guest/external collaborators: only explicitly shared resources.
+
+The intended matrix exists in policy/schema form only. End-to-end enforcement is not yet complete.
+
+## Agents
+
+V1 agents: CEO/Orchestrator, Operations, Marketing, Content/Social, Sales/CRM, Analytics, Knowledge, HR, Finance, Customer Support, Competitor Intelligence. Each resolves its model from its provider row rather than a hard-coded name, but they require different prompts, tools, permissions, and memories. Memory scopes are User, Project, Department, Company, and Agent.
+
+The Agent Map is no longer a visual mock. `supabase/functions/llm-gateway` is the private gateway: it verifies the session, applies `agents_admin_read` RLS, enforces approval levels L0-L4, refuses any run whose data classification exceeds the provider's clearance, rate-limits per caller, and records every attempt in `agent_runs` with latency, token usage, and errors. Prompts are stored only as a SHA-256 hash; answers are kept as a 280-character preview.
+
+Agents carry a data classification, and only those at or below the enabled provider's ceiling start enabled:
+
+| Classification | Agents | Status on the free-tier Gemini row |
+| --- | --- | --- |
+| `public` | Marketing, Content/Social, Competitor Intelligence | enabled |
+| `internal` | Operations, Analytics, Knowledge, Support, CEO/Orchestrator | disabled |
+| `confidential` | Sales/CRM | disabled |
+| `restricted` | HR, Finance | disabled |
+
+Only the three `public` agents run today. The `internal` five unlock by moving the Gemini account to a paid tier and raising `max_classification` to `internal`; the `confidential` and `restricted` agents unlock only on the local `ollama` provider. Enablement is derived from `provider_accepts`, and the `agent_runs_clearance` trigger enforces it in the database rather than in the gateway alone.
+
+## Implemented and verified
+
+Last verified: 2026-09-26, Asia/Muscat (phase-1 Production deployment, candidate server suite and isolated migration/RLS harness; see the 2026-09-26 section).
+
+### 2026-09-11 Owner operating brief
+
+- `/owner` is the Owner/Super Admin-only bilingual operating brief. It brings together active company accounts, projects and business cases; 30-day invoicing/collection; outstanding and overdue receivables; pending approvals/applications; overdue tasks; stalled cases; agent failures; six-month OMR collection history; stage distribution; and the eight receivables/projects needing attention.
+- The page links each signal back to Finance, Business Flow, Projects, Administration or the Agent Command center. It explicitly labels financial aggregates as OMR-only rather than silently combining currencies, and it does not invent margin, profit, tax liability or bank-balance metrics that the current subledger cannot support.
+- Migration `202609110011_owner_company_snapshot.sql` is applied and recorded in Production. The fixed, zero-argument `SECURITY DEFINER` function rejects Admin, Employee and unauthenticated callers before querying, uses an empty search path and fully qualified relations, returns bounded lists, and performs no mutation.
+
+Verification on 2026-09-11:
+
+- `npm run check`: 202/202 Vitest route, authorization, design-token and application checks passed with the Production build.
+- `npm run test:e2e`: all 19 runnable Chromium workflows passed, including anonymous rejection at `/owner`; six credential-gated live role workflows were correctly skipped locally.
+- The isolated PostgreSQL 16 harness passed commercial/Owner checks 23/23, business lifecycle 36/36, CRM 15/15 and WhatsApp 14/14. It proves the Owner snapshot succeeds for Owner and is rejected for Admin and Employee.
+- Supabase schema lint returned zero errors before the single migration was applied. Production browser QA rendered the live Owner brief and every Reid OS page with a disposable Owner, then exercised commercial documents and cleaned all fixtures. The 390px Owner/Finance/Business/Today views had no JavaScript exception or document overflow. Live `npm run qa:business` also verified the Owner snapshot, rejected Admin, completed the governed commercial lifecycle and cleaned all temporary identities with 84 audit receipts.
+- Production `reid-web` rebuilt healthy on Reid; the Cloudflare tunnel continued to serve the local origin.
+
+Still open and must not be presented as complete:
+
+- The Owner brief is an operational snapshot, not audited financial statements. Profit, cash-at-bank, double-entry ledgers, tax liability, forecasts and budget variance require accounting-grade source data before they may be shown.
+- Thresholds are currently fixed (14-day stalled case and normal due-date semantics). Owner-configurable targets, monthly board packs and scheduled exception alerts remain future increments.
+
+### 2026-09-11 commercial documents and project kickoff
+
+- Finance now has a bilingual commercial-document workspace rather than a single amount field. Owner/Super Admin can create and edit drafts with up to 100 validated line items, quantity, unit price, discount, document-level tax rate, due/validity dates, terms and supported currency. PostgreSQL—not the browser—calculates subtotal, tax and final amount.
+- Business Flow collects the quote lines when Sales moves an opportunity to Quoted. Contract approval freezes that quote, invoice issuance copies its exact approved economics, and starting delivery creates a bilingual kickoff milestone plus an assigned planning task. The estimate on the CRM deal/business case is updated to the database-calculated quote total.
+- Issuing a quote, invoice or expense stores an immutable private snapshot of Reid, the customer/supplier, line items, totals, dates and terms. Later edits to the Owner-only company identity cannot rewrite history. The Finance preview uses that frozen copy and provides a clean A4 browser print / Save as PDF path in Arabic or English.
+- Reid's legal, contact and payment identity is editable only by Owner/Super Admin. Its general audit receipt deliberately stores no CR, VAT, IBAN or bank values. Sales, Admin, employees and guests cannot read the table; Sales can still issue a case-bound quote through the narrow governed function without gaining finance-ledger access.
+- Migrations `202609110009_commercial_documents.sql` and `202609110010_finance_calculator_permission.sql` are applied and recorded in Production. The second grants only the immutable JSON arithmetic helper needed by hosted Supabase's authenticated trigger execution; the helper reads no table or company data.
+
+Verification on 2026-09-11:
+
+- `npm run check`: 200/200 Vitest checks and the TypeScript/Vite Production build passed; `git diff --check` passed.
+- `npm run test:e2e`: all 18 runnable Chromium workflows passed; six credential-gated live role workflows were correctly skipped locally. Application, Reid service and QR bridge dependency audits report zero known vulnerabilities at their enforced thresholds.
+- The isolated PostgreSQL 16 harness applied every migration and passed commercial documents 20/20, business lifecycle 36/36, CRM 15/15, and WhatsApp 14/14.
+- Live `npm run qa:business` used disposable Sales, Admin and Owner identities to issue a two-line discounted/taxed quote, reject issued-line tampering, approve the contract, seed delivery, copy the quote into an invoice, collect/reverse/recollect/close it, cancel a separate flow, and pay a company expense. It produced 84 audit receipts and its mandatory cleanup completed.
+- Production browser QA rendered Today, Business, Finance, Operations, Assistant, Admin, Connections and Inbox, loaded the real QR, created/previewed/issued a detailed invoice, issued/paid an expense, and cleaned its disposable Owner and documents. Desktop and 390px finance/business/workspace views had no JavaScript exception or document overflow.
+- `https://reidpro.com/finance` returned HTTP 200 with `X-Reid-Origin: local-reid`; `reid-web`, `reid-services`, `reid-ai-relay`, and `reid-tunnel` were running, with both health-checked containers healthy.
+
+Still open and must not be presented as complete:
+
+- Browser printing can save a compliant-looking PDF, but Reid does not yet cryptographically sign documents, email/share them to a customer portal, generate Oman Tax Authority e-invoice payloads, or file a VAT return.
+- Finance remains a governed commercial/collection subledger, not double-entry accounting, bank reconciliation, payment gateway, payroll, or a tax-return engine.
+- Mandatory MFA for L4 payment and ownership actions remains a release gate before any real electronic payment execution is enabled. Current collection records an external receipt; it never moves money.
+
+### 2026-09-11 unified business lifecycle
+
+- `/business` is the bilingual operating spine for the company: a CRM deal becomes one durable business case that moves through Opportunity, Quote, Contract, Delivery, Invoice, Collection and Close. The database creates and links the quote, contract work record, private delivery project and invoice atomically instead of relying on operators to reconcile separate modules.
+- The employee workspace header now falls back to authenticated session identity while the company directory hydrates. A cold multi-query load can no longer leave the signed-in employee's own name blank or make the authenticated browser journey flaky.
+- Responsibility is enforced in PostgreSQL as well as the interface. Sales can open a case and issue its quote; Owner, Super Admin or Admin approval is required for contract and delivery; only Owner or Super Admin may issue the invoice, record a payment or reverse a payment. Stage skipping is rejected and every transition requires a written reason.
+- Customer payments now use an Owner-only ledger with partial collection, exact remaining balance, full-payment collection, and governed reversal. A browser update cannot mark an invoice paid directly. Reversal requires a reason and reopens both the invoice and business case. The Finance page reports `paid_amount` and sends collection work to Business Flow rather than offering a manual paid state.
+- Cancellation is a governed operation rather than a cosmetic state. It requires management approval, becomes Owner-only after invoicing, refuses to proceed while posted payments remain, voids an unpaid invoice, archives the delivery project, and stores the reason. Early opportunity/quote cancellation also marks the CRM deal lost with that reason.
+- Migrations `202609110003_business_core.sql` through `202609110008_expense_payment_transition.sql` are applied and recorded. `004` and `005` fix pre-existing project deletion blockers: activity-feed children no longer write after their parent disappears, and financial documents retain history while their deleted project link becomes null. `007` closes the legacy stage-RPC cancellation bypass so all cancellation side effects are mandatory. `008` preserves the separate Owner-audited paid transition for company expenses without weakening the customer-invoice ledger.
+- `npm run qa:business` runs live, disposable completion and cancellation paths across Sales → Admin → Owner. It covers quote, contract, project, invoice, partial payment, full payment, reversal, recollection, closure, permission refusal, invoice voiding and project archival. Cleanup is mandatory and verified; the last run left zero QA identities, projects or business cases.
+
+Verification on 2026-09-11:
+
+- `npm run check`: 197/197 Vitest checks and the TypeScript/Vite Production build passed. Vitest was upgraded to 5.0.0 to remove the remaining moderate development-only advisory; the application, Reid service and QR bridge audits now report zero known vulnerabilities at their tested thresholds.
+- `npm run test:e2e`: all 18 runnable Chromium workflows passed; six credential-gated live role workflows were correctly skipped locally.
+- The isolated PostgreSQL 16 harness applied every migration and passed 36/36 business lifecycle/RLS assertions, plus the existing CRM and WhatsApp suites.
+- Live Supabase QA completed closure, cancellation and company-expense payment paths and produced 75 audit receipts. Direct invoice-paid mutation, Sales contract approval, Admin invoice issuance/cancellation, cancellation with a posted payment, legacy-RPC cancellation bypass, and reasonless reversal were all rejected at their database boundaries.
+- Authenticated desktop and 390px browser QA rendered Business Flow and all Reid OS pages against Production data, created/cleaned a finance draft, loaded the live QR connection, found no page exception, and found no document-level mobile overflow.
+
+Still open and must not be presented as complete:
+
+- Finance is now a controlled commercial and collection subledger with line items and browser print/PDF output, but not yet a double-entry accounting system, bank feed, payment gateway, VAT return engine, tax-authority e-invoice generator, e-signature service, or customer delivery portal.
+- Mandatory MFA for L4 payment and ownership actions remains a release gate before real electronic payment execution can be enabled. Current recording documents an external receipt; it never moves money.
+
+### 2026-09-11 Owner governance and organized company navigation
+
+- `/admin` is now a bilingual Owner/Admin control center and is part of the guarded route manifest. Owner and Super Admin can manage accounts; Admin has an explicit read/review mode. The page combines active-account health, pending governed-agent approvals, the permission map, and the latest 200 audit changes.
+- Account inspection shows roles and lifecycle state side by side. Every role or status mutation requires a written reason. The active caller cannot modify their own roles or status, Owner accounts cannot be suspended or stripped through this workflow, and only an Owner can grant/change Super Admin access. Ownership transfer is intentionally reserved for a future MFA-backed flow.
+- Reid OS navigation is grouped into Overview, Company Operations, Intelligence, and Administration in both Arabic and English. Retired automated QA identities are quarantined, stripped of roles, and excluded from the company-account and audit views; archived real accounts remain available through an explicit filter.
+- Ali (`alialajmi524@gmail.com`) and Sheikha (`sheikhaalmamari4@gmail.com`) are the two configured Owner identities. Both profiles are active and have the Owner role. Sheikha was sent the official Supabase invitation to `https://reidpro.com/admin`; accepting that email remains a human step.
+- Migration `202609110002_owner_governance.sql` is applied and recorded. It corrects future bootstrap behavior so both designated emails receive Owner (the old rule gave Sheikha Admin), backfills any existing profile, and retires the known synthetic QA patterns.
+
+Verification on 2026-09-11:
+
+- `npm run check`: 192/192 Vitest checks and the TypeScript/Vite Production build passed after merging current `develop`.
+- `npm run test:e2e`: all 17 runnable Chromium workflows passed (11 public/access routes and six 3D-agent-world workflows); six credential-gated live role workflows were correctly skipped locally.
+- `npm test --prefix server`: 7/7 Reid QR service tests passed. `npm test --prefix infra/whatsapp-bridge`: 30/30 isolated bridge, policy, reminder, and generated-artifact tests passed.
+- `npm run qa:admin`: the deployed `manage-account` function granted and removed a role, suspended and reactivated a disposable user, and stored the real Owner actor in the explicit audit receipt. All disposable identities and receipts were cleaned afterward.
+- Authenticated local-browser QA loaded the real Supabase data, rendered the administration page after account hydration, exercised all new Reid OS routes, created/cleaned a finance document, generated a live WhatsApp QR image, found no page exceptions, and found no mobile horizontal overflow.
+
+Still open and must not be presented as complete:
+
+- Sheikha must accept the invitation email before her first interactive sign-in is complete.
+- Secure ownership transfer/recovery and mandatory MFA for L4 actions are not implemented. The current workflow deliberately refuses Owner-role changes instead of providing an unsafe shortcut.
+- Ninety-six legacy synthetic identities still exist as disabled audit history because hard deletion is blocked by their historical foreign-key receipts. They have no roles, cannot pass the active-account gate, and are hidden from the company account/audit views. Deleting that history requires a dedicated retention migration rather than a blind cascade.
+
+### 2026-09-11 Reid local rebuild foundation
+
+- Active implementation branch is `feature/reid-os-qr`. The production site and authenticated workspace have been rebuilt with a modern, practical bilingual interface while preserving the Reid name and logo. New focused pages cover Today, Operations, Finance, Assistant, QR Connections and the QR Inbox; existing Employee, Projects, Research, CRM and governed Agent Command remain available under the same session/route gate.
+- Supabase remains the system of record. Migration `202609110001_reid_os_qr.sql` is applied and recorded in remote migration history. It adds Owner-only QR message/job/outbox storage, scoped operational records and Owner/Super Admin finance documents with RLS, transition guards and audit receipts.
+- Reid hosts the QR linked-device service. Session credentials and Signal keys are encrypted at rest in a persistent SQLite volume with a separate 32-byte key outside Git; outbound messages use a durable idempotent outbox, and ambiguous delivery is never retried automatically.
+- Cloud API transport is disabled through `REID_WHATSAPP_TRANSPORT=qr` in both Reid and Supabase. The legacy inbox/history is preserved read-only. The webhook accepts internal QR dispatch only with a private bridge credential and explicit Owner phone-to-email mapping; ordinary customer conversations use a separate fixed public assistant with no company data or tools.
+- Personal reminders now move through the QR outbox and become `sent` only after actual WhatsApp delivery is confirmed. Reminders over 30 minutes late become failed/review-required instead of surprising the recipient after downtime.
+- The public website assistant now uses `ai-lap` through the private Reid relay with a fixed public-only prompt and global/per-IP throttles. Authenticated assistant result polling returns the caller's full stored result rather than only the 280-character dashboard preview.
+- `REID_LOCAL_AI_ONLY=1` disables stale-heartbeat and failed-run fallback to Gemini. An unavailable ai-lap now fails visibly rather than sending Reid prompts to an external model.
+
+Verification on 2026-09-11:
+
+- `npm run check`: 164/164 Vitest checks and the TypeScript/Vite Production build passed.
+- `npm test --prefix server`: 7/7 service tests passed, including encrypted session restart, wrong-key rejection, direct-message filtering, human handoff, expiry, no ambiguous resend, phone-number identity and stale-reminder behavior.
+- `npm run test:e2e`: 10/10 public Chromium workflows passed; six credential-gated live role workflows were correctly skipped locally.
+- `npm audit --prefix server --omit=dev --audit-level=high`: 0 vulnerabilities.
+- Live Supabase RLS workflow passed and rolled back its synthetic users/records. All five updated Edge Functions deployed; an unsigned legacy webhook request returned `{transport:"qr",ignored:true}`, proving it cannot activate Cloud API delivery.
+- A real Reid-to-ai-lap request returned the exact sentinel on `gemma4:12b`; the adapter health confirmed both chat and embedding models.
+- Authenticated Playwright QA rendered Today, Finance, Operations, Assistant, Connections and Inbox, created/cleaned an actual finance row, generated a real QR image, and found no page exceptions or mobile horizontal overflow.
+
+Still open and must not be presented as complete:
+
+- The Reid phone has not yet scanned the current QR, so real inbound/outbound WhatsApp and reminder acceptance cannot be claimed. Media, voice notes, historical sync and groups are intentionally absent from this text-first release.
+- Finance is a controlled document/collection register, not an accounting ledger, bank integration, tax engine or payment rail. Existing Employee, Project, CRM and Research workflows were preserved, not comprehensively redesigned in this increment.
+- QR linked-device automation uses an unofficial library. It may require relinking after a WhatsApp protocol/session change and must be monitored accordingly.
+
+- The hosting foundation began on `feature/local-rebuild` and continued on `feature/reid-os-qr`; the local origin and tunnel have now passed cutover verification.
+- Added a reproducible Docker build for the React application, an unprivileged local-only origin on `127.0.0.1:8080`, an Nginx SPA fallback, a dedicated `/healthz` probe, immutable asset caching, baseline response headers, and automatic container restart.
+- Per the Owner's 2026-09-11 decision, database, Auth, Storage, Realtime, and Edge Functions remain on the existing Supabase project. "Local hosting" means the web origin runs on Reid; it does not mean moving Supabase data to the host.
+
+Verification log:
+
+- Pending: `npm run check` on `feature/local-rebuild`.
+- Pending: `docker compose build` and `/healthz` on the Reid host.
+- Cloudflare Tunnel `reid-local` was created for the Reid host. Its credential is stored outside the repository; `local.reidpro.com` is the pre-cutover verification hostname.
+- Local Supabase startup was cancelled before any containers or database volumes were created. No production data or Supabase configuration was changed.
+- `local.reidpro.com` passed external HTTPS, all declared application routes, tunnel redundancy, production Supabase configuration, and a live PostgREST request on 2026-09-11.
+- The Nginx origin emits `X-Reid-Origin: local-reid` so post-cutover probes can prove traffic reached Reid instead of the previous Cloudflare Worker.
+- Production cutover completed on 2026-09-11: the old Worker custom-domain attachment was removed and `reidpro.com` plus `www.reidpro.com` were routed to `reid-local`. The Worker itself was retained for rollback; only its production-domain attachment changed.
+- Post-cutover verification passed for `/`, `/login`, `/privacy`, `/dashboard`, `/workspace`, `/projects`, `/research`, and `/crm`; every response returned HTTP 200 with `X-Reid-Origin: local-reid`. The web and tunnel containers are healthy, use `restart: unless-stopped`, and Docker is enabled at boot.
+### 2026-09-09 the outpost was modelled rather than assembled
+
+- The robots are built, not implied. Each is 1.85 m of painted shell over dark machined limbs, with a jointed neck, shoulders, elbows, hips and knees, standing at a 0.74 m desk with a chair, a monitor, a keyboard and a mug. The whole world is modelled in metres, which is most of what separates a scene that looks built from one that looks assembled from primitives.
+- Materials are materials: matte painted shell, machined joints at high metalness, polished trim, rubber, glass. A sky-derived environment map is baked with `PMREMGenerator` and rebaked when the theme flips, so metal reflects the sand and the sky instead of being a flat grey shape. That single change is the largest step in the whole rework.
+- The desert has grain. A procedural sand texture — wind ripples plus speckle, drawn in a canvas rather than downloaded — drives the ground's relief, the dunes are smooth-shaded, boulders are deformed icosahedra sunk into the sand, and two worn service tracks follow the rings the stations sit on. The paved apron that used to cover the campus is gone; the pads stand on stone.
+- State is animation, not a snapshot. Every joint eases toward a named pose — `idle`, `typing`, `raised`, `slumped`, `crossed`, `shaken` — so a state change is a movement. On top of that sit breathing, a slow weight shift, blinking, hands taking turns at the keyboard, and a head that tracks the camera and glances up from the desk while working.
+- The monitor faces its robot, as monitors do, so the reader gets a holographic readout angled their way with bars that rise and fall with real activity. The selection beam fades by viewing angle, because a cylinder with flat alpha reads as a translucent box.
+- Colour was reworked around the light: the daylight sky is a narrow warm band under blue rather than a blue-orange mix that greys out halfway up, exposure came down to 0.82, and the sky opts out of tone mapping because ACES was desaturating it to the same pale grey whatever the tokens said.
+- Cost was measured, not assumed. Baking each workstation's furniture into two draw calls kept the scene at 292 draw calls — fewer than the simpler version it replaced — while triangles rose to 90k. Profiling then cut rounded-corner tessellation in half and removed twelve redundant bump-mapped material variants, which tripled the software frame rate for no visible difference. Adaptive degradation gained a third step: pixel ratio and sand, then shadows, then environment reflections and ground relief.
+
+### 2026-09-08 the agent map became a place
+
+- The Agent Command Map now offers two views of the same live data. The classic node diagram is unchanged and still there; the default is a 3D desert outpost where each of the eleven governed agents is a robot at its own workstation. Selecting a robot selects the same agent in the same inspector, so every run, tool, approval, pause and disable control is untouched.
+- Operational state is behaviour, not a legend: `working` leans into the desk and types while data packets travel the link toward the CEO, `approval` raises an arm under a rotating amber beacon, `paused` sinks with dimmed eyes, `blocked` closes a red containment dome over the robot, and `error` shakes under a flashing beacon. `operationalState()` in `src/agents.ts` remains the only source of that truth; `stateVisual()` only decides how it looks.
+- The campus layout is derived from `agentTopology` alone — the orchestrator on a central platform, its six reports on a ring, the four specialists on the ring beyond beside their parent — so adding an agent moves nobody by hand. Workstation pads are tinted by operating domain.
+- The renderer names no colour. `readWorldPalette()` lifts the `--world-*` tokens out of the cascade, so the outpost is midday sand in the light theme and moonlit sand in the dark one, and `tokens.css` is still the only file in the product that names a colour.
+- three.js never reaches the first paint: `agent-command.tsx` mounts the world through `React.lazy`, so it lands in its own 566 kB (149 kB gzip) chunk that only an administrator opening the dashboard downloads. The application bundle is unchanged at 336 kB (101 kB gzip). The Vite chunk-size warning names that lazy chunk and is expected; the limit is deliberately not raised, because doing so would also hide growth in the application bundle.
+- The world refuses to be a requirement. It falls back to the classic diagram when WebGL is unavailable or a context is refused, the diagram is the default for a reader who asked for reduced motion, and either choice persists in `localStorage`. Under reduced motion the world still renders — on demand, with no frame loop.
+- Frames are only spent when they are worth spending: rendering stops when the tab is hidden or the map scrolls out of view, the device pixel ratio is capped, quality is chosen from device hints, the shadow map refreshes at 4 Hz instead of per frame, and every geometry, material and texture is disposed on unmount. When measured frame time stays below 24 fps for 2.5 s the world steps its own detail down — first pixel ratio and drifting sand, then shadows — because a device-hint guess is not a measurement.
+- The canvas is `aria-hidden`. Each robot carries a real focusable HTML nameplate positioned by projecting its world coordinate every frame, and focus moves the camera, so the map is fully operable from the keyboard and legible to a screen reader.
+
+### 2026-09-07 isolated WhatsApp QR bridge
+
+- Work is active on `feature/whatsapp-qr-bridge`. The bridge is deliberately a separate Node 20 service for a secondary WhatsApp number; Reid's official Cloud API number must never be paired with it.
+- The service uses patched Baileys `6.7.24`; `6.7.18` was rejected before deployment after `npm audit` exposed the critical message-spoofing advisory `GHSA-qvv5-jq5g-4cgg`. Authentication stays only on `ai-lap` with mode `0700`; senders are restricted to Ali/Sheikha, groups by exact JID, and group replies require Reid to be named, mentioned, or replied to. Each Owner/group history is isolated and capped at twelve turns.
+- Conversation generation uses the existing loopback-only Reid Ollama adapter and `gemma4:12b`; no Ollama port is exposed. The service refuses startup without an Owner list, group allow-list, adapter URL, and origin credential.
+- Baileys `6.7.24` removed the deprecated automatic terminal QR renderer. Pairing listens to `connection.update.qr` and renders that ephemeral value locally through `qrcode-terminal`; it is never logged to GitHub, Supabase, or application storage.
+- The first real phone scan failed with WhatsApp stream code `515`. Runtime inspection showed Baileys' release helper at protocol `2.3000.1043857760` while the authoritative WhatsApp Web helper returned `2.3000.1046945112`. The bridge now uses `fetchLatestWaWebVersion` and automatically reconnects on `restartRequired` instead of treating the normal post-pair restart as failure.
+- This unofficial bridge may be blocked by Meta and therefore cannot replace Cloud API for customer conversations. Installation, one-time human QR scan with a second number, exact group allow-list discovery, service activation, and a live group send/receive test remain release gates.
+- At the Owner's explicit request, Meta deletion was completed for the former Cloud API number `+968 9730 8003`. WhatsApp Manager now authoritatively shows “Reid hasn't added any phone numbers yet.” Cloud API delivery for that number is intentionally offline; its old credentials remain unusable operational history and must not be treated as a live transport.
+- QR pairing subsequently completed on `ai-lap` after the protocol-version correction. The authentication store contains the expected multi-device state, exactly one Owner-supplied group JID is allow-listed, the user service is enabled for login lingering/background operation, and `reid_whatsapp_bridge_ready` is present in the journal. A real addressed message and response in that group remains the final acceptance test.
+
+### 2026-09-07 Stability foundation
+
+- Work is active on `chore/stability-foundation`. Synced `main` into the release history to remove the Production divergence that conflicted with PR `#117` while preserving the verified WhatsApp browser-send repair.
+- Standardized browser-call preflight headers across account management, application decisions, the agent gateway, the public assistant and the Owner WhatsApp inbox. The UI now translates transport/service failures into safe Arabic or English guidance while retaining technical detail only in the console.
+- Upgraded the scheduled database backup to require encrypted output, restore every dump into an isolated PostgreSQL 16 service before upload, retain only AES-256 encrypted artifacts, and fail when credentials or artifacts are missing. Uptime failures now open or update one GitHub incident, allowing repository notification rules to alert the Owners without adding another external monitoring secret.
+- Generated and stored a dedicated backup-encryption credential directly in GitHub Actions secrets without printing it. Local verification passes 155/155 application tests, the Production TypeScript/Vite build, diff validation, and the complete Production/Staging routing, security-header, asset and Supabase uptime probe.
+- Deployed the stabilized browser contracts for `manage-account`, `decide-application`, `llm-gateway`, and `public-assistant` to the linked Supabase project. No secret values are recorded in Git or this file.
+- The backup workflow permits explicit manual restore drills from a reviewed branch while scheduled backups remain bound to `main`; this allows recovery failures to be caught before Production release.
+- The first remote uptime drill correctly opened incident `#120`, but Cloudflare returned 403 only to GitHub's generic curl identity while the same Production probe passed locally. The probe now uses a stable, explicitly identified browser-compatible Reid monitoring user agent; the incident remains open until the remote rerun passes.
+- Cloudflare continues to deliberately challenge GitHub-hosted runner IPs even with the identified probe. Remote monitoring therefore treats that specific 403 as proof that DNS/TLS/Cloudflare edge routing is reachable, continues to test Supabase directly, and relies on the Cloudflare deployment check plus a direct regional probe for application routes and headers. Other statuses still fail and open/update the incident.
+- The next drill passed the Cloudflare reachability stage and exposed that Supabase's current publishable-key gateway requires the key in both `apikey` and bearer authorization for the REST health request. The monitor now uses the same public authentication shape as the application; no service-role credential is used.
+- The encrypted restore drill reached the live dump step and rejected the existing malformed `SUPABASE_DB_URL` before reading data. Replace that GitHub secret with the complete URI copied from Supabase **Connect** (which safely encodes special password characters), then rerun the weekly-backup workflow; never paste the database password into chat or documentation.
+
+### 2026-09-07 WhatsApp Owner inbox browser-send repair
+
+- Fixed the production Owner inbox preflight contract: `whatsapp-inbox` now explicitly permits authenticated browser `POST` requests and the Supabase client information header, so the dashboard can reach the Edge Function instead of failing at the browser boundary.
+- Added a regression contract test for the required CORS methods/headers. Deployed Edge Function version 5 and verified its live preflight from `https://reidpro.com` returns HTTP 200 with `POST, OPTIONS` allowed.
+- Real production Owner-inbox test passed: `اختبار إرسال من لوحة ريّد ✅` was sent to Ali through Meta and the live Reid timeline recorded it as `delivered` at 2026-09-07 13:02 Asia/Muscat.
+
+### 2026-09-07 Owner system command center
+
+- The Owner Dashboard command map now begins with a live system overview sourced from the real database: active projects, open tasks, employees, pending approvals, active queue, and 24-hour agent failures. It subscribes to Realtime changes for agents, runs, and the `ai-lap` heartbeat, with a five-second reconciliation poll as a resilience fallback.
+- `ai-lap` runner telemetry version 1.1.1 publishes every five seconds and reports heartbeat age, round-trip ping, CPU load, used/total RAM, GPU utilization, and used/total VRAM. Realtime pushes each database change immediately; the five-second interval is the bounded hardware sampling rate, not a page refresh delay. The Owner-only RLS row contains operational measurements only—never secrets, prompts, or document data. The command map retains per-agent live state, queue, tools, permissions, memory scopes, provider/model, latency, token usage, errors, controls, approvals, and retry.
+- Telemetry uses one `agent_runner_status` row keyed by `ai-lap`; each heartbeat overwrites that row rather than appending samples, so continuous monitoring cannot fill the database. The browser contract explicitly requires the Owner view to show the command-center heading, `gemma4:12b`, an online state, and all five telemetry gauges.
+
+### 2026-09-07 live multi-agent action matrix
+
+- The dedicated authenticated live workflow now exercises the real tool families for Operations, Sales, HR, Finance, Content, and Knowledge against isolated synthetic project/CRM/employee records. It covers eight read tools; L1 task, CRM follow-up, onboarding, and content-draft creation; L2 content-publish rejection; and L3 budget-change rejection with an unchanged-budget assertion. Test records and runs are deleted in `finally` cleanup.
+- GitHub Actions run `34064860674` executed that complete matrix against the live linked Supabase project and live `ai-lap`/Ollama provider on 2026-09-07. It passed in 2m04s, including the authenticated Owner browser journey and automatic cleanup. The earlier baseline run `34063981492` also passed Operations generation on the required `ollama` provider plus project-read and content-draft tool receipts.
+
+### 2026-09-07 WhatsApp Intelligence V2
+
+- PR `#108` merged to `develop`; migration `202609070001_personal_reminders_memory_v2.sql` was applied to the linked Reid Supabase project and `reminder-dispatch`, `whatsapp-webhook`, and `llm-gateway` were deployed. Owner reminders now have an audited/RLS-protected lifecycle, separate phone/user ownership, Muscat-time parsing, cancellation/listing, bounded retries, and an authenticated minute scheduler. The shared scheduler secret exists only in Supabase and Cloudflare.
+- Explicit personal-memory controls now support durable `preference` memories and expiring seven-day conversational context per Owner: `احفظ`, `وش تتذكر عني؟`, and `انسَ`. Ali and Sheikha remain isolated by their profile UUID, never merely by display name.
+- The next action-planner increment recognizes overdue-project queries and returns live project records/links, and recognizes task-creation commands, resolves the named project, asks one focused question when ambiguous, then executes the audited `tasks.create` L1 tool and returns the project link. WhatsApp uses buttons for two/three choices and a list for four to ten choices.
+- Verification: 150 Vitest checks, TypeScript/Vite production build, and linked-database lint pass. Production PR `#101` was repaired by syncing `main` history through PR `#109`; it is mergeable and still requires the configured independent Owner review before `main`.
+- Live scheduler verification on 2026-09-07 returned HTTP `200` with `{ok:true,sent:0,failed:0}` from the deployed `reminder-dispatch` using a freshly rotated shared secret. Zero was the correct result because no reminder was due; the secret value was neither logged nor committed.
+
+### 2026-09-06 WhatsApp Owner team inbox
+
+- PR `#99` passed both CI/RLS runs, authenticated Chromium and Cloudflare Staging, then merged to `develop`. The Owner Dashboard now includes a bilingual, responsive team inbox backed by normalized conversations and messages, Realtime refresh, unread counts, delivery state, assignment to an Owner, and per-conversation `active`/`human` bot handoff.
+- Manual replies use the existing permanent WhatsApp Cloud API token only inside the new `whatsapp-inbox` Edge Function. The function verifies the Supabase session and Owner role, never exposes the Meta token to the browser, and enforces WhatsApp's 24-hour free-form reply window server-side.
+- The webhook now records authorized inbound messages, bot replies and Meta delivery updates in the inbox. When a conversation is in human mode the webhook records the message but does not dispatch an agent, preventing simultaneous human/bot replies.
+- Every authorized inbound message also triggers a bounded Arabic Resend alert to `ADMIN_NOTIFICATION_EMAILS` (Ali and Sheikha by default), with sender identity, a 500-character preview and a direct Dashboard link. Email failure is logged and isolated so it can never block WhatsApp ingestion or agent replies.
+- A fresh read-only host audit confirmed `ai-lap` is online: Ollama 0.33.2, the loopback Reid adapter, and the correct `reid-agent-runner` user service are active; the RTX 3080 Ti reports 12 GB VRAM and the Supabase runner endpoint is reachable. The earlier `reid-ai-runner` check used a nonexistent legacy unit name.
+- Meta Developer settings were inspected for app `961651950294892`: the account exposes the normal `whatsapp_business_management` and `whatsapp_business_messaging` permissions, but no Groups API permission or group-management surface. The registered Cloud API number therefore cannot be added to an ordinary existing WhatsApp group. A separate bridge requires a second WhatsApp number and must remain isolated from the production Cloud API number.
+- Migration `202609060004` is applied remotely and both `whatsapp-inbox` and the updated `whatsapp-webhook` are deployed. Authenticated Cloudflare Staging verification with `alialajmi524@gmail.com` passed: the account resolved as Owner, all eleven agents reported ready on `Reid ai-lap / gemma4:12b`, and the new inbox rendered without an access or data error.
+- Local verification passes 140/140 Vitest checks, the TypeScript/Vite Production build, schema lint, migration dry run listing only `202609060004`, `git diff --check`, both PostgreSQL RLS jobs, authenticated browser CI and Cloudflare Staging. A fresh inbound message, real manual reply and real alert email remain the final Production acceptance tests because the normalized inbox intentionally contains no historical rows.
+
+### 2026-09-06 WhatsApp Owner personalization
+
+- Work is active on `feature/whatsapp-owner-personalization`. The webhook maps each allowed phone number to its own real Owner profile before calling the governed gateway, so Ali and Sheikha no longer share one requester identity, user-memory scope or approval actor.
+- Each response receives only the last 12 messages from that Owner conversation and is instructed to match the responsible person's Arabic/English language, brevity and tone without inventing familiarity. This uses the normalized message history already protected by Owner-only RLS; it does not broaden agent tools or approval levels.
+- Obvious six-digit OTP values and password/secret/API-key assignments are redacted before conversational context reaches a model. The raw webhook event retention policy remains separate work; responsible users must still never send credentials to the bot.
+
+### 2026-09-07 WhatsApp QR group bridge hardening
+
+- The isolated Baileys bridge is paired and running as an enabled `systemd --user` service on `ai-lap`; the only allowed group is `120363412585944970@g.us`.
+- Inbound and outbound bridge access is temporarily restricted to Owner Ali (`+968 9670 9444`) only. Sheikha is intentionally excluded until the Owner requests reactivation.
+- Group decryption recovery now uses a cacheable Signal key store, bounded message lookup, retry counters, five delayed retry attempts and recent history synchronization. Multi-device group authorization resolves `participantPn` before LID identifiers so the allow-list checks the actual phone number.
+- The local bridge suite passes 17/17 tests and `npm audit --omit=dev` reports zero vulnerabilities. The deployed service is enabled and active. The Owner later authorized one outbound acceptance message: the bridge sent it to the exact allowed group, restarted cleanly, accepted the addressed group reply and emitted `bridge_reply_sent` after a successful local `gemma4:12b` response. Live group send/receive is therefore verified.
+- A direct-message acceptance attempt from Ali exposed a WhatsApp initial-sync `408`: the phone received the message, but Baileys delivered no normal `notify` event. The bridge now accepts only fresh (at most two-minute-old) `append` events in addition to `notify`, while refusing historical replay. Metadata-only diagnostics record event type, decision and direct/group kind without logging message content.
+- A subsequent direct message at 22:52 reached the bridge as `notify` but used Ali's multi-device LID instead of his phone JID and was correctly denied by the phone-only allow-list. The exact LID was correlated to Ali using the new Signal session created at that same timestamp and is now configured through a separate `REID_BRIDGE_ALLOWED_OWNER_LIDS` allow-list. Phone and LID access remain limited to Ali; wildcards and automatic trust of unknown LIDs are forbidden.
+- `ollama show gemma4:12b` on `ai-lap` confirms native `vision`, `audio`, `tools` and `thinking` capability flags in addition to completion. The documented Ollama chat API was verified for vision; its audio flag is not exposed as a working chat input, so local Whisper handles audio as documented below.
+- WhatsApp multimodal support is implemented. Images are held in memory only, capped at 5 MB and passed to local Ollama as base64; a synthetic red PNG returned the correct Arabic color through the authenticated adapter. Ollama's documented API did not consume audio despite the model capability flag, so `faster-whisper==1.2.1` with the pre-downloaded `Systran/faster-whisper-small` model provides local transcription. Audio is capped at 16 MB, written only to a protected temporary file and deleted in `finally`; a local endpoint smoke test returned HTTP 200. Current-message and quoted-message media are both supported, which covers replying to a voice note or image with an instruction such as `ريد حلله`. No media is persisted in conversational memory.
+- WhatsApp report output supports branded RTL XLSX, DOCX and PDF attachments. Format intent is detected in Arabic or English, the requested report is generated from the model result, and the binary is sent as a WhatsApp document. Container/signature tests cover all three formats. DOCX and PDF output were rendered and visually checked; the initial mixed Arabic/Latin PDF bidi defect was corrected before the final deployment. A corrected PDF was then delivered live to Ali's allow-listed private number. The bridge dependency tree is pinned and `npm audit --omit=dev` reports zero vulnerabilities; `uuid` is explicitly overridden to the patched version required by the Excel dependency tree.
+- Follow-up report-quality work is active on `feature/whatsapp-reports-reminders`: PDF output now uses a branded Reid header/logo treatment, Arabic section cards, proper bullets, mixed Arabic/Latin layout, Muscat generation time, repeating continuation headers and page-numbered footers. The upgraded PDF was rendered to PNG and visually inspected before deployment rather than accepted from its file signature alone.
+- The QR bridge now injects the exact current `Asia/Muscat` date/time into every local model request. A deterministic reminder parser handles Arabic/Western digits, relative minutes/hours/days, today/tomorrow and explicit clock times; missing time produces one focused follow-up. Reminders persist atomically with mode `0600` beside the protected bridge state, recover safely after process interruption, and are delivered by the same paired WhatsApp session every 15 seconds with at most three attempts. This local transport is deliberately separate from the older Meta Cloud reminder dispatcher because that Cloud API phone registration was removed.
+- Acceptance passed on `ai-lap`: the expanded bridge suite is 21/21, the upgraded service restarted to `active`, a persistent reminder due 15 seconds later was claimed once, delivered to Ali's allow-listed private chat, and logged only as metadata `bridge_reminder_sent`. The reminder text/state remains server-side and no credential entered the repository or journal.
+- Group participation is invocation-only for the exact allow-listed Owner group. Direct messages remain Ali-only. The bot stays silent during ordinary group conversation and responds only when its account is mentioned using either its phone or LID identity, the message contains the standalone name `ريد`/`ريّد`/`Reid` anywhere, or a member replies to one of its messages. Every member of that group remains explicitly trusted as an Owner by the user's instruction, and other groups remain denied. The assistant speaks natural Gulf Arabic with an Omani character, matches conversational tone and may use up to two context-appropriate emoji without overuse. Credentials, OTPs and access keys remain forbidden output even in the Owner group; future tool executions must be audited.
+- Group inference is serialized through one response queue because concurrent replies saturated the single local GPU and left accepted messages waiting without output. The group now uses one bounded shared conversational history so replies understand the discussion rather than isolated per-sender fragments, and each successful outbound response emits metadata-only `bridge_reply_sent`. A known libsignal `console.info` diagnostic that printed complete session objects is suppressed before runtime so cryptographic key material is never written to the service journal.
+
+### 2026-09-06 WhatsApp personal chief of staff
+
+- Work is active on `feature/whatsapp-personal-chief-of-staff`. WhatsApp presents one coherent assistant per responsible Owner: a personal chief of staff for writing, planning and priorities, plus a governed Reid company specialist that routes company work to the correct agent and tool boundary.
+- Every eligible Owner message is redacted for obvious OTP/password/secret/API-key patterns and persisted as an `internal`, `user`-scoped memory owned by the mapped profile. Ali and Sheikha therefore build separate durable preferences and context in addition to the 12-message conversational window.
+- Reminder/task language routes to Operations, but the assistant is forbidden from claiming a task or reminder was created without a successful governed tool result. Existing L0-L4 approvals, provider classification and audit rules remain authoritative.
+- Plain `موافقة`/`رفض` (and English equivalents) now decides the newest pending command for that same Owner phone, matching the existing reply-button path. A typed decision with no pending command gets an explicit refusal instead of being misrouted as a new L3 request.
+
+### 2026-09-06 ai-lap returned and was audited
+
+- Read-only SSH audit succeeded. `ai-lap` is Ubuntu 22.04 with 31 GiB RAM and an RTX 3080 Ti with 12 GiB VRAM. Ollama 0.33.2 is active and remains correctly bound only to `127.0.0.1:11434`.
+- The requested model exists under the exact local tag `gemma4:12b` (7.6 GB); `nomic-embed-text:latest` is also installed. A live warm chat returned the exact sentinel `REID_OK` in about seven seconds with `think:false`. A bounded run with default thinking returned empty content after spending its output ceiling on hidden thinking, so the future adapter must explicitly disable thinking for normal agent runs.
+- `cloudflared` is installed but its service/tunnel configuration was not changed. No Ollama port was exposed and no provider was enabled during this audit.
+- The complete gated rollout, private tunnel/Access design, provider routing, RAG verification and rollback plan is recorded in `docs/AI_LAP_INTEGRATION.md`. Implementation remains pending Cloudflare Access setup and the sudo-required local adapter service.
+- Partial implementation on `feature/ai-lap-secure-adapter`: the versioned Python adapter and hardened user-systemd unit are installed on `ai-lap` at loopback `127.0.0.1:11436`. Live local checks passed: unauthenticated request 401, Ollama administration path 404, authenticated health 200, exact `REID_ADAPTER_OK` chat output, and a 768-dimensional embedding. The adapter forces `gemma4:12b`, `nomic-embed-text:latest`, `think:false`, body/time limits and redacted logs. The Supabase gateway code now supports the separate origin token and Cloudflare Access headers.
+- The existing root cloudflared service is configured with a token but failed because UDP/QUIC is blocked while Cloudflare's own preflight reports HTTP/2 reachable. A systemd HTTP/2 override is staged at `/home/ai-lap/cloudflared-http2.conf`. The host went offline before sudo installation; the override, Cloudflare Access hostname/service token, Supabase secret synchronization, provider activation and remote end-to-end tests remain incomplete. A token briefly visible in a local process listing was immediately rotated on `ai-lap` and is invalid; the replacement has not yet reached Supabase because its CLI request stalled.
+
+### 2026-09-05 WhatsApp Cloud API setup
+
+- Meta developer account verification is complete for the Reid company account. Meta app `Reid` (`961651950294892`), business portfolio `Reid` (`999137349850382`), and WhatsApp Business test account (`3774337566038468`) were created. The claimed test Phone Number ID is `1270966392773395`; access tokens are never recorded in this repository.
+- Branch `feature/whatsapp-agent-gateway` adds `whatsapp-webhook`, a signature-verified Meta webhook with constant-time verification-token comparison, idempotent event ingestion, an environment-only Owner phone allow-list, and bounded acknowledgement replies. It refuses POST delivery when `META_APP_SECRET` is absent rather than accepting unsigned events.
+- Migration `202609050006_whatsapp_gateway.sql` stores idempotent webhook events and the command inbox. Both tables are RLS-hidden from everyone except Owner and command changes are audited. The first implementation intentionally records commands but does **not** execute an agent or sensitive action until the WhatsApp approval/dispatch adapter is completed and tested.
+- PR `#89` passed both RLS jobs, both application jobs, the authenticated browser job and Cloudflare Staging, then merged to `develop`. Migrations `202609050005` and `202609050006` are applied remotely and `whatsapp-webhook` is deployed without platform JWT verification because Meta authenticates it with its own verification token and HMAC signature.
+- The Meta callback is verified and saved, and the `messages` webhook field is subscribed on v26.0. Supabase holds the generated verification token, test Phone Number ID and Owner phone allow-list as encrypted secrets; none is committed.
+- Production setup still requires storing `META_APP_SECRET` and `META_WHATSAPP_ACCESS_TOKEN`, completing the real-number registration, publishing/verifying the Meta app, and implementing the approved command-to-agent dispatcher. The Meta registration dialog is currently stopped at the human reCAPTCHA after Reid/reidpro.com were entered; select Oman and complete the CAPTCHA in the visible browser before continuing. Never commit or paste secret values into chat.
+
+### 2026-09-06 ai-lap returned and was audited
+
+- Read-only SSH audit succeeded. `ai-lap` is Ubuntu 22.04 with 31 GiB RAM and an RTX 3080 Ti with 12 GiB VRAM. Ollama 0.33.2 is active and remains correctly bound only to `127.0.0.1:11434`.
+- The requested model exists under the exact local tag `gemma4:12b` (7.6 GB); `nomic-embed-text:latest` is also installed. A live warm chat returned the exact sentinel `REID_OK` in about seven seconds with `think:false`. A bounded run with default thinking returned empty content after spending its output ceiling on hidden thinking, so the future adapter must explicitly disable thinking for normal agent runs.
+- `cloudflared` is installed but its service/tunnel configuration was not changed. No Ollama port was exposed and no provider was enabled during this audit.
+- The complete gated rollout, private tunnel/Access design, provider routing, RAG verification and rollback plan is recorded in `docs/AI_LAP_INTEGRATION.md`. Implementation remains pending Cloudflare Access setup and the sudo-required local adapter service.
+- Partial implementation on `feature/ai-lap-secure-adapter`: the versioned Python adapter and hardened user-systemd unit are installed on `ai-lap` at loopback `127.0.0.1:11436`. Live local checks passed: unauthenticated request 401, Ollama administration path 404, authenticated health 200, exact `REID_ADAPTER_OK` chat output, and a 768-dimensional embedding. The adapter forces `gemma4:12b`, `nomic-embed-text:latest`, `think:false`, body/time limits and redacted logs. The Supabase gateway code now supports the separate origin token and Cloudflare Access headers.
+- The existing root cloudflared service is configured with a token but failed because UDP/QUIC is blocked while Cloudflare's own preflight reports HTTP/2 reachable. A systemd HTTP/2 override is staged at `/home/ai-lap/cloudflared-http2.conf`. The host went offline before sudo installation; the override, Cloudflare Access hostname/service token, Supabase secret synchronization, provider activation and remote end-to-end tests remain incomplete. A token briefly visible in a local process listing was immediately rotated on `ai-lap` and is invalid; the replacement has not yet reached Supabase because its CLI request stalled.
+
+### 2026-09-05 WhatsApp Cloud API setup
+
+- Meta developer account verification is complete for the Reid company account. Meta app `Reid` (`961651950294892`), business portfolio `Reid` (`999137349850382`), and WhatsApp Business test account (`3774337566038468`) were created. The claimed test Phone Number ID is `1270966392773395`; access tokens are never recorded in this repository.
+- Branch `feature/whatsapp-agent-gateway` adds `whatsapp-webhook`, a signature-verified Meta webhook with constant-time verification-token comparison, idempotent event ingestion, an environment-only Owner phone allow-list, and bounded acknowledgement replies. It refuses POST delivery when `META_APP_SECRET` is absent rather than accepting unsigned events.
+- Migration `202609050006_whatsapp_gateway.sql` stores idempotent webhook events and the command inbox. Both tables are RLS-hidden from everyone except Owner and command changes are audited. The first implementation intentionally records commands but does **not** execute an agent or sensitive action until the WhatsApp approval/dispatch adapter is completed and tested.
+- PR `#89` passed both RLS jobs, both application jobs, the authenticated browser job and Cloudflare Staging, then merged to `develop`. Migrations `202609050005` and `202609050006` are applied remotely and `whatsapp-webhook` is deployed without platform JWT verification because Meta authenticates it with its own verification token and HMAC signature.
+- The Meta callback is verified and saved, and the `messages` webhook field is subscribed on v26.0. Supabase holds the generated verification token, test Phone Number ID and Owner phone allow-list as encrypted secrets; none is committed.
+- Production setup still requires storing `META_APP_SECRET` and `META_WHATSAPP_ACCESS_TOKEN`, completing the real-number registration, publishing/verifying the Meta app, and implementing the approved command-to-agent dispatcher. The Meta registration dialog is currently stopped at the human reCAPTCHA after Reid/reidpro.com were entered; select Oman and complete the CAPTCHA in the visible browser before continuing. Never commit or paste secret values into chat.
+
+### 2026-09-05 reliability task 1 implementation
+
+- GitHub Actions now holds the Supabase URL, publishable key and service-role key as encrypted repository secrets; no value is committed. A separate authenticated-browser CI job creates disposable Employee, department Manager and HR identities, exercises their real `/workspace` sessions against remote RLS, and deletes every identity/department afterwards.
+- `scripts/uptime-check.sh` verifies Production and Staging, all declared application routes, real edge 404 behavior, the Reid SVG, six security headers, and Supabase API availability. `.github/workflows/uptime.yml` runs it every 15 minutes and may be dispatched manually.
+- Local pre-PR verification passed: 3/3 authenticated Chromium role journeys (Employee, direct-report Manager, HR), 114/114 Vitest checks, the TypeScript/Vite Production build, and the Production/Staging/Supabase uptime probe. The authenticated job must also pass with repository secrets on the pull request before merge.
+- Weekly database backup remains blocked only on `SUPABASE_DB_URL`, which requires the database password. Never paste it into chat; add the complete connection URL directly as a GitHub Actions secret.
+
+### 2026-09-05 CRM and executive reports implementation
+
+- Work is active on `feature/crm-executive-reports`; do not present it as Production-ready before remote migration, authenticated role verification, CI, Staging, and the protected Production release pass.
+- Migration `202609050003_crm_reports.sql` adds companies, expanded contacts, leads, deals, follow-up activities, daily/weekly executive reports, audit triggers, Realtime and a database-generated metrics snapshot. CRM data is limited to Owner/Super Admin/Admin/HR/Sales; ordinary employees and anonymous users receive no rows. Sales cannot read executive reports.
+- Added the bilingual `/crm` workspace with pipeline KPIs, lead board, company/contact/lead/deal/follow-up creation, stage controls and report generation/history. Route visibility is role-aware and database RLS remains the security boundary.
+- Added the service-role-only `executive-reports` Edge Function and scheduled GitHub workflow: a daily snapshot is stored every day and a weekly snapshot is stored each Sunday. Weekly Arabic email delivery activates only when `RESEND_API_KEY` and a verified `REPORT_FROM_EMAIL` are configured in Supabase; without them the report remains stored and records `email_provider_not_configured` instead of pretending delivery.
+- Local application verification passes 127/127 Vitest checks, the TypeScript/Vite Production build and 10/10 public Chromium journeys; three remote authenticated journeys are intentionally CI-only. The linked migration dry run lists only `202609050003`. Local database RLS execution is unavailable on this Mac because PostgreSQL client binaries are absent, so the PR's PostgreSQL 16 RLS job is mandatory before remote migration.
+- The first PR RLS run correctly rejected test-fixture collisions with existing suites; CRM fixtures now use dedicated emails and rely on the real auth-profile trigger instead of inserting duplicate profiles. Repeat CI is required before remote migration.
+- The second RLS run exposed that the new suite lacked a transaction, so `set local` JWT impersonation ended before each assertion. The suite now follows the established begin/rollback isolation contract; repeat CI remains mandatory.
+- PR `#72` subsequently passed both PostgreSQL 16 RLS jobs, both application jobs, the authenticated HR CRM route journey and Cloudflare Staging. Migration `202609050003` is applied remotely. A live disposable-role suite passed Sales CRUD/stage/activity, HR client/report access and Employee denial, then removed its synthetic users and CRM rows.
+- The report function uses a dedicated `REPORT_CRON_SECRET` shared only between Supabase and GitHub rather than exposing a database/service key to the scheduler. Supabase platform JWT verification is disabled only for this function; the function itself rejects every request whose bearer value does not exactly match that dedicated secret.
+- Resend account `3lialajmi524@gmail.com` now contains domain `reidpro.com`. Cloudflare Domain Connect added the required DNS-only DKIM record plus the `send` SPF and MX records; independent DNS queries resolve all three. A new sending-only key named `Reid Weekly Reports` is stored as `RESEND_API_KEY` in Supabase, and `REPORT_FROM_EMAIL` is `Reid <reports@reidpro.com>`; neither value is committed or exposed to GitHub.
+- A live weekly invocation generated the report but Resend returned HTTP 403 while the new domain remained `pending`; the report correctly records `email_status=failed` and `email_error=provider_403`. Retry only after the Resend domain status becomes `verified`. The scheduler bearer was rotated after testing and synchronized between Supabase and GitHub Secrets.
+- The weekly backup secret still did not update after the latest browser handoff: GitHub reports the original update timestamp and the repeated manual backup failed. Treat the value as invalid until a complete percent-encoded pooler DSN is saved and a run succeeds.
+
+### 2026-09-05 Production ownership enforcement
+
+- GitHub `main` enforces administrators, current-branch status checks, pull requests, linear history, resolved conversations, and blocks force-push/deletion. Direct collaborator downgrade still reports `write`, so `.github/CODEOWNERS` assigns the whole repository to `@accelerator007`; branch protection now requires one approving CODEOWNER review and applies to administrators. Production cannot merge without the Owner's explicit GitHub review.
+
+### 2026-09-05 approved-agent dispatch implementation
+
+- Branch `feature/agent-approved-dispatch` adds a service-role-only transient payload table for L2-L4 runs. Full prompts remain invisible to browser/database roles and are deleted immediately after rejection or completed execution.
+- Agent approvals now pass through the authenticated gateway: the existing atomic approval RPC verifies the human's level, then an approved run resumes against its recorded provider while a rejection cancels it and erases the payload. This closes the previous state where approved runs remained queued forever.
+- The live Gemini embedding route was separately verified with an authenticated synthetic Owner and returned exactly 768 dimensions; its run and test account were cleaned up afterwards.
+- Migration `202609050002` is applied remotely and `llm-gateway` version 2 is active. A live Owner suite submitted a Marketing L2 run, observed `pending_approval`, approved it, received the required Gemini response and verified `succeeded/approved`; it separately rejected a Content L2 run and verified `cancelled/rejected`. Both transient payload rows were erased and all synthetic accounts/runs were cleaned up.
+
+### 2026-09-05 frontend rebuild Production release
+
+- Release PR `#56` merged to `main` as `037ecec` after both RLS jobs, both application test jobs, and Cloudflare Staging passed. Cloudflare Worker Production build `0e484466-9670-4e61-a402-e2e6673bf9c9` and the matching Pages build completed successfully.
+- The rebuilt bilingual shell, route manifest, typed data boundary, design tokens, Research workspace and Agent Command are live on `reidpro.com`; `/`, `/login`, `/research`, `/dashboard`, and `/privacy` are application routes. `/dashboard` is the administrative Agent Command route; `/agents` is intentionally not a route.
+- Production smoke testing found the browser favicon's absolute `/assets/img/reid-logo.svg` URL was not emitted by Vite, although the in-app imported logo was emitted. PRs `#60` and `#61` added the same mark under `public/` and a build-contract regression. Production commit `772a176` deployed through successful Worker build `e7dea15d-3aa6-466d-bc2a-4607494063db`; the public URL now returns HTTP 200 with `image/svg+xml`.
+
+### 2026-09-05 remote Research verification and granted-file correction
+
+- Remote migration `202609040001_research_workspace.sql` was applied to Supabase project `pkogchbrknwmzefjklkr`; the linked migration history matches through that version and remote database lint reports no schema errors.
+- A synthetic authenticated suite exercised Owner, supervisor, researcher, HR, outsider, suspended-member, and anonymous sessions against the live PostgREST/Auth/Storage services. The first pass completed 36/39 assertions and cleaned up its users, research rows, and objects.
+- That pass exposed a real nested-RLS defect: a role grant made `can_read_research_document()` true for HR, but the Storage policy's lookup of `research_documents` was filtered before it could evaluate the grant, so a signed URL returned `Object not found`. Migration `202609050001_research_granted_storage_read.sql` makes granted document metadata visible to the same authorized reader. A local RLS regression now seeds both open and restricted objects and requires an HR role grant to expose only the matching authorized private Storage object.
+- Corrective migration `202609050001` is applied remotely. A focused authenticated regression then created temporary Owner, supervisor and HR accounts, uploaded a restricted object, granted HR by role, downloaded it through a one-minute signed URL, verified the exact 24-byte payload, and cleaned up every test row, object and account.
+
+### 2026-09-05 agent gateway and live Gemini provider
+- Migration `202609040002_agent_gateway.sql` adds `llm_providers`, provider/classification/enabled columns on `agents`, run lifecycle and approval columns on `agent_runs`, the `provider_accepts` clearance function, the `agent_runs_clearance` trigger, the `approve_agent_run` RPC, Owner-only provider writes, and Realtime on `agent_runs`.
+- Edge Function `llm-gateway` dispatches to Gemini or Ollama behind one provider-agnostic interface, so restoring `ai-lap` is a provider row change rather than a rewrite.
+- The dashboard Agent Map is replaced by `AgentCommand`: provider clearance display, manual run, pause/resume, disable/enable, approval decisions for L2+ runs, and a run stream with latency, tokens, output preview, and errors.
+- `supabase/tests/local/rls_agents.sql` adds 30 executable allow/deny checks that CI runs against a real PostgreSQL 16 with every migration applied, so the clearance rule, the roster scoping, the admin controls and the approval engine are proven by the database rather than by the UI.
+- 8 new unit tests cover the clearance and approval policy.
+- Migration `202609040002` is applied, Edge Function `llm-gateway` version 1 is active, and `GEMINI_API_KEY` is stored only as an encrypted Supabase Edge Function secret.
+- A live authenticated Owner regression selected the enabled L1 Competitor Intelligence agent, invoked Gemini through the deployed gateway, required the exact sentinel response, verified the persisted run as `succeeded` on provider `gemini`, latency `1773 ms`, token usage `127`, and removed the synthetic account and run afterwards.
+- The Marketing and Content/Social agents remain L2: their runs correctly stop at human approval. Competitor Intelligence is L1 and runs immediately. Only `public` data may reach the current free-tier key.
+
+### 2026-09-02 critical V1 implementation (feature branch)
+
+- Public join form now validates and inserts a real `applications` row instead of showing unconditional success.
+- Optional CV upload is limited to PDF/5 MB and targets the private `application-cvs` bucket; failed inserts clean up the uploaded object.
+- New migration creates private CV storage policies, `notifications`, audit trigger, reviewer notifications, Realtime publication entries, and atomic `decide_application` RPC.
+- New `decide-application` Edge Function validates the caller, executes the first-decision RPC, and sends an Auth invitation/Magic Link on approval.
+- Dashboard now requires an authenticated user, completed LinkedIn profile, and Owner/Super Admin/Admin/HR role. KPIs, applications, and agents load from Supabase instead of hard-coded dashboard values.
+- OAuth profile completion is enforced before workspace access. GitHub is now present in the login UI; provider activation still requires company OAuth credentials.
+- The 20-minute inactivity logout is installed in the application and covered by two tests.
+- Browser routes, bilingual privacy content, `robots.txt`, `sitemap.xml`, SPA redirects, and deployable security headers were added under `public/`.
+- Local Supabase Auth configuration now matches the verified remote public-signup behavior and Storage default is 5 MB.
+- Local verification passes with 5 unit tests, 4 Chromium E2E tests, TypeScript, Vite build, and 0 npm vulnerabilities.
+- Deployment state: critical V1 is deployed to Production and Staging. Git main commit `0edb0e6`, Cloudflare Worker Build `reid`, and Cloudflare Pages all passed. Migrations through `202609020002`, private CV Storage, Realtime, notifications, and Edge Function `decide-application` version 1 are deployed.
+### Repository and delivery
+
+- Repository is public; default branch is `main`.
+- `main` branch protection requires the `test` status, current branch, PR flow, linear history, resolved conversations, and blocks force pushes/deletion.
+- Production release commit: `6528542`.
+- Develop commit audited: `e7a4171`.
+- Recent GitHub CI runs for feature, develop, and production PRs passed.
+- `npm run check` passes: 3 unit tests plus TypeScript/Vite production build.
+- `npm audit --audit-level=high` reports 0 vulnerabilities.
+- Repository secret scan found only empty placeholders in `.env.example`, not real committed secrets.
+
+### Cloudflare
+
+- `reidpro.com` returns HTTP 200 and current Reid React application.
+- `staging.reidpro.com` returns HTTP 200 and follows `develop`.
+- Production and Staging builds are independent.
+- Production bundle contains the Supabase URL, browser-safe publishable key, and WhatsApp number.
+- WhatsApp handoff targets `+968 97308003`.
+
+### UI
+
+- Arabic shows `ريّد`; English shows `Reid`.
+- Language switch changes navigation and hero content.
+- Light/dark toggle exists.
+- Login and account-creation views render.
+- Email/password login is wired to Supabase Auth.
+- Registration requires full name, email, password (minimum 8), and a LinkedIn URL; GitHub is optional.
+- Profile form reads/writes basic profile fields through Supabase.
+- Homepage assistant opens, responds with local rule-based replies, and produces a valid WhatsApp handoff.
+- Agent Map, KPI cards, join form, and profile UI render, but several are mock-only as listed below.
+
+### Supabase
+
+- Remote Auth settings verified: email enabled, Google enabled, Microsoft/Azure disabled, signups remotely enabled, email confirmation required.
+- Google OAuth client is connected to `https://pkogchbrknwmzefjklkr.supabase.co/auth/v1/callback`, published for external Google accounts, and the OAuth redirect starts without `invalid_client`.
+- Site URL is `https://reidpro.com`.
+- Redirect allow list includes Production, Staging, Pages staging, and local development.
+- Database audit found 14 public tables; all 14 have RLS enabled.
+- Database audit found 16 RLS policies.
+- Audit triggers exist for the audited tables; `information_schema` reports 39 event rows (insert/update/delete events).
+- `profiles.linkedin_url`, `applications.linkedin_url`, GitHub fields, profile trigger, and self-update policy were applied.
+- pgvector is installed and the memory embedding column exists.
+- Database currently has 0 auth users, 0 profiles, 0 applications, 0 projects, 0 tasks, 0 CRM contacts, and 0 agent runs. It has 11 audit rows from setup activity.
+
+## Known defects and missing work
+
+### P0 — blocks a trustworthy V1
+
+1. Join request, private CV upload, reviewer notifications, the review dialog, secure one-minute CV links, and Realtime refresh are deployed or implemented as recorded below. The expanded reviewer UI still needs an authenticated Owner browser test after its Staging deployment.
+2. First-decision approval/rejection and approval Magic Link are deployed. Invitation delivery now has `pending/sent/failed` state and an Admin retry path, but still requires an authenticated Owner test and real SMTP delivery test. Secure one-click email decision links are still missing.
+3. Dashboard authentication, LinkedIn completion, RBAC, live counts, applications, and agent rows pass anonymous-denial testing; authenticated Owner behavior still needs final Production verification.
+4. Microsoft login is displayed but Supabase Azure is disabled. Do not create it inside the available Sohar University tenant; use a company-owned Microsoft tenant.
+5. GitHub login is implemented in UI but its Supabase provider and company OAuth app are not configured.
+6. Google OAuth LinkedIn completion is enforced in code but is not yet released to Production.
+7. The 20-minute inactivity timeout is enforced in code and tested, but is not yet released to Production. Supabase JWT expiry remains 60 minutes.
+8. Public signup is now authoritative and local `supabase/config.toml` is aligned; remote re-verification remains required after release.
+9. Custom SMTP is disabled. Cloudflare Email/SMTP, Arabic templates, Admin notifications, and reliable Auth email delivery are not configured.
+10. Weekly backup cannot run: GitHub has no `SUPABASE_DB_URL` Actions secret. There is no successful backup/restore test.
+11. `robots.txt`, `sitemap.xml`, privacy route, and in-app 404 were added, but production content types/status behavior must be verified after deployment; SPA unknown routes still use HTTP 200 at the edge.
+12. Security headers are now emitted from `public/_headers`; Production header verification remains required because Worker static-asset handling may differ from Pages.
+13. Owner-only Production merging is not fully enforced. Collaborator `sheikhaalmamari4-cyber` currently has `write` permission, and main protection requires zero approvals; a writer could merge a passing PR.
+14. A Google OAuth client secret appeared in an automation tool transcript during setup. It is not committed to Git, but it should be rotated and the replacement stored only in Supabase after explicit credential-rotation confirmation.
+15. The Gemini API key used by Reid has appeared in assistant/browser automation output. It is not committed and is now stored as an encrypted Supabase secret, but Google rejected an attempted replacement-key creation as suspicious. Rotate it in Google AI Studio when Google permits creation, then replace only the Supabase secret.
+16. The Gemini account is on the free tier, so the provider is capped at `public` and the five `internal` agents (Operations, Analytics, Knowledge, Support, CEO) are disabled. Moving to a paid tier and raising the cap to `internal` is the smallest change that activates them.
+
+### P1 — core modules are schema/mock only
+
+- The authenticated shell, role-aware navigation, route manifest, typed data boundary and design tokens are in place, and the employee, projects and research modules read the session through `useSession()` and report failures through `src/db.ts`. Their remaining direct writes still call Supabase without the data layer, and the three files are each over 1,000 lines and have not been split into feature folders.
+- No real employee directory, departments, onboarding, announcements, calendar, documents, KPI/performance, notifications, or timesheet UI/API.
+- No working project dashboards, Kanban, milestones, meetings, budgets, file-level permissions, clients, GitHub integration, activity, or project agents.
+- Research V1 (members, datasets, experiments, ethics/approvals, publications/DOI/conference tracking, private documents with per-user/per-role grants, tasks, activity) is merged to `develop`; migrations `202609040001` and `202609050001` are applied remotely. CI proves 80 local allow/deny checks, and the live HR role-grant signed-URL workflow passes. Full authenticated browser coverage and the AI research assistant remain incomplete.
+- No working CRM UI, lead pipeline, Sales permissions E2E, or Sales agent.
+- CV Storage, three Realtime tables, and the decision Edge Function are deployed. The `project-files` and `research-files` buckets and policies exist in migrations; the research bucket is not yet applied remotely. Avatar and general-document buckets are still missing.
+- RAG/Knowledge Agent, Google Drive synchronization, embeddings pipeline, and document ACL filtering are not implemented.
+- Agent execution, admin controls, and the private gateway are merged to `develop` and deployed to Supabase. One public L1 agent has completed a verified real Gemini run. The new authenticated shell/Agent Map is live on Staging but is not yet released to Production.
+- No daily/weekly executive report generation or weekly email delivery.
+- Tool allow-lists, per-agent system prompts, and memory-scope retrieval are not implemented; the gateway currently passes the caller's text straight through.
+- `ai-lap` was offline during the latest audit, so the local provider remains disabled and unverified.
+
+### P2 — quality and operations
+
+- The current CI passes 114 unit tests, 9 public-browser E2E tests, and 113 database RLS allow/deny checks (80 research, 33 agent gateway). Focused authenticated live regressions now cover immediate Gemini dispatch/audit, 768-dimensional embeddings, approved and rejected L2 execution with payload erasure, and research role-grant Storage download; broad authenticated browser coverage is still missing.
+- `supabase/tests/rls.sql` is still a schema-shape draft (38 checks) that CI does not run, because pgTAP is not installed in the harness. Role impersonation is now covered instead by `scripts/rls-local.sh`, which applies every migration to a throwaway PostgreSQL 16 database and runs 79 allow/deny checks as real `anon`/`authenticated` roles in its own CI job. The Research workspace and the agent gateway have such suites; Employee, Projects, Applications, and account-lifecycle suites are still missing.
+- A Chromium public-flow E2E suite exists; authenticated E2E, accessibility automation, mobile visual regression, performance budgets, error monitoring, and uptime alerts remain missing.
+- No tested recovery procedure, restore drill, staging data policy, retention policy, or disaster recovery evidence.
+- Legacy COR-era pages are archived under `content/legacy/` with a README. Their titles still read "| COR" and they are not reachable; they need to become real bilingual routes before the directory is deleted.
+- Documentation files other than this status have stale claims, including hosting details and OAuth progress. Update them alongside implementation.
+
+## Ordered delivery plan
+
+The product must be released vertically: each phase includes database, RLS, UI, audit, notifications, responsive behavior, and automated tests. A later phase must not be presented as live before its vertical workflow passes.
+
+### Phase 0 — security and account recovery
+
+1. Rotate the previously exposed Google OAuth secret, store the replacement only in Supabase, and retest the callback.
+2. Keep public registration application-only; approved applicants receive the invitation/Magic Link.
+3. Configure company SMTP and Arabic Auth/application templates; test delivery to both Admin addresses.
+4. Configure company-owned GitHub OAuth and Microsoft OAuth when the company tenant/client credentials exist.
+5. Add encrypted weekly backup credentials and complete one documented restore drill.
+
+### Phase 1 — operational company V1
+
+1. Finish authenticated application review: details, private CV access, first-decision race, notifications, approval invitation, rejection audit, and secure email action links.
+2. Build the authenticated shell and role-aware navigation for Profile, People, Projects, Research, Tasks, Calendar, Documents, Announcements, KPIs, Notifications, Timesheets, CRM, Agents, Approvals, and Settings.
+3. Deliver Employees + departments + onboarding + announcements + timesheets as real workflows.
+4. Deliver Projects + members + Kanban tasks + milestones + files + meetings + activity + KPIs + GitHub repository link.
+5. Deliver Research + members + documents + datasets + experiments + ethics/approvals + publications/DOI/conference tracking. Merged to `develop`, covered by 80 local RLS checks, remotely migrated, and its highest-risk file-grant path is live-tested. Full authenticated Staging browser coverage is still required before calling the entire module complete.
+6. Deliver CRM contacts/leads/pipeline for Admin, HR, and Sales.
+
+### Phase 2 — governance and integrations
+
+1. Add private HR, project, research, avatar, and general document buckets with file-level authorization.
+2. Add authenticated RLS allow/deny integration tests to CI, plus accessibility, mobile visual, and performance checks.
+3. Add error monitoring, uptime checks, retention policy, disaster-recovery runbook, and staging-data policy.
+4. Enforce Owner-only Production merge authority in GitHub; current collaborator permission still prevents claiming this complete.
+
+### Phase 3 — AI agents
+
+1. Deploy the agent gateway to Staging, run the `public` and `internal` agents end to end, and verify audit rows, latency, token accounting, rate limiting, and the L2+ approval path with a real Owner session.
+2. Add the queue worker that dispatches an approved L2+ run, plus tool allow-lists, per-agent system prompts, and memory-scope retrieval.
+3. Enable the local provider only when `ai-lap` is online; re-verify GPU/RAM, Ollama health, network reachability, and the exact installed model, then raise the confidential and restricted agents onto it. Do not expose Ollama publicly.
+4. Activate agents incrementally: Knowledge/RAG first, then Operations/Analytics/Support, then Sales and HR once the local provider carries them, then CEO orchestration.
+5. Connect Google Drive only after company authorization and enforce document ACLs before indexing.
+
+## Verification log
+
+### 2026-09-09 rebuilding the robots, and what it cost
+
+- Local verification: 175/175 Vitest checks, the TypeScript/Vite production build, and 16/16 Chromium journeys. No database change, so no migration and no RLS run.
+- The scene budget in `tests/e2e/agent-world.spec.ts` was raised deliberately and only where the rebuild earned it: 380 draw calls (measured 292, down from 310 before the rebuild, because furniture is baked per material), 220k triangles (measured 90k, up from 53k), 70 geometries, 10 textures. Draw calls falling while detail rose is the merge doing its job.
+- Benchmark on this container's software rasterizer, which has no GPU and is the floor rather than the expected experience: `high` at 1440×900 settled at 4.5 fps after adaptive degradation, `low` at 390×844 at 21 fps, first frame 3.7–7.2 s dominated by compiling 38 shader programs. Every scenario released the renderer on unmount and rendered zero frames while off screen.
+- The first build of the rebuild ran at 1.3 fps and took 9.8 s to the first frame. Two measurements fixed that without changing what the scene looks like: rounded-corner segments dropped from two to one (163k triangles to 90k, invisible past two metres) and the bump map was removed from the thirteen surfaces that did not need it, leaving it on the ground alone. Frame rate tripled.
+- Three visual defects were found by rendering and fixing rather than by reading code: the blue-to-orange sky mixed to mauve halfway up, the paved apron read as a muddy brown disc over the whole campus, and the purple-grey workstation pads read as plastic against warm sand.
+
+### 2026-09-08 the 3D agent world, measured rather than assumed
+
+- Local verification: 175/175 Vitest checks (19 of them new, in `src/agent-world.test.ts`), the TypeScript/Vite production build, and 16/16 Chromium journeys including six new ones in `tests/e2e/agent-world.spec.ts`. The six authenticated remote journeys stay CI-only. No database change was made, so no migration and no RLS run were required.
+- The browser suite asserts only what is identical on every machine: the campus builds eleven reachable robots, pointer **and** keyboard select an agent, the scene stays inside a ceiling of 360 draw calls / 80k triangles / 60 geometries / 4 textures, the `low` tier is strictly cheaper than `high`, the frame loop stops off screen and restarts on return, unmounting releases the renderer, a browser with WebGL removed falls back instead of failing, and reduced motion still renders and still answers input.
+- Frame rate is deliberately **not** asserted. CI renders through SwiftShader on a CPU, so any threshold would either fail on every run or pass trivially on a GPU. `scripts/world-benchmark.mjs` (`npm run bench:world`) measures it instead and prints draw calls, triangles, heap, first frame, off-screen frames and disposal.
+- Benchmark on this container's software rasterizer, which is the floor and not the expected experience: `high` at 1440×900 ran 4.2 fps before adaptive degradation and 6.1 fps after it engaged, `low` at 390×844 ran 34 fps and never degraded, first frame 1.0–2.7 s, 307–310 draw calls, 43–53k triangles, 21–28 MB heap, zero frames while off screen, renderer released on unmount in every scenario. A GPU was not available here, so no claim is made about frame rate on real hardware.
+- Profiling drove two design decisions rather than guesses. Disabling the shadow pass entirely raised the software frame rate 62%, while never regenerating the shadow map changed nothing and a cheaper shadow filter changed nothing: the cost is in sampling shadows, not producing them, so the `low` tier drops shadows outright and the 4 Hz depth refresh is kept as free work avoided rather than sold as the fix. Drifting sand was measured at no cost at all and was left at full count. Scattered rock became one instanced draw call instead of twenty-eight.
+- The adaptive step-down was verified by watching it fire: under software rendering it reached step 2 and lifted the frame rate 45%, and on the phone-sized `low` scenario it correctly never fired.
+- Two visual defects were found by rendering and fixing rather than by reading the code: every robot faced the headquarters, which pointed eleven backs at a camera that orbits the outside of the campus, and the selection beam was opaque enough to hide the robot it pointed at.
+
+### 2026-09-04 feature modules moved onto the shell
+
+- `employee.tsx`, `projects.tsx` and `research.tsx` each resolved their own roles and reported failures by printing the raw Postgres string. Session-scoped reads of `user_roles` are now **one**, in `src/shell.tsx`; the read remaining in `main.tsx` is the admin listing of every account's roles, which carries no user filter and is a different query.
+- Their parallel loads report through `firstError` and `messageFor`, so a reader sees a bilingual, actionable message instead of `new row violates row-level security policy for table ...`, and an expired session is named ahead of the failures it caused.
+- `shell.test.ts` now scans every module for a session-scoped `user_roles` read and fails if one returns, which was verified by reintroducing the query and watching the test catch it. It also asserts the shell still performs that read, so the check cannot pass vacuously.
+
+### 2026-09-04 design tokens (feature branch)
+
+- The stylesheets held six variables and **85 hard-coded colours**: roughly seventeen shades of purple doing the work of three, six greens, five reds and two ambers. The dark theme was defined in one file, so all 85 literals stayed frozen at their light values when the theme flipped.
+- `src/tokens.css` is now the only file that names a colour. A seven-step brand ramp built on `#55418b`, the value already in the `theme-color` meta tag, plus semantic `good`/`warn`/`risk` families kept deliberately separate from the brand so a warning and a button cannot look alike. Radii collapsed from twelve values, including two spellings of "pill", onto a six-step scale across 51 declarations.
+- `tokens.test.ts` enforces it: no component stylesheet may contain a colour literal, every token referenced must exist, and every colour token needs a dark counterpart unless it is a named exemption. The 500 and 700 brand steps are exempt because they are fills carrying white `--on-brand` text and stay deep on either ground.
+- The test also caught ten tokens defined but never used, which were removed rather than shipped.
+- **Dark-mode defect fixed.** `body` resolved `color: var(--ink)` against `:root`, while `.dark` redefined `--ink` on `.app`, a descendant. Every element that only inherited kept the light theme's near-black ink on a dark ground: the hero headline and the stat figures were close to invisible. Confirmed by screenshot before and after; `.app` now resolves its own colour in the scope where the token is redefined, and an E2E test measures the headline's computed luminance so it cannot regress.
+- The theme also ignored the reader's system preference and always opened light. It is now seeded from `prefers-color-scheme` and still owned by the toggle afterwards, so there is one mechanism rather than two.
+
+### 2026-09-04 authenticated shell (feature branch)
+
+- Session state was resolved independently in five places. `user_roles` was read seven times per session, five hand-written gates could disagree, and the navigation offered every signed-in visitor every destination regardless of role.
+- `src/shell.tsx` resolves user, roles, account status and profile completion once and provides them through `useSession()`. Session-scoped role reads went from four to one; the three remaining in the feature modules move as each module migrates, and the read left in `main.tsx` is the admin listing of every account's roles, which is a different query.
+- Routes now declare `allow`, the roles that may open them, so the gate and the navigation derive from the same manifest. `navigableRoutes` cannot offer a destination `accessFor` would then refuse, which `shell.test.ts` proves for every role.
+- One `<Guarded>` component replaces the five gates and reports *why* access was refused: `anonymous`, `incomplete_profile`, `suspended`, `forbidden`, `error`, each distinct.
+- **Gap closed.** `/workspace`, `/projects` and `/research` never checked account suspension; only `/dashboard` did. A suspended employee could open all three. Row-level security still refused their rows through `is_account_active()`, so no data was exposed, but the interface opened. All four routes now refuse through the same gate.
+- A session that cannot be read is reported as an error with a retry, never as `forbidden`: the roles list is empty in both cases, so the previous code showed "Access denied" for a dropped connection.
+- Sign-in is now offered inline on every guarded route and returns the person to the page they asked for. `/workspace` already behaved this way; `/dashboard` showed a dead-end gate that forgot the destination. The public E2E expectation for `/dashboard` was updated to the improved behaviour.
+- 16 new unit tests cover the access matrix, including that suspension is checked before roles so an Owner is suspended too, and that a guest may reach the profile to finish onboarding but not the workspace.
+
+### 2026-09-04 typed data boundary (feature branch)
+
+- `src/db.ts` returns a discriminated `Result` and maps PostgREST and Postgres codes to seven outcomes a user can act on, each with an Arabic and an English message. It covers `42501` RLS refusals, `PGRST301` expired sessions, `PGRST116` missing rows, constraint violations, network failures, and the `P0001` refusals our own RPCs raise, including `approval_denied` and `provider_not_cleared_for_classification`.
+- It deliberately does not guess about SELECT: row-level security filters rather than raising, so a denied read and an empty table are identical over the wire. The layer keeps them distinct as outcomes so the interface can say "nothing visible to you" instead of rendering a void.
+- **Security fix.** The dashboard read `account_controls` with `setAccountStatus(control.data?.status || "active")`. Any failure of that read — expired JWT, dropped connection — produced `null` and was treated as an active account, so the suspension gate failed open. A failed read is now an error state, and the workspace stays closed.
+- A failed load also no longer masquerades as a permission problem: roles come back empty when their query fails, which is exactly what the "Access denied" gate tested for. The gate now shows the real cause and a retry.
+- The dashboard's eleven parallel queries report one outcome through `firstError`, which puts an expired session ahead of the failures it caused.
+- 19 unit tests cover the mapping. Migration is incremental: the dashboard gate and its parallel loads are converted; roughly sixty direct calls remain in the four feature modules and move as each is brought into the shell.
+
+### 2026-09-04 archived the pre-React site
+
+- `en/`, `blog/`, `projects/`, `styles.css`, `script.js` and `fonts.css` moved to `content/legacy/`. None of it was ever built or served — Vite builds `index.html` and `src/`, and the Worker serves `dist/` — but the three content pages hold real Arabic writing about كور COR, رتق RATQ and predictive maintenance, so they are archived rather than deleted, with a README recording what must happen before they go.
+- Deleted outright as dead duplicates of the deployed `public/` copies: root `sitemap.xml`, `robots.txt`, `_headers`, `site.webmanifest`, `404.html` and `privacy.html`. The root sitemap advertised ten COR-era URLs; the deployed one lists four real routes.
+
+### 2026-09-04 shared route manifest (feature branch)
+
+- Routing lived in five places: the `Page` union, a path-to-page map, a page-to-path map, prefix rules inside `resolvePage`, and a second hand-written list in `src/worker.ts`. Adding a route meant editing all five, and missing the Worker shipped a page that worked locally and returned 404 in production, which had already happened once.
+- `src/routes.ts` is now the single manifest. It declares each route's page, path, deep-link ownership and whether it needs a session, and stays free of React and DOM APIs so the Worker can import it. `main.tsx` and `worker.ts` both derive from it.
+- `src/routes.contract.test.ts` iterates the manifest, so a new route is covered the moment it is declared. It asserts the edge serves the shell for every declared path, that deep links resolve to their parent, that an undeclared path 404s at both layers, that pages round-trip through their paths, and that no authenticated route appears in the public sitemap.
+- Verified by adding a temporary `/crm` route to the manifest alone: the Worker served it with no edit, and the contract suite grew from 18 to 19 cases by itself. The route was then removed.
+
+### 2026-09-04 Gemini provider credential verified
+- `ListModels` returned HTTP 200 for the Owner-supplied key: 50 models, so the credential is a valid Gemini API key rather than a short-lived OAuth token.
+- `gemini-2.5-flash` and `text-embedding-004`, the models first written into the migration, are rejected at call time. Generation returns `no longer available to new users`; the embedding model is not found for `embedContent`.
+- Verified working by real calls: `gemini-3.6-flash` (HTTP 200, 92 tokens) and `gemini-3.8-flash` (HTTP 200, 111 tokens) for generation, and `gemini-embedding-001` with `outputDimensionality: 768` (HTTP 200, 768 values), which matches `memories.embedding vector(768)` exactly, so RAG needs no schema change.
+- The provider row now pins `gemini-3.6-flash`. Moving to `gemini-3.8-flash` is a single row update with no code change.
+- The Owner confirmed the free tier, so `max_classification` was lowered from `internal` to `public` and `requests_per_hour` from 60 to 20. Agent enablement is now derived from `provider_accepts` instead of a hard-coded ceiling.
+- Still unverified: every path through the gateway itself, and the free tier's real request limits, which were not measured.
+### 2026-09-04 agent gateway implementation
+- Implemented the Phase 3 gateway on `claude/agent-plan-7v3s5l` with Gemini as the temporary provider while `ai-lap` is offline.
+- `scripts/rls-local.sh` passed with exit 0: **109 checks**, 30 in the new `rls_agents` suite and 79 in `rls_research`. Every Reid migration, the agent gateway included, applied cleanly to a throwaway PostgreSQL 16 instance.
+- The agent suite caught a real authorization defect before review: HR could approve an L3 run through the RPC but `runs_scope_read` did not let HR read it, so the approval panel would have been empty and the decision unconfirmable. The policy now also admits an approver to runs pending at their level and to runs they decided.
+- Merged `origin/develop` (Research V1, commit `3039e6d`). Conflicts resolved in favour of develop's production brand-mark fix; both status histories and both pgTAP suites were kept. The migration was renumbered to `202609040002_agent_gateway.sql` because develop had already taken `202609040001`.
+- `npm run check` passed after the merge: 21 unit tests across 5 files, `tsc -b`, and the Vite production build. 8 Chromium E2E tests passed.
+- `npm audit --audit-level=high` reported 0 vulnerabilities.
+- `supabase/tests/rls.sql` grew to 49 checks after merging develop's research suite, including `provider_accepts('gemini','internal') = false` on the free tier and the Operations agent staying disabled.
+- Not verified: the migration was not applied, the Edge Function was not deployed, and no request reached Google. The Supabase CLI, Deno, and project credentials were unavailable in the working environment.
+- The Gemini key supplied by the Owner was written only to the gitignored `.dev.vars`. Nothing containing it was committed.
+
+### 2026-09-04 Research V1 merged to develop; remote application blocked
+
+- The Owner verified the repaired brand mark on the Staging preview and it renders correctly. PR `#54` was merged into `develop` at commit `b10161e8`. CI passed all three checks on the head commit: `test`, the new `rls` job, and Cloudflare Pages.
+- Local RLS coverage was extended to the remaining items on the Owner's test list: research archive and unarchive as the supervisor, archive denial for an ordinary researcher, conference/event-date publication tracking, `research.conference` updates, and a re-check of the added researcher proving that gaining membership grants read access but never management authority. The suite now runs **79 checks, all passing**.
+
+**Blocked — the remote Supabase work could not be attempted from this environment.**
+
+The Owner asked for the migration to be applied to the live project, for a database lint and migration-history check, and for authenticated Staging testing with Owner, researcher, supervisor and HR accounts. None of that was executed, and none of it should be recorded as done. Two independent causes, both verified rather than assumed:
+
+1. No credentials. `supabase projects list` returns `Access token not provided`, and `supabase migration list --linked` returns `Cannot find project ref`. There is no `SUPABASE_ACCESS_TOKEN`, no `SUPABASE_DB_URL`, and no linked project in this session.
+2. No network path. The environment's egress proxy refuses `api.supabase.com` and `pkogchbrknwmzefjklkr.supabase.co` with `CONNECT tunnel failed, response 403`. Even with credentials the CLI could not reach the project from here.
+
+Credentials were deliberately not requested, because pasting them into this session would place secrets in the transcript and logs, which the Owner has forbidden. The remote steps require a session that already holds Supabase access.
+
+**Therefore the following remain open and must not be treated as complete:**
+
+- Migration `202609040001_research_workspace.sql` is **not applied** to the remote Supabase project. Until it is, `/research` will fail against Production and Staging because the tables, policies, helper functions and the `research-files` bucket do not exist remotely.
+- No remote `supabase db lint` and no remote migration-history reconciliation.
+- No authenticated Staging test with Owner, researcher, supervisor or HR identities: create/update/archive, members, datasets, experiments, ethics approvals, publications/DOI/conference, notifications, private-document upload and signed open, per-user and per-role grants, and unauthorized/suspended denial all remain unverified against the live project.
+- What the 79-check suite proves is the policy logic against a local PostgreSQL 16 database with the real migrations applied. It does not prove PostgREST response shapes, the React wiring, Realtime delivery, Storage signed URLs, or browser upload against the live project.
+- The `develop → main` release PR is open for review only. Research V1 must not reach Production before the remote migration is applied and the authenticated Staging suite passes, and only with explicit Owner approval.
+
+**Untouched by instruction:** `ai-lap`, Arabic SMTP, and Microsoft OAuth. No Production data was read or modified, and no credential was written to the repository, to GitHub, or to any log.
+
+### 2026-09-04 research workspace implementation and production brand-mark repair
+
+Work is active on `claude/reid-system-development-bcaz9n`, branched from `develop`. Do not present Research V1 as Production-ready before the migration is applied remotely, CI passes, and an authenticated Staging session verifies the workflows.
+
+**Production defect fixed — the header brand mark was broken on `reidpro.com`.**
+
+- The Owner reported a broken-image placeholder next to `ريّد` in the live header. Root cause: `src/main.tsx` referenced the mark as the literal string `/assets/img/reid-logo.svg`. Vite rewrites imported assets and copies `public/`, but leaves literal URLs untouched, and `assets/` sits outside `public/`. Nothing was emitted to `dist/`, so the tag returned 404 in Production while still resolving against the dev server — which is exactly why the existing E2E assertion passed and the bug shipped.
+- The in-app mark is imported, so Vite emits and content-hashes it. The fixed absolute favicon URL is separately copied from `public/assets/img/reid-logo.svg`; Production verifies both delivery paths instead of assuming an HTML literal is rewritten.
+- Two regressions were added. `src/assets.test.ts` fails the build if any file under `src/` references `/assets` through a bare string literal. The E2E assertion no longer matches a fixed URL but asserts the rendered image has a non-zero `naturalWidth`, which is the condition that actually broke.
+- The `/assets/fonts/*.woff2` URLs inside `src/style.css` were checked and are safe: Vite rewrites `url()` in processed CSS, and both font files appear in `dist/`.
+
+**Research workspace V1.**
+
+- Migration `202609040001_research_workspace.sql` extends `research` with field, dates, funding, archive, `created_by` and `updated_at`, and adds `research_datasets`, `research_experiments`, `research_ethics_approvals`, `research_publications`, `research_documents`, `research_document_permissions`, and `research_activity`, plus audit triggers, an activity trigger, membership/ethics notifications, Realtime publication entries, and the private `research-files` bucket.
+- `research_members` had RLS enabled since the core migration but carried no policy at all, so the table was unreadable and unwritable by every client. It now has scoped read and supervisor-only write policies.
+- Bilingual `/research` and `/research/:id` routes were added with overview, tasks, datasets, experiments, ethics, publications, documents, and activity tabs, role-aware controls, 60-second signed document URLs, and per-user/per-role grant management. `/research` and `/research/` deep links were added to the Worker SPA allow-list, and unknown routes keep their edge 404.
+- Two data-integrity rules are enforced in the database rather than the UI: a DOI must match `10.x/suffix`, and an ethics record moved to `approved` or `rejected` must carry `decided_by` and `decided_at`.
+
+**Permissions and RLS were tested against the database, not the interface.**
+
+- `scripts/rls-local.sh` applies every migration in `supabase/migrations` to a throwaway PostgreSQL 16 database and runs `supabase/tests/local/rls_research.sql` as real `anon` and `authenticated` roles with JWT claims. It needs no Docker, Supabase credentials, or network access. `supabase/tests/local/bootstrap.sql` supplies only the missing platform pieces (auth schema, `auth.uid()`, the anon/authenticated/service_role roles, storage schema, Realtime publication); every policy under test is the verbatim policy from the migrations. pgvector is unavailable locally, so the embedding column falls back to a shim domain — no policy reads it.
+- Result: **70/70 checks pass, 0 fail**, across six actors — anonymous, an unrelated active employee, a suspended member, an ordinary researcher, the supervisor, HR, and the Owner.
+- Denials proven, not assumed: anonymous sees no research at all; an unrelated employee sees only the public study and none of its datasets, documents, activity or unpublished papers; a **suspended** member loses every membership-derived permission even though the membership row still exists; an ordinary researcher cannot rename the study, add teammates, register datasets, file ethics approvals, record publications, upload files, grant themselves access to a restricted document, or create research tasks; a researcher cannot log an experiment under another author's name; a supervisor cannot create a new research record, attribute a dataset to someone else, forge the granter of a file permission, or upload into a research folder they do not manage; the Owner cannot attribute a new research record to someone else or create one without a supervisor.
+- Grants proven to work: a direct user grant and an additive-role grant each open a restricted document through `can_read_research_document`, and storage object visibility follows the document decision rather than bucket membership.
+- Side effects proven: membership inserts notify the researcher, an ethics decision notifies the supervisor, the activity feed attributes the supervisor's dataset, ethics changes reach `audit_logs`, the `research-files` bucket is private, and all eight research tables publish to Realtime.
+- One check initially failed and found a fault in the **test**, not the policy: the seed made the same person supervisor of both studies, so cross-research upload denial could never trigger. The second study was reassigned to a different supervisor and the denial then held.
+- The suite runs as its own `rls` CI job against a `postgres:16` service container, so this coverage is enforced on every PR rather than run by hand.
+
+**Local verification.**
+
+- `npm run check`: pass; 13 Vitest checks (TypeScript, Vite Production build included).
+- `npm run test:e2e`: pass; 8 Chromium public workflows, including anonymous denial for `/research` and `/research/:id`, and the new brand-mark render assertion.
+- `npm run test:rls`: pass; 70/70 RLS allow/deny checks.
+- `playwright.config.ts` now honours an optional `PLAYWRIGHT_CHROMIUM_PATH` so sandboxes with a preinstalled Chromium can run the suite; CI still installs its own pinned browser.
+- `@types/node` was added as a devDependency because the new asset regression test reads the filesystem.
+
+**Not done — remaining before Research V1 may be called complete.**
+
+- Migration `202609040001` has **not** been applied to remote Supabase. No Supabase credentials exist in this environment, so no remote migration, schema lint, or Edge Function deployment was attempted.
+- No Staging deployment and no authenticated Owner/supervisor/researcher browser verification. The RLS harness proves the policies against a local database; it does not prove PostgREST shapes, the UI wiring, or Realtime delivery against the live project.
+- Research document upload/download through a real browser is unverified, the same gap already recorded for employee and project files.
+- Equivalent local RLS suites for Employee, Projects, Applications, and account lifecycle are still missing; only Research is covered.
+- Untouched by instruction: `ai-lap` and any AI agent work, Arabic SMTP, and Microsoft OAuth. No Production data was read or modified, and no secret was added to the repository or to GitHub.
+
+### 2026-09-04 Reid brand mark
+
+- Replaced the temporary header `R` tile and legacy COR-era triangular favicon with the Owner-provided Reid rising-bars brand mark.
+- Added a compact transparent SVG reproduction of the supplied artwork so the mark remains sharp at favicon, mobile-header, desktop, light-mode, and dark-mode sizes. The bilingual wordmark remains `ريّد` in Arabic and `Reid` in English.
+- The supplied PNG remains external source artwork and was not committed with its large transparent canvas; `assets/img/reid-logo.svg` is the web-ready canonical mark.
+
+### 2026-09-02 Dashboard route hotfix
+
+- Confirmed the Production account `alialajmi524@gmail.com` already has the `Owner` role; the failure to open Admin was not an RBAC assignment problem.
+- Root cause: Cloudflare interpreted the explicit `/dashboard /index.html 200` static redirect as a canonical redirect to `/`, discarding the application route and rendering the public homepage.
+- Replaced static application redirects with a Worker asset fallback that serves `index.html` internally for the five known React routes before Cloudflare asset canonicalization, preserving the browser URL and retaining real 404 responses for unknown routes.
+- Added automated coverage for Dashboard fallback, unknown-route 404, and the legacy privacy redirect. Production verification is recorded after deployment below.
+- `npm run test`: pass; 8 tests. Production Worker version `a09b8338-3776-422d-9ab5-f4c146bddbad` deployed successfully.
+- Live verification: `https://reidpro.com/dashboard` returns HTTP 200 with no redirect and the Reid app shell; an unknown URL returns HTTP 404.
+
+### 2026-09-02 operational V1 alignment
+
+- The authoritative onboarding workflow is now fixed as: public application → first Admin/HR decision → invitation/Magic Link on approval. Direct public account creation is removed from the UI to prevent bypassing company review.
+- Login remains available for approved email/password accounts and configured OAuth providers. RLS remains the final authorization boundary even if an external OAuth identity is created.
+- Added browser coverage proving the login page directs new people to the join workflow and no longer offers direct account creation.
+
+### 2026-09-02 application review workspace
+
+- Added a full Admin/HR application review dialog with contact, organization, requested scope, LinkedIn, GitHub, reason, cover letter, and private CV access through a signed URL that expires after 60 seconds.
+- Added reviewer notification display and Realtime refresh for applications and notifications.
+- Fixed partial invitation delivery: migration `202609020003` tracks `not_sent/pending/sent/failed`, error and delivery time independently from the atomic first decision. Failed invitations remain visible to reviewers and can be retried.
+- Deployed migration `202609020003` and the updated `decide-application` Edge Function to Supabase. An unauthenticated retry request returned HTTP 401.
+- Local `npm run check` passes with 8 tests and the Production build. Authenticated Owner/CV/decision/retry browser coverage remains required on Staging before release.
+- Release-process correction: merging the `develop → main` release PR with automatic head deletion removed `develop`. The branch was immediately restored from current `main` (`17b5f59`). Never use `--delete-branch` when the release PR head is the persistent `develop` branch.
+
+### 2026-09-02 account lifecycle completion
+
+- Migration `202609020004` adds audited `active/suspended/disabled` account controls, backfills existing users, makes role mutation function-only, and enforces active-account checks in role, project, research, task, timesheet, notification, and profile-update policies.
+- New `manage-account` Edge Function allows active Owner/Super Admin callers to assign non-Owner roles and suspend/reactivate non-Owner accounts. It blocks self-modification, Owner suspension/removal, unauthorized callers, and synchronizes suspension with Supabase Auth ban state.
+- The Owner/Super Admin Dashboard now lists company accounts, multiple roles, status and reason, and provides protected role/status controls. Suspended users receive a dedicated access gate.
+- Application notifications and future email buttons can deep-link to `/dashboard?review=<id>`; authentication plus RLS/RBAC are still required and the link never executes a decision itself.
+- Remote migration and Edge Function deployment completed; an unauthenticated account-management call returned HTTP 401. Real Owner mutation tests must use a synthetic non-Owner account on Staging before Production.
+- Outbound Arabic email remains blocked by missing SMTP provider credentials. Cloudflare Email Routing is not treated as an outbound SMTP service.
+- Remote Supabase Auth public signup and email signup are now disabled through `supabase config push`; the authoritative application → approval → invitation flow is enforced at the Auth service, not only hidden in UI. Admin invitations remain the account-creation path.
+- Approved accounts can request a Magic Link or password recovery without creating a new user (`shouldCreateUser: false`), and invited users can set an 8+ character password from their authenticated Profile.
+- Arabic source templates for invite, Magic Link, recovery and confirmation are stored under `supabase/templates/`. Supabase refused hosted template activation on the Free plan with its default provider; activation requires custom SMTP or a paid plan. Existing remote confirmation, OTP length, MFA, redirects and Storage settings were preserved during config synchronization.
+
+### 2026-09-03 Production account workflow release
+
+- Released secure application review and account lifecycle management to Production through owner-approved PR `#26`; CI, build, Playwright, and Cloudflare Staging checks passed before merge.
+- Production is served by the `reid` Worker rather than the `reid-staging` Pages project. The Git merge did not start a Worker build, so version `414f6037-1049-47c6-8690-521b5ff1980a` was deployed manually with the Supabase publishable client key and no service-role secret in the browser bundle.
+- Live Owner verification for `alialajmi524@gmail.com` passed: the session resolves the `owner` role, `/dashboard` opens the Company Command Center, one pending synthetic application is visible, and Admin/HR review data is protected behind authentication.
+- Corrected Google/Microsoft/GitHub OAuth return routing to `/dashboard`. Profile remains available through `حسابي / My profile`.
+- Corrected the Owner account directory loader to fetch profiles, roles, and account controls independently and join them client-side. This avoids a PostgREST embedded-relationship failure that silently rendered an empty account list.
+- Released the routing/directory correction through Staging PR `#28` and owner Production PR `#30`; CI and Cloudflare checks passed. Production Worker version `283e9c28-12fc-408f-aca0-c6aa0d8789ec` is live.
+- Final authenticated browser verification passed on `https://reidpro.com/dashboard`: `Ali Alajmi / alialajmi524@gmail.com` appears as an active `owner`; Owner role removal, self-suspension, and role-add controls are disabled by design. The synthetic `Reid E2E Test` application remains pending for a deliberate decision test.
+- Remaining deployment gap: permanent GitHub-to-Production Worker automation needs a scoped Cloudflare API token stored as a GitHub Actions secret. Creating that persistent credential requires explicit action-time authorization; until then Production deployment is manual.
+
+### 2026-09-03 employee workspace implementation
+
+- Work is active on `feature/employee-workspace-v1`; do not present this module as Production-ready until migration, authenticated role tests, Staging, and the release PR pass.
+- Added migration `202609030001_employee_workspace.sql` for departments, profile employment fields, onboarding, calendar, announcements, private employee-document metadata/storage, KPIs, performance reviews, task writes, audit triggers, RLS, and Realtime feeds.
+- Added the bilingual `/workspace` application route with role-aware navigation, company directory and individual employee view, onboarding checklist, assigned tasks, calendar, announcements, secure documents, KPIs/reviews, and timesheets-derived working hours. Payroll, leave, expenses, and attendance clock-in/out remain excluded.
+- Owner/Admin/HR can manage employee operational records; an active employee can read the internal directory, update their assigned task state, complete their onboarding, manage their own calendar/documents/timesheets, and read only their own HR performance records.
+- Staging OAuth verification exposed an exact-path allow-list gap: Google returned to the Production site instead of `staging.reidpro.com/workspace`. Auth redirect configuration now includes exact Profile, Dashboard, and Workspace paths for Production/Staging plus preview/local wildcards; retest after `supabase config push`.
+- Auth redirect configuration was pushed and the second Google test returned correctly to `https://staging.reidpro.com/dashboard`; Owner navigation into `/workspace` passed with all employee modules visible.
+- Live Staging writes passed for an onboarding item plus completion, an assigned task plus status update, a company calendar event, a bilingual announcement, a KPI, a performance review, and a 90-minute timesheet displayed as `1h 30m`. Records are clearly labeled `Staging` for audit visibility.
+- Added migration `202609030002_employee_notifications.sql` and a Workspace notification center: task, onboarding, KPI, and announcement inserts notify the affected active employee; users can mark only their own notifications read.
+- Private document upload could not be executed through Chrome because the ChatGPT extension lacks local-file access. The bucket, metadata RLS, signed URL UI, accepted MIME types, and size boundary exist, but upload/download remains an explicit Staging verification item.
+- Employee V1 was released through owner Production PR `#36`; Cloudflare Worker version `d4b5b7fa-7896-4f11-8f74-b45d6fa0109e` is live. Authenticated Production verification at `/workspace` passed with the Owner identity, employee count, open-task count, 100% onboarding, `1h 30m` working hours, announcement, and calendar data.
+- Post-release notification verification passed on Staging: a bilingual company announcement generated an employee-owned notification, the Workspace displayed it, and mark-read reduced the unread counter. Test operational records are intentionally labeled `Staging` and remain auditable.
+
+### 2026-09-03 accounts and employees completion
+
+- Work is active on `feature/accounts-employees-completion-v2`; do not claim final completion until separate Employee, HR, and department-manager sessions pass remote RLS tests and the release reaches Production.
+- Added migration `202609030005_department_manager_scope.sql`. Department managers gain operational access only to direct reports' onboarding, tasks, private calendar items, KPIs, performance reviews, and timesheet summaries. HR documents, account controls, roles, company announcements, and department administration remain Owner/Admin/HR-only.
+- The Workspace UI derives manager authority from `departments.manager_id`, scopes rows to the selected direct report, exposes operational forms only for authorized staff/managers, and prevents ordinary employees from showing an upload form for another employee.
+- Cloudflare Email Sending Beta requires a paid Workers plan for arbitrary recipients; the free Email Routing path can send only to verified destinations. Supabase default SMTP is restricted and non-production, so applicant Magic Links require custom SMTP credentials or an approved paid sending service.
+- Local verification passed on the first implementation: 10 Vitest checks, Production build, 7 Chromium public workflows, and linked migration dry run. The branch was rebuilt from current `develop` after resolving squash-history conflicts without replacing prior project work.
+- PR `#44` passed CI and Cloudflare Pages and was merged into `develop`; migration `202609030005` was applied to Production Supabase and the remote schema lint is clean.
+- Email authentication was found disabled in the live project and was explicitly enabled on 2026-09-03. Public self-signup remains disabled by design because accounts are issued only after an approved application; Email+Password and Magic Link are now available to issued users.
+- The first separate-role remote test passed employee sign-in/timesheet creation and manager direct-report timesheet visibility, then correctly stopped on a real RLS mismatch: PostgREST could not return a manager-created task because the task SELECT policy omitted department managers. Migration `202609030006_manager_task_visibility.sql` adds manager/HR task visibility; it must be applied and the complete remote suite repeated before completion is claimed.
+- PR `#45` passed CI and Cloudflare Pages, was merged into `develop`, and migration `202609030006` was applied remotely with a clean database lint. The repeated remote Employee/Manager/HR suite passed 25/25 checks, including password sign-in, employee timesheets, direct-report manager scope, tasks, KPIs, performance reviews, HR private upload, employee/HR signed-file open, and manager denial for HR documents.
+- The live application suite passed 15/15 checks: public submission, synthetic PDF upload, HR signed CV open, internal rejection reason, first-decision-wins denial, anonymous privacy, approval, invitation dispatch, and persisted delivery state. The invitation to the controlled company alias was `sent`, and the Owner supplied phone evidence that the invitation arrived and opened the approved profile flow successfully.
+- Google OAuth was rotated without downtime: a new secret was stored only in Supabase, a Staging Owner callback completed, and the old secret was disabled after the successful test. GitHub OAuth app `Reid Company Platform` was created with the exact Supabase callback, enabled in Supabase, and its Staging Owner callback also completed successfully.
+- Microsoft OAuth remains blocked because Microsoft Entra requires a signed-in company Microsoft account and no Microsoft session is available. Do not invent or create a company tenant without the Owner completing that login.
+- Custom SMTP and Arabic sender/template activation were explicitly deferred by the Owner. Supabase Free locks template editing while its default sender is used. Ready-to-activate Arabic invite, Magic Link, and secure review-link templates are stored in `docs/EMAIL_TEMPLATES.md`; evaluate Resend or Brevo later and keep credentials only in Supabase.
+- Production release PR `#47` passed CI and Cloudflare but exposed divergent squash ancestry between `main` and `develop`. Branch `chore/sync-production-history` merges the current Production ancestry into `develop` while retaining the fully tested `develop` state, so the Owner release can be merged cleanly without overwriting either branch history.
+- The history synchronization was merged through PR `#48`, after which owner-approved release PR `#47` merged to `main` at commit `59bd4d2`. The `main` and `develop` source trees are identical at this release point.
+- The connected Cloudflare Worker build for `59bd4d2` failed because its Build command was empty: Cloudflare installed dependencies and immediately ran `npx wrangler deploy`, so the configured `./dist` asset directory did not exist. The Worker Build configuration now runs `npm run build` before deploy; no application secret or source file was changed for this repair.
+- The corrected retry created Worker version `cc79d37b` and promoted it to Production. Live checks passed for `/`, `/workspace`, `/dashboard`, and `/profile` with HTTP 200, the required security headers, and a new production bundle containing the secure email-review deep-link flow and internal rejection-reason UI. Future pushes to `main` now have a complete install → build → deploy pipeline.
+
+### 2026-09-03 project workspace implementation
+
+- Work is active on `feature/project-workspace-v1`; do not present Projects V1 as Production-ready before migration, CI, authenticated Staging workflows, and the Production PR pass.
+- Migration `202609030003_project_workspace.sql` extends projects with lifecycle, client, budget/currency, dates, archive and GitHub fields; adds milestones, meetings, KPIs, private file metadata and explicit user/role file permissions, activity feed, RLS helpers, audit triggers, notifications-ready task assignments, Realtime, and the private `project-files` bucket.
+- Added bilingual `/projects` and `/projects/:id` routes. The project directory supports all five types and archived filtering; each project has its own dashboard, team/manager controls, settings, Kanban, milestones, meetings, files, KPIs, activity and GitHub link.
+- Project access is scoped by Admin, project manager/lead, or membership. Managers control the project and team; ordinary members can read project data and only use permissions granted by task/file policies. Restricted files require an explicit user/role grant in addition to project membership.
+- Restricted-file controls now let a project manager grant and revoke read or read/write access per user, or read access per company role, directly from the project dashboard. `/projects` was also added to the Worker SPA allow-list while unknown routes retain edge 404 behavior.
+- Validation caught and corrected two permission-model mismatches before migration: permission rows now have stable UUIDs for safe revocation, each grant records the authenticated granter, and role choices exactly match the database enum.
+- Local verification passed: 10 Vitest checks, the TypeScript/Vite Production build, and 7 Chromium workflows including anonymous denial for `/projects` and `/projects/:id`. The linked migration dry run lists only `202609030003`, remote schema lint reports no errors, and the migration has not yet been applied pending PR/CI validation.
+- PR `#39` passed both CI jobs and Cloudflare Pages, was merged into `develop`, and migration `202609030003` was applied remotely. First authenticated Owner creation test exposed `record "new" has no field "project_id"` in the generic activity trigger; no project row was created. Corrective migration `202609030004` resolves identifiers through JSON for parent and child records and must pass the repeated Staging workflow before Production.
+- Corrective migration `202609030004` is now applied and lint-clean. The repeated authenticated Owner flow created `Staging Project V1` successfully with product type, manager membership, OMR 12,500 budget, client, dates and GitHub link; Kanban task creation/move, milestone, meeting, KPI, and the attributable activity feed all passed.
+- Staging project update from `planning` to `active` passed, as did archive and immediate unarchive. Private upload verification reached the native file handoff but Chrome denied the extension access (`Not allowed`); no file or metadata row was created. The private bucket, MIME/size limits, signed URL flow, and per-user/per-role RLS remain implemented, but browser upload/download is still an explicit manual verification item until Chrome file access is enabled.
+
+### 2026-09-02 critical V1 implementation verification
+
+- `npm run check`: pass; 5 tests, TypeScript build, and Vite production build.
+- `npm run test:e2e`: pass; 4 Chromium workflows covering bilingual home/chat/WhatsApp, anonymous dashboard denial, join-form validation, privacy, and 404.
+- `npm audit --audit-level=high`: 0 vulnerabilities.
+- Vite output contains `_headers`, `_redirects`, `robots.txt`, and `sitemap.xml`.
+- Staging deployment `f434ae6`: Cloudflare and CI passed; live Chromium verified anonymous Dashboard denial and privacy rendering; fresh `robots.txt` is `text/plain`, `sitemap.xml` is XML, and CSP/HSTS/X-Frame-Options/Permissions-Policy/Referrer-Policy/X-Content-Type-Options are present.
+- Supabase CLI authenticated as the company account; migration history was reconciled to the already-existing schema, migration `202609020001` was applied, and Edge Function `decide-application` version 1 is ACTIVE. Migration `202609020002` backfills Owner/Admin roles for approved accounts created before the bootstrap trigger.
+- Live Staging onboarding passed using synthetic identity `reid-e2e-1788330139887@example.com`: application insert succeeded and a synthetic PDF CV uploaded to the private bucket. The test record is retained for the Owner's first Dashboard decision test.
+- An unauthenticated `decide-application` request returned HTTP 401 (`Missing authorization header`), confirming the function is not callable without a session.
+- Production Worker build failure was traced to Cloudflare rejecting the wildcard SPA `_redirects` rule as an infinite loop (API code `100324`). The rule was replaced with explicit application routes, which also restores a real edge 404 for unknown paths.
+- Production was deployed manually to Worker `reid`, version `2c51371b-4e23-48ed-bfc4-5b3aab62b393`, after a successful Wrangler dry run. Live verification found the new bundle markers, HTTP 404 for unknown routes, correct robots/sitemap content types, and CSP/HSTS/frame/content-type/referrer/permissions headers.
+- The follow-up connected Worker Build for Git commit `0edb0e6` completed successfully, proving future Git-to-Production deployment is repaired rather than only manually recovered.
+- Owner account verification found one profile and one `user_roles` row in Production. The profile UI was corrected to display role badges and navigate to Dashboard after a successful LinkedIn/profile save; the previous UI silently remained on Profile even when Owner authorization existed.
+- Static secret scan: no committed credential found; Edge Function references runtime-managed `SUPABASE_SERVICE_ROLE_KEY` only.
+- Supabase remote migration/function deployment is complete through `202609020002`; CLI authentication succeeded through the company account.
+- GitHub collaborator downgrade was requested twice through the official API, but GitHub retained `sheikhaalmamari4-cyber` at `write`; Owner-only merge enforcement therefore remains open and was not falsely marked complete.
+- `ai-lap`: intentionally not touched; host remains out of scope while offline.
+### 2026-09-02 comprehensive audit
+
+- `npm run check`: pass; 3 tests, TypeScript build, Vite build.
+- `npm audit --audit-level=high`: 0 vulnerabilities.
+- GitHub Actions: recent feature/develop/main CI runs passed.
+- Production HTTP/title: pass (`200`, `Reid | ريد`).
+- Staging HTTP/title: pass (`200`, `Reid | ريد`).
+- Arabic/English branding and navigation: pass.
+- Login/create-account fields and HTML validation: pass.
+- Google OAuth initiation: pass; full account creation/callback/profile completion not executed.
+- Microsoft provider: fail/not configured (`external.azure=false`).
+- Homepage assistant and WhatsApp URL: pass.
+- Public SEO/legal/404 routes: fail; React fallback returned.
+- Supabase introspection: 14/14 public tables with RLS, 16 policies, audit triggers present, profile social columns present.
+- Supabase Storage: 0 buckets. Realtime publication: 0 public tables.
+- Custom SMTP: disabled.
+- GitHub backup secret: missing; backup workflow not operational.
+- `ai-lap`: not tested because host was reported offline.
+
+## Definition of done
+
+A workflow is done only when its happy path, denial path, validation errors, RBAC/RLS, audit log, notification, responsive UI, and automated tests pass in Staging; Production is deployed through a protected PR; and this file is updated with exact evidence and remaining limitations.
+
+### 2026-09-06 WhatsApp real-number activation and permanent credentials
+
+- Meta registered Reid's real Cloud API number `+968 9730 8003` under phone-number ID `1385771684612322` and WABA `1635487314831752`; Graph API verification returns verified name `Reid`. The former consumer WhatsApp registration was removed by the Owner before the Cloud API registration.
+- Created the Admin system user `Reid API` (`61594205189607`), assigned full access to the Reid app and both Reid WABAs, and generated a non-expiring system-user token with only `whatsapp_business_manage_events`, `whatsapp_business_management`, and `whatsapp_business_messaging`.
+- Stored the permanent access token, Meta App Secret, phone-number ID, registration PIN, webhook verification token and Owner allow-list only in Supabase secrets. No secret value is committed. A live authenticated Graph API lookup of the registered number passed.
+- Added public bilingual `/terms` and `/data-deletion` routes, linked them in the footer and sitemap, and retained `/privacy`. Meta is configured for `reidpro.com`; the legal URL save/publish gate cannot complete until those new routes reach Production.
+- PR `#96` passed Cloudflare Staging, both CI/RLS jobs and authenticated Chromium, then merged to `develop` as `56db5ead`. The resulting Production PR is the existing protected PR `#85`; all checks pass and review is requested from `sheikhaalmamari4-cyber`.
+- At the end of the initial activation pass, the remaining gates were reviewer approval, Production deployment, Meta publication and a two-device conversation; the next entries record which of those subsequently closed.
+- Production follow-up completed: `sheikhaalmamari4-cyber` approved PR `#85`, all seven checks were successful/skipped as designed, and GitHub merged it to `main` as squash commit `43f5bc8`. Cloudflare Workers deployed the commit successfully; `/privacy`, `/terms`, and `/data-deletion` return HTTP 200 on `reidpro.com`.
+- Meta accepted the Reid domain, legal URLs, category and contact configuration and reported “Your app was successfully published”; the WhatsApp use case is now public. The only remaining WhatsApp acceptance test is a real inbound/outbound conversation from a second number added to `WHATSAPP_OWNER_NUMBERS`, because the registered Cloud API business number cannot message itself.
+
+### 2026-09-06 WhatsApp governed agent dispatch
+
+- Meta app `Reid` already has the Supabase `whatsapp-webhook` callback verified and the `messages` webhook field subscribed. The remote Supabase project already holds the verify token, Owner phone allow-list and phone-number ID; values remain secret and browser-inaccessible.
+- Replaced the receipt-only prototype with real governed dispatch. Authorized Owner text is deterministically routed to CEO, Operations, Sales, HR, Finance, Content, Marketing, Analytics, Knowledge, Support or Competitor Intelligence, then enters the same `llm-gateway` classification, provider, rate-limit, L0-L4 approval, prompt-hash and audit path as Dashboard requests.
+- Added a separate 256-bit internal gateway credential and explicit WhatsApp Owner user mapping in Supabase secrets. The gateway accepts this channel only when both the secret and `source=whatsapp` match; ordinary browser authentication remains unchanged.
+- L2-L4 commands return WhatsApp reply buttons for approval/rejection. A decision is accepted only from the same allowed Owner phone and only once for a matching pending command. Local Ollama completion/failure updates the command and sends the bounded result back through Meta; immediate Gemini results return in the original webhook call.
+- Help/menu responses and agent-name routing are bilingual. Unknown/non-text messages receive bounded guidance; unauthorized senders cannot enqueue a command. Event and command message IDs remain idempotent.
+- Smart conversation correction: ordinary greetings, capability questions, analysis and drafting are L0 conversations and no longer inherit an agent's maximum L3 capability. Only an explicitly selected execution tool applies its own L0-L4 approval level. WhatsApp replies now read as a direct personal assistant response instead of a generic `agent reply` wrapper.
+- Gemini Google Search grounding is enabled server-side for Marketing, Content/Social, Competitor Intelligence and Knowledge runs. Those specialists can use current public web information and return up to three source links; database credentials and unrestricted mutation tools are never exposed to the model. Search usage remains subject to the configured Gemini quota/billing policy.
+- WhatsApp dialogue is adaptive rather than menu-driven: a clear request gets a direct answer, missing context produces one focused clarification, and genuinely useful next steps may produce two or three model-selected reply buttons. Button labels are server-capped to Meta's 20-character limit and clicking one re-enters the same isolated Owner conversation and memory context.
+- Intelligence V2 in progress on `feature/whatsapp-intelligence-v2`: personal reminders persist per Owner with Muscat time, explicit list/cancel actions and authenticated minute-level delivery through WhatsApp. Delivery is claimed atomically, retried twice at five-minute intervals, and audited. Explicit `احفظ` creates durable preference memory, `وش تتذكر عني؟` lists only that Owner's durable records, and `انسَ` deletes only matching durable records; ordinary conversation context is temporary and expires after seven days.
+- Deployed updated `llm-gateway`, `whatsapp-webhook` and `ai-lap-runner`. Local verification passes: 131/131 checks and Production build. Existing WhatsApp RLS suite remains 8/8; a real-number send/receive test is still blocked at Meta's mandatory human reCAPTCHA and phone OTP registration.
+
+### 2026-09-06 ai-lap outbound Ollama runtime
+
+- Verified `ai-lap`: Ubuntu 22.04, 31 GiB RAM, NVIDIA RTX 3080 Ti 12 GB, Ollama 0.33.2, `gemma4:12b` and `nomic-embed-text:latest`. A live non-thinking chat returned the requested sentinel and embeddings are exactly 768 dimensions.
+- Installed and live-tested the loopback-only adapter on `127.0.0.1:11436`: correct credential succeeds, missing credential is denied, model administration routes are absent, chat works, and three adapter unit tests pass. Ollama remains bound to loopback.
+- Cloudflare Tunnel was rejected after a real test because the current network blocks its required outbound TCP/UDP 7844 path even with HTTP/2 forced. No public Ollama hostname or inbound port was created.
+- Replaced the tunnel with an outbound HTTPS runner. `ai-lap` claims queued jobs from the private `ai-lap-runner` Edge Function, executes locally, writes the bounded result/768-vector memory back, and emits a 30-second heartbeat. A 15-minute stale-job recovery prevents permanently stranded work.
+- Migration `202609060003` is applied: Ollama is enabled with exact model `gemma4:12b`, all eleven agents use it as primary, and Gemini remains enabled/preserved for deliberate Owner-controlled fallback. Sensitive data never falls back silently.
+- The runner credential was generated locally and stored as a Supabase secret without committing or printing it. `ai-lap-runner` and the queue-aware `llm-gateway` are deployed.
+- Availability routing uses a 90-second heartbeat: fresh `ai-lap` routes to Ollama; a missing/stale heartbeat routes to the already Owner-authorized Gemini provider only after the same classification-ceiling check. Every run persists its actual provider, and a classification that the fallback is not cleared for is refused rather than leaked.
+- Latest Owner runtime decision: the verified local tag is exactly `gemma4:12b` (not `gemma4:12`). Every governed Reid agent is pinned to Ollama on `ai-lap`; Gemini remains enabled but is fallback-only. A stale heartbeat selects Gemini before dispatch, while a claimed local generation failure now makes one governed Gemini fallback attempt, records the actual provider and fallback event, then returns the result through the original channel. If both providers fail, the run is explicitly failed and remains visible.
+- Live proof after deployment: migration `202609060005` applied successfully, `ai-lap-runner` and `llm-gateway` were redeployed, both `ollama` and `reid-agent-runner` services reported active, and manually dispatched GitHub Actions run `34062877483` passed with `EXPECTED_AGENT_PROVIDER=ollama`. This verifies a real authenticated Owner agent run completed through the local provider after the change.
+- The authenticated tool workflow now reflects the corrected approval semantics: L1 content draft creation executes immediately and is still audited; only L2 publication or higher-risk tools wait for human approval.
+- Verification passed locally: 131/131 application checks, Production build, 3/3 adapter tests, Python compilation, 48/48 agent RLS checks, migration/function deployment, runner authentication denial and authenticated heartbeat. The user service is installed, enabled and active on `ai-lap`.
+- Final outbound model completion remains externally blocked: the server reaches its LAN gateway and is reachable over SSH/ZeroTier, but has no Internet route or DNS response, including direct `1.1.1.1`/HTTPS. Gemini fallback engaged correctly but its conservative 18-request free-tier daily budget was already exhausted. Regular CI therefore continues to require the live tool workflow without spending model quota; the dedicated live-provider workflow verifies Ollama after Internet returns (or Gemini after its UTC-day quota resets).
+
+### 2026-09-06 governed agent tools and scoped memory V1
+
+- Work is active on `feature/agent-tools-memory-v1`. Migration `202609060001` adds a centrally audited tool catalog, agent-to-tool assignments, execution receipts and bilingual content drafts. Every tool declares its operation, JSON input contract and approval level; the gateway takes the stricter of the agent and tool levels before any mutation runs.
+- The first real tools cover bounded project/task reads, task creation, CRM pipeline and follow-up creation, employee/application reads, onboarding creation, budget reads and L3 budget updates, content context/drafts and L2 publication, plus authorized knowledge search. Service-role execution is available only after the caller has passed the existing authenticated agent gate; Gemini never receives a database credential or arbitrary table/column selector.
+- All eleven agents now have distinct operating prompts and persisted tool IDs. HR has no finance mutation, Finance has no CV/application access, and Content publication remains a separate L2 action. This separation is enforced by `agent_tool_assignments`, not by prompt wording.
+- Durable memories retain the five scopes `user`, `project`, `department`, `company`, and `agent`, and now record creator, source run, title and update time. Gateway retrieval no longer passes every memory to every agent: it selects only the current agent, Reid company, requesting user, and explicitly selected project/department scopes, capped to 24 recent records.
+- The Owner Agent Map loads the live tool catalog and invokes tools through the gateway. Tool results and failures remain tied to an `agent_run`; successful executions add a separate hash-only receipt without retaining raw arguments.
+- Pre-live verification caught that the older private approval payload constraint allowed only `run/embed`; corrective migration `202609060002` adds `tool`, so L2/L3 tool calls can wait for approval without weakening payload RLS. A dedicated live test covers immediate Operations read plus approved Content draft creation, execution receipt and cleanup.
+- The tool workflow is mandatory in every authenticated PR job through `LIVE_TOOL_E2E=1`; unlike the separately scheduled provider check it makes no Gemini call and therefore does not consume the free-tier model quota.
+- The first mandatory live attempt exposed that the gateway still counted non-model tool runs against Gemini's 18/day budget. Tool actions now bypass provider request counters while retaining session, account-status, agent assignment, provider-clearance, approval and audit enforcement; only `run/embed` consume model quota.
+- The repeated mandatory authenticated workflow passed on PR `#93`: a disposable Owner executed `projects.list` through Operations, queued `content.draft.create` through Content, approved the L2 run, received the created draft, verified the successful `agent_tool_executions` receipt, and deleted the draft/run/test identities. RLS, application checks and Cloudflare Staging also passed.
+- Local application verification: 131/131 Vitest checks and the TypeScript/Vite Production build pass; `git diff --check` passes; linked database lint reports no schema errors and the dry run lists only `202609060001`. Both PostgreSQL CI/RLS jobs and Cloudflare Staging passed on PR `#91`. The generic authenticated job exposed that invoking Gemini on every PR exhausts the deliberately tiny free-tier daily quota; provider verification now has a dedicated daily/manual workflow, while role-browser checks remain mandatory per PR. Remote migration, Edge Function deployment, authenticated Staging tool workflows and the protected Production release remain mandatory before calling this live.
+
+### 2026-09-05 Owner agent command map redesign
+
+- Replaced the flat Agent Command cards with a responsive animated operating map. The CEO/Orchestrator is the single root; Operations, Growth, Revenue, Knowledge, HR and Finance form the governed domains; Analytics, Content/Social, Competitor Intelligence and Support appear as linked specialists under their operating lead.
+- The eleven database agents remain separate identities. No HR, finance, CRM or company memory is merged: grouping is visual and operational only, preserving least privilege, independent prompts, audit trails and approval levels.
+- Every node is driven by live provider/agent/run data and displays ready, working, approval, paused, security-blocked or error state. Animated connections visualize active routing, while blocked connections are visibly distinct and do not imply a working provider.
+- Selecting a node opens its purpose, queue, run count, latency, token usage, tools, memory scopes, provider/model, classification, approval level, manual run, pause/resume, recent logs, approval/rejection and failed-run retry controls.
+- Enable/disable is visibly Owner-only in the interface. Admin operational controls and database RLS remain authoritative; sensitive agents stay blocked while Gemini's public-data ceiling is the only available provider and `ai-lap` remains offline.
+- The layout supports Arabic/English, light/dark themes, narrow screens and reduced-motion preferences. Unit coverage now validates the 11-node rooted topology and distinct blocked/paused/approval states. Local verification: 129/129 Vitest checks and the Production TypeScript/Vite build pass.
+- Remaining release evidence: authenticated Owner interaction on Cloudflare Staging, authenticated non-Owner denial check, and the normal develop then Owner-approved Production PR. This entry must not be represented as Production-live before those gates pass.
+
+### 2026-09-05 public-site and company-workspace separation
+
+- Separated the public Reid experience from the signed-in company operating system at the application-shell level. Public pages keep the compact marketing header; authenticated company routes now use a persistent role-derived sidebar and a smaller context top bar.
+- The sidebar is generated from the same central route manifest and session roles as the authorization gate. It can never advertise CRM, Dashboard, Research or another module to a role that cannot open it; database RLS remains the final security boundary.
+- The company shell includes Dashboard, Employees/Workspace, Projects, Research, CRM and Profile when permitted, plus sign-out. Desktop uses a fixed navigation rail; mobile uses an off-canvas menu with RTL-correct direction and reduced-motion support.
+- Removed implementation trivia (`11 Agents`, `5 Project Types`, `RLS`) from the public hero. It now communicates customer outcomes: tailored solutions, end-to-end delivery and governed security. Internal technical health remains inside the Owner Agent Command Map.
+- Reused the existing Reid token system, logo, bilingual copy, light/dark themes and all existing business modules. No data table, workflow or permission was removed.
+- Local verification passes: 131/131 unit/contract/security-style tests, TypeScript/Vite Production build, 10/10 public Chromium workflows, and `git diff --check`. Authenticated Employee/Manager/HR browser cases are configured for CI where protected test credentials exist.
+- Remaining release gates: PR CI/RLS/authenticated-browser, Cloudflare Staging visual and role verification, merge into `develop`, then a separate Owner-approved Production release to `main`.
+
+### 2026-09-05 Resend verification and live weekly delivery
+
+- Resend now reports `reidpro.com` as `Verified`; the existing SPF, DKIM and MX records were accepted without recreating DNS records or API credentials.
+- A manual weekly Executive Reports workflow ran from `main` as GitHub Actions run `33968156023`. The deployed Supabase Edge Function returned report id `bead7999-7075-4fc5-b354-2b35d41a78cc` with `email_status: sent`.
+- The successful response proves the generated `executive_reports` row was updated to `sent` by the function after Resend accepted the Arabic weekly email for both configured Admin recipients. No credential was printed or changed.
+- The scheduled daily report generation and Sunday weekly email workflow remain active. The temporary `verify-reid-email` heartbeat is no longer needed after this verified delivery.
+
+### 2026-09-05 Gemini primary runtime and governed company context
+
+- The Owner explicitly authorized Gemini as the temporary full runtime for all Reid agent classifications, including HR, CRM and finance, while requiring the dormant `ollama`/`ai-lap` provider to remain intact for a later switch back. Migration `202609050004_gemini_primary_agent_runtime.sql` raises Gemini's clearance to `restricted`, enables all eleven agents, preserves their original classifications and L2/L3 approval levels, and does not delete or modify the Ollama endpoint.
+- The gateway now builds a bounded, server-side allow-listed context for each agent. Operations/Analytics receive projects and tasks; Sales/Support receive CRM leads, deals and follow-ups; HR receives employee/application/CV metadata; Finance receives project budgets and pipeline values; Content/Marketing/Competitor receive announcements and public projects; Knowledge receives project/research document metadata. CEO receives the executive operating and CRM views.
+- Models never receive database credentials and cannot select arbitrary tables or columns. Context is capped, prompts remain hash-only in `agent_runs`, every invocation is audited, and the existing approval gateway runs before any L2/L3 execution.
+- Successful runs now create an embedded, Agent-scoped memory record on a best-effort basis. Existing User/Project/Department/Company/Agent memory scopes remain separate, and the migration adds RLS for self/project/department reads plus Owner/Super Admin writes.
+- This change sends sensitive bounded context to Google's API by explicit Owner decision. It does not connect social-platform publishing credentials, payment rails, deletion tools, or contract execution; those external mutations must not be represented as completed. Switching back later requires verifying `ai-lap`, enabling `ollama`, restoring each provider assignment, and lowering Gemini's clearance.
+- PR `#83` passed CI, RLS, authenticated-browser and Cloudflare Staging checks and was merged into `develop` at `9ef2a6f`. Migration `202609050004` was then applied to the linked Reid Supabase project and the `llm-gateway` Edge Function was deployed successfully; Gemini is therefore the active governed provider while the Ollama provider remains preserved and dormant.
+- PR `#84` adds a live authenticated Owner smoke test. It creates an isolated Owner fixture, invokes the deployed `llm-gateway` as Operations with `internal` classification, receives a real run id, and verifies the persisted run used provider `gemini`, reached `succeeded`, and recorded positive latency. GitHub CI, the 131-check suite/build, RLS, authenticated Chromium and Cloudflare Staging all passed on commit `e94a382`.
+
+### 2026-09-05 public Gemini assistant redesign
+
+- Replaced the homepage's scripted two-response widget with the server-side `public-assistant` Gemini Edge Function. The browser receives no provider credential and the assistant is restricted to public Reid services, projects and join-request guidance; it has no internal company context or mutation tools.
+- Removed the permanently visible WhatsApp action. Human-contact intent is recognized in Arabic and English, and only then does the conversation reveal a prefilled WhatsApp handoff to the Reid team. Ordinary questions remain inside the assistant.
+- Redesigned the chat as a responsive bilingual conversation panel with a branded identity, online state, welcome message, starter prompts, distinct bubbles, typing and loading states, auto-scroll, reduced-motion handling, an explicit privacy reminder, and accessible labels.
+- Local verification passes: 131/131 unit/contract/design-token tests, Production TypeScript/Vite build, and 10/10 public Chromium workflows. The browser suite explicitly verifies that WhatsApp is absent on open and appears only after the visitor requests a person.
+- `public-assistant` was deployed to the linked Reid Supabase project after PR `#87` passed its first CI/RLS/authenticated-browser/Cloudflare cycle. Two direct live invocations passed: an Arabic services question returned a complete Gemini answer with `handoff: false`, while “أريد أتحدث مع شخص” returned `handoff: true`. Gemini 3's low thinking level and a 1,024-token response ceiling prevent internal reasoning tokens from truncating the visitor answer. The redesigned frontend remains gated from Production until merge through `develop` and the Owner-approved `main` PR.
+
+### 2026-09-05 temporary Gemini free-tier budget
+
+- The Owner supplied AI Studio evidence of a 5 RPM / 20 RPD text-model allowance and requested temporary free-tier operation. Company agents now use `gemini-3.8-flash`, while the public website assistant remains on `gemini-3.6-flash`, separating the two model quotas instead of making public traffic consume the internal agent allowance.
+- The company gateway enforces a conservative maximum of 5 authenticated runs per user per hour and 18 total Gemini agent runs in a rolling 24-hour period, reserving two of the provider's 20 daily requests for verification/recovery. The existing classification, approval and audit gates remain unchanged.
+- Public assistant Gemini calls use an atomic service-only daily counter capped at 18 UTC-day requests. The counter is RLS-hidden from browsers; human-handoff requests do not consume Gemini quota. At exhaustion the visitor receives an explicit limit message and the human contact option instead of an unexplained provider failure.
+- This is a temporary availability/cost control, not production capacity. Upgrade to Gemini Paid or restore verified `ai-lap` before promising unrestricted agent or public-chat availability.
+
+### 2026-09-08 WhatsApp action suite
+
+- Active work is on `feature/whatsapp-action-suite`. The QR bridge remains Ollama-first (`gemma4:12b`) through the loopback adapter; Gemini fallback behavior is unchanged.
+- Added an authenticated, allow-listed bridge surface to `ai-lap-runner`. A WhatsApp phone maps to an existing Owner/Super Admin profile before any operation. The model never receives a database credential or arbitrary table selector.
+- Implemented real project summaries from projects, tasks, overdue items, milestones and KPIs; results include the corresponding Reid project URL. Meeting transcripts are structured into summary, decisions and tasks, shown as a preview, and only saved to the named project after an explicit approval message.
+- Implemented isolated personal/group memory list and save operations, plus explicit deletion scaffolding. User memory is keyed by the authenticated Owner profile; group memory uses a separate WhatsApp group scope identifier.
+- Implemented knowledge lookup across authorized Reid project, research and employee document metadata plus memories. Replies must identify returned source records and state when evidence is insufficient. Google Drive full-text/page citations remain dependent on its OAuth/indexing connection and must not be claimed as active.
+- Implemented a content-studio draft flow: bilingual channel-ready copy and visual direction, preview, explicit approval, then persistence to `content_drafts`. External Instagram/LinkedIn scheduling, publication and performance retrieval remain unavailable until their business credentials/connectors are configured; the bridge states this rather than claiming publication.
+- Reminder handling now supports weekly recurrence, listing, snoozing and cancellation with Asia/Muscat formatting. Reminder data stays in an atomic private local store and recurring reminders advance seven days after successful delivery.
+- PDF, XLSX and DOCX generation remains supported. The bridge now retains the latest generated report per isolated conversation so a follow-up edit regenerates the same format. Image invoice extraction and screenshot troubleshooting use the existing vision path; voice notes use the existing local transcription path. Voice synthesis is not active because the adapter has no TTS route/model.
+- Added local execution lifecycle records (`running`, `completed`, `failed`) with short request IDs and 30-day pruning. Failed cloud operations return the failure ID and do not claim success.
+- Local verification passes: 25/25 WhatsApp bridge tests, Node syntax checks and `git diff --check`. The local machine could reach `ai-lap` over SSH and both bridge/runner services were active, but DNS resolution to Supabase timed out during deployment. Therefore the new Edge Function and bridge files have not yet been activated on `ai-lap`; deploy the function first, then the bridge, and perform non-mutating live project/memory checks before enabling meeting/content mutations.
+
+### 2026-09-08 governed image studio
+
+- Added a WhatsApp-first image studio that keeps `gemma4:12b` as the request planner and uses a separate server-side Gemini image model only for pixel generation/editing. The default is `gemini-3.1-flash-image`, configurable with `GEMINI_IMAGE_MODEL`; provider keys never reach WhatsApp, the browser or Ollama.
+- Requests support Instagram/LinkedIn posts, 9:16 stories, 16:9 banners and website images, plus 1:1, 4:5, 3:2 and 2:3. Up to three alternatives may be generated per request. A fixed Reid brand contract supplies the approved purple/plum/lavender palette, premium minimal direction, bilingual-text accuracy rules and a prohibition against inventing/distorting the logo.
+- A supplied or quoted WhatsApp image can be edited, resized or have its background removed. Subsequent edits create monotonically numbered versions on the same asset. The active version can be rolled back; any edit resets approval to `draft`.
+- Migration `202609080001` adds private `content_assets`, immutable `content_asset_versions`, a private `content-assets` bucket and an atomic daily generation counter. Project-bound assets are stored under the project's existing private bucket and receive a `project_files` record.
+- Image generation is L1/draft-only. Explicit Owner approval records L2 without publishing. Scheduling is refused until the asset is approved, and scheduling only records intent: Instagram/LinkedIn publication remains unavailable until the corresponding business connector is configured. No automatic publish path was added.
+- The default daily generation budget is 10 images and may be lowered with `CONTENT_IMAGE_DAILY_LIMIT`. The budget is claimed atomically before provider calls and the WhatsApp response shows the remaining daily allowance.
+- WhatsApp sends each generated alternative as an actual image, identifies the asset/version, and offers approve or iterative edit. The latest image remains isolated per sender/conversation for follow-up editing.
+- Local verification passes 26/26 bridge tests, including image-planner controls, Node syntax and diff checks. Database contract checks cover the three new tables, private bucket and atomic claim/refund budget functions.
+- Migrations `202609080001` and `202609080002` are applied to the linked Supabase project, `ai-lap-runner` is deployed, and the QR bridge was backed up, updated and restarted active on `ai-lap`. A bounded one-image provider test reached Google but returned HTTP 429, so no image was produced. The unused Reid allowance is refunded atomically and WhatsApp now reports the provider-quota condition clearly. The studio workflow is deployed, but actual pixel generation must not be called operational until the Google image quota/billing is enabled or a separate local image generator is installed and verified.
+
+### 2026-09-08 free local image provider
+
+- Image generation no longer depends on a paid Google image quota. `ai-lap` hosts a loopback-only SDXL-Turbo service on `127.0.0.1:11437`; only the existing authenticated Reid adapter may call it through `/api/images`, and the Cloudflare tunnel continues to expose the restricted adapter rather than the generator itself.
+- `ai-lap-runner` sends image generation and image-to-image edits to the private local provider first. Gemini remains configured for text fallback only and image billing was not enabled. The existing atomic 10-image daily allowance, private Storage, version history, L2 approval and no-auto-publish rules remain unchanged.
+- The service is a persistent user-systemd unit with bounded request sizes, one GPU generation at a time, protected filesystem access, automatic restart, and CUDA out-of-memory recovery. Model weights remain cached only on `ai-lap`.
+- Local application verification passed 155/155 tests, all 26 WhatsApp bridge tests, Python compilation and the Production build. The warm local adapter generated a real 694 KB PNG in 2.5 seconds. The deployed end-to-end path then generated another image, authenticated to `ai-lap-runner`, stored asset `42f42651-b68f-4847-b5b3-b06f8f077a58` with one private version, returned the pixels and completed in 4.0 seconds. No WhatsApp message was emitted by these tests. The local image provider is operational; the synthetic asset is retained as an auditable smoke-test artifact.
+- The initial Turbo result exposed a real prompt-order defect: the long branding preamble consumed CLIP's 77-token window and truncated the requested subject. Image requests now pass through `gemma4:12b` for strict Arabic-to-English prompt translation, place the exact subject/action first, and prohibit unwanted collages, mood boards, palette charts, gibberish text and invented marks.
+- The pixel model is upgraded to `stabilityai/stable-diffusion-xl-base-1.0` at 28 inference steps with negative prompting. A visual crocodile-swimming regression produced the requested animal/action rather than the prior unrelated interior. The final CPU-offload configuration generated a 775 KB PNG in 35 seconds, returned GPU use to 635 MB afterward, and unloads resident Ollama weights before image inference to stay within the RTX 3080 Ti's 12 GB VRAM.
+- Direct WhatsApp support is now open to any sender, while `isOwner` remains true only for Ali and Sheikha. Public users receive conversation, media and document help but cannot invoke company data/tools. They may generate or edit one image at a time with a persisted two-images-per-number daily limit; Owner images retain the governed ten-image company allowance, private storage, history and approval flow. Group membership no longer promotes users to Owner authority.
+- Verification after the quality/public-support change passed 27/27 bridge tests, 155/155 app tests, Python compilation, the Production build, all three live `ai-lap` services, and a warm high-quality local generation. No WhatsApp test message was sent.
+
+### 2026-09-08 Owner outbound WhatsApp messaging
+
+- Ali and Sheikha may ask Reid to send a WhatsApp message by a synchronized contact name or an explicit international/Oman phone number. The planner separates recipient and message; phone numbers are checked with WhatsApp before confirmation, ambiguous names return a bounded choice list, and unknown names request the number instead of guessing.
+- Sending is L2: Reid shows the resolved recipient and exact message, then requires `موافقة` or `رفض`. Only an authenticated Owner reaches this branch. Public direct-chat users retain general assistance and their bounded image feature but cannot send through the company number or use internal tools. Calling remains deliberately unimplemented.
+- The encrypted local action store persists the bounded contact directory learned from WhatsApp contact sync and direct-chat display names. It never grants a role based on a contact name; authorization continues to use the exact Owner phone/LID allow-list.
+- Local verification passed 28/28 bridge tests, including contact/name/number resolution, plus 155/155 app tests and the Production build. Deployment copied the implementation to `ai-lap`, but the restart authoritatively returned `logged_out`: the prior linked-device session was revoked outside this change. The restart loop was stopped. Preserve the 81-file auth directory as a backup and require a fresh human QR link before claiming live send/receive or contact synchronization. No outbound acceptance message was sent.
+
+### 2026-09-08 WhatsApp request lifecycle and controlled memory
+
+- The request planner now distinguishes status checks, safe retry, cancellation/undo and human handoff in addition to the existing company, content, media and reporting intents. It emits one bounded clarification question when a required field is missing instead of repeatedly interrogating the user.
+- Execution records are isolated by sender and conversation and expose the latest request id and state. Failed work can only be returned to `pending_approval`; retry never repeats an outbound message or company mutation automatically. Running or approval-pending work may be cancelled, while completed sends and mutations explicitly refuse false rollback claims.
+- Personal and WhatsApp-group memories can now be deleted by the short identifier shown in the memory list. The runner checks the authenticated owner and exact personal/group scope before deletion, preventing a memory id from being used across users or groups.
+- Local verification passes 30/30 bridge tests, including retry approval, lifecycle isolation, handoff and cancellation; the full application remains at 155/155 passing tests, the Production build passes, Node syntax checks pass and `git diff --check` is clean.
+### 2026-09-30 unified redesign, transparent approvals and ai-lap monitoring
+
+- Redesigned the public/authenticated surfaces requested by the Owner: research list/detail, workshops, accounts/admin, connections, profile, sign-in, join and the public shell now use the Reid 2 token system, responsive layouts and the existing light/dark themes. Business rules, route authorization and RLS remain unchanged.
+- Sensitive agent approvals now persist and display the requested operation plus a bounded input summary. Secret/token/password-like values are redacted and URL query strings are stripped before persistence; the full raw tool payload remains in the existing private execution path.
+- Migrations `202609300002` and `202609300003` are applied. `llm-gateway` and `ai-lap-runner` are deployed. Runner telemetry separates cloud heartbeat latency from the authenticated adapter/model-health round trip, and the Connections screen refreshes live model latency every ten seconds.
+- The local ai-lap source is versioned at `1.3.0`; health advertises chat, JSON, vision, embeddings, transcription and image generation plus the Ollama round-trip. Live tunnel checks returned authenticated health, valid JSON chat and a real red-image vision answer. The current SSH key is deliberately port-forward-only, so adapter/service files on the physical laptop cannot be replaced through that credential; a shell-capable ai-lap login is still required to install version 1.3.0 there.
+- The weekly-backup workflow no longer depends on a long-lived database password. It uses a Supabase access token to mint a temporary login role for the exact Reid project; the same clean-checkout schema dump succeeded locally. GitHub still needs the existing local token written into `SUPABASE_ACCESS_TOKEN` from an authenticated GitHub session.
+- The backup proof now runs the matching Supabase Postgres 17.6 image, disables its platform event triggers only inside the disposable restore service, and dumps only the `public` schema. A complete local schema/data restore recreated all 87 public tables; this also removes the old failure caused by trying to restore managed Auth rows into a different Auth schema revision.
+- WhatsApp web search was live-tested with Tavily and the local model: three current Sohar University sources were found in 2.19 seconds and synthesized with citations in 4.96 seconds total. Search synthesis now uses the bounded intent profile (192 output tokens, 35-second ceiling) instead of the long-report profile; if inference fails, WhatsApp still returns the external snippets and sources instead of an error.
+- Verification: 362/362 frontend tests, Production TypeScript/Vite build, 195/195 WhatsApp service tests, 18/18 ai-lap Python tests, database migrations, Edge Function deployments, live search/model/vision/audio probes, full backup restore and service health checks pass. Linked database lint continues to report the pre-existing `match_memories` vector-operator issue, unrelated to these migrations.
+# 2026-10-04 instant Reid meetings — implementation ready, provider activation pending
+
+- WhatsApp now has deterministic Owner-only commands for an immediate voice meeting: `خلنا ندخل ميتنج`, `نبدأ ميتنج`, `نسوي ميتنج`, and `أرسل لي رابط ميتنج`; `حالة الميتنج` reports the current session and `أنهي الاجتماع` ends it. A start request is deliberately immediate and does not use the sensitive-operation approval queue. The action ledger and `reid_meetings` table still provide an audit receipt.
+- `server/meetings.mjs` creates a Google Meet space through the Meet REST API with `accessType=OPEN`, `entryPointAccess=ALL`, and moderation off, then starts an ad-hoc Recall bot named `Reid | ريّد`. The reply is sent only after both providers succeed; failures are recorded and never described as a successful join. One active meeting per Owner is enforced in PostgreSQL.
+- Google uses a separate least-privilege OAuth grant (`meetings.space.created`). Refresh tokens are AES-256-GCM encrypted with `SESSION_KEY` in the service-role-only `meeting_connections` table. The OAuth state is HMAC-signed and expires after ten minutes. Google passwords are never stored or used by the service.
+- Migration `202610040002_reid_live_meetings.sql`, API routes, WhatsApp grammar, and the Connections setup/status panel are deployed from commit `b711e0a`. The existing Supabase Google application's client ID/secret were copied privately into `service.env` without printing them. Production activation still requires adding `https://reidpro.com/api/meet/google/callback` to that Google OAuth client's authorized redirect URIs, adding a private `RECALL_API_KEY`, connecting the existing ElevenLabs account inside the matching Recall region, setting `RECALL_TRANSCRIPTION_READY=1`, and completing the Owner OAuth button. Until those external steps are done, do not claim that live meetings work.
+- The follow-up commit adds a signed eight-hour Recall Output Media page, multilingual ElevenLabs realtime transcription configuration, bounded meeting-turn history (`202610040003_reid_meeting_voice_turns.sql`), local Reid LLM answers, and the existing ElevenLabs voice played back into the call. Sensitive spoken requests are referred to WhatsApp for the governed preview/confirmation path. WhatsApp document discussion is still not implemented and must not be claimed complete. The server suite is 209/209, frontend 362/362, and the production build passes.
+# Latest verification update
+
+- Updated the authenticated role journeys to select the redesigned sign-in action by its accessible Arabic name inside the main login region instead of the removed legacy `.primary` CSS class. The main-region scope distinguishes the form submit button from the same-named navigation action and keeps employee, manager, HR, and owner browser checks aligned with the current login UI.
+- The same remote browser suite now validates the redesigned People and Clients vocabulary (`الفريق`, `ملفي`, `الأشخاص`, `العملاء`) while retaining its real role, department-visibility, and CRM-access assertions. Removed headings and controls from the legacy workspace are no longer treated as the expected product behavior.
+
+### 2026-10-12 production model center and WhatsApp access release
+
+- Production serves `main` commit `5304da7`. PR `#153` delivered the Owner model center, governed WhatsApp group/user permissions, durable customer handoff records, content-free provider usage telemetry, and prompt/completion token accounting. PR `#154` added the public-site assistant to that same provider usage ledger after a live verification exposed the missing direct-call metric.
+- Linked Supabase migrations `202610100002` and `202610120001` are applied. `llm-gateway` version 7 and `ai-lap-runner` version 8 are active. The host API and web images were replaced only after 250/250 server tests, 372/372 frontend tests, the RLS harness, the Production build, authenticated browser checks, Cloudflare checks and the Arabic PDF verifier passed.
+- `Reid ai-lap` is the only enabled provider. A direct restricted SSH-tunnel check reached the physical adapter, `gemma4:12b` returned a real chat answer, and `nomic-embed-text:latest` returned a numeric 768-dimensional embedding. The runner heartbeat is online on `gemma4:12b`; its adapter round-trip was 46 ms at verification time. The SSH credential intentionally permits only loopback port forwarding and cannot open a host shell.
+- `Google Gemini API` remains present but disabled and untested. Its configured model labels are `gemini-3.8-flash` and `gemini-embedding-001`; these must not be represented as working until an Owner stores a key in Vault and the dashboard test succeeds.
+- A live public assistant probe returned the requested answer and persisted a `public_chat` event with 240 prompt tokens, 7 completion tokens, 247 total tokens and 7,666 ms latency. Historic total-token counts remain visible; input/output splits begin with this release for the paths that report them.
+- Production health reported website, database, WhatsApp, ai-lap, TTS and queues all healthy. WhatsApp relinked after both API swaps; pending jobs and outbox rows were zero, and no WhatsApp test message was sent. The only discovered group is `Reid_Owner`; it remains explicitly enabled while newly discovered groups still default to silent.
+- API rollback tags are `reid-services:pre-model-center-20261012-140018` and `reid-services:pre-public-usage-20261012-141058`. The web rollback tag is `reid-web:pre-web-202610121401`.

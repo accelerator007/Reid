@@ -16,6 +16,8 @@ type ProjectLink = { id: string; name: string; status: string };
 
 export function Today({ lang, go }: { lang: Lang; go: (page: Page) => void }) {
   const { user, roles } = useSession();
+  const [focusedTask,setFocusedTask]=React.useState<string|null>(()=>new URLSearchParams(location.search).get('task'));
+  React.useEffect(()=>{const follow=()=>setFocusedTask(new URLSearchParams(location.search).get('task'));addEventListener('popstate',follow);return()=>removeEventListener('popstate',follow);},[]);
   const [tasks, setTasks] = React.useState<MyTask[] | null>(null);
   const [projects, setProjects] = React.useState<ProjectLink[]>([]);
   const [notices, setNotices] = React.useState<Notice[]>([]);
@@ -28,7 +30,7 @@ export function Today({ lang, go }: { lang: Lang; go: (page: Page) => void }) {
   const load = React.useCallback(async () => {
     if (!supabase || !user) return;
     const [mine, visible, updates] = await Promise.all([
-      list<MyTask>(supabase.from('tasks').select('id,title,status,priority,due_at,project_id').eq('assignee_id', user.id).neq('status', 'done').order('due_at', { nullsFirst: false }).limit(60)),
+      list<MyTask>(supabase.from('tasks').select('id,title,status,priority,due_at,project_id').eq(focusedTask?'id':'assignee_id',focusedTask||user.id).not('status','in','(done,cancelled)').order('due_at', { nullsFirst: false }).limit(60)),
       list<ProjectLink>(supabase.from('projects').select('id,name,status').is('archived_at', null).order('updated_at', { ascending: false }).limit(6)),
       list<Notice>(supabase.from('notifications').select('id,title_ar,title_en,body_ar,body_en,read_at,created_at').order('created_at', { ascending: false }).limit(10)),
     ]);
@@ -36,7 +38,7 @@ export function Today({ lang, go }: { lang: Lang; go: (page: Page) => void }) {
     if (visible.ok) setProjects(visible.data);
     if (updates.ok) setNotices(updates.data);
     setError(!mine.ok ? mine.error : !visible.ok ? visible.error : !updates.ok ? updates.error : null);
-  }, [user]);
+  }, [user,focusedTask]);
   React.useEffect(() => { void load(); }, [load]);
 
   const complete = async (task: MyTask) => {
@@ -88,6 +90,7 @@ export function Today({ lang, go }: { lang: Lang; go: (page: Page) => void }) {
         <IconButton label={tr(lang, 'تحديث', 'Refresh')} icon={<RefreshCw />} onClick={() => void load()} />
       </section>
 
+      {focusedTask&&<InlineAlert tone="info" action={<Button size="sm" onClick={()=>setFocusedTask(null)}>{tr(lang,'عرض مهامي','Show my tasks')}</Button>}>{tr(lang,'المهمة المحددة للمتابعة','Selected follow-up task')}</InlineAlert>}
       {error && <InlineAlert action={<Button size="sm" onClick={() => void load()}>{tr(lang, 'إعادة المحاولة', 'Retry')}</Button>}>{messageFor(error, lang)}</InlineAlert>}
 
       <section className="day-stats" aria-label={tr(lang, 'ملخص يومي', 'My day at a glance')}>

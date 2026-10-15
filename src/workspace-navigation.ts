@@ -38,7 +38,7 @@ const labels: Partial<Record<Page, { ar: string; en: string }>> = {
   workshops: { ar: 'الورش', en: 'Workshops' },
   workspace: { ar: 'فريق الشركة', en: 'Company team' },
   inbox: { ar: 'واتساب', en: 'WhatsApp' },
-  dashboard: { ar: 'إعداد الوكلاء', en: 'Agent setup' },
+  dashboard: { ar: 'النظام والذكاء', en: 'System & AI' },
   forms: { ar: 'النماذج', en: 'Forms' },
   admin: { ar: 'الإدارة', en: 'Administration' },
   connections: { ar: 'الربط والتكاملات', en: 'Connections' },

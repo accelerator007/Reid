@@ -2,7 +2,7 @@
 // which holds the linked phone. The service checks the owner role on every
 // request; nothing here reaches the phone directly.
 import { localApi } from '../local-api';
-import type { AiHealth, AssistantAction, Chat, ChatMessage, Connection, OperationsHealth, OutboxItem, WhatsappAccess, WhatsappGroupAccess, WhatsappHandoff, WhatsappSettings, WhatsappUserAccess } from './model';
+import type { AiHealth, AssistantAction, Chat, ChatMessage, Connection, OutboxItem, WhatsappAccess, WhatsappGroupAccess, WhatsappHandoff, WhatsappSettings, WhatsappUserAccess } from './model';
 
 export const loadStatus = () => localApi<Connection>('whatsapp/status');
 export const loadChats = () => localApi<Chat[]>('whatsapp/conversations');
@@ -10,7 +10,6 @@ export const loadOutbox = () => localApi<OutboxItem[]>('whatsapp/outbox');
 export const loadActions = () => localApi<AssistantAction[]>('whatsapp/actions');
 export const loadSettings = () => localApi<WhatsappSettings>('whatsapp/settings');
 export const loadAiHealth = () => localApi<AiHealth>('ai/health');
-export const loadOperationsHealth = () => localApi<OperationsHealth>('operations/status');
 export const loadAccess = () => localApi<WhatsappAccess>('whatsapp/access');
 export const loadHandoffs = () => localApi<WhatsappHandoff[]>('whatsapp/handoffs');
 export const saveSettings = (settings: WhatsappSettings) => localApi<WhatsappSettings>('whatsapp/settings',{

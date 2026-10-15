@@ -41,7 +41,6 @@ export type AssistantAction = {
   output_summary: string|null; error_code: string|null; created_at: string;
 };
 export type AiHealth = { online: boolean; model: string; latencyMs: number|null; capabilities: string[] };
-export type OperationsHealth = { components?: Record<string,{status?:string;detail?:string}> };
 
 export const isGroup = (jid: string) => jid.endsWith('@g.us');
 

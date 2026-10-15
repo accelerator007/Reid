@@ -28,6 +28,27 @@ export type ProviderInput = {
   retains_data:boolean;requests_per_hour:number;requests_per_day:number;notes:string|null;api_key?:string;
 };
 
+export type ServiceHealth = {
+  status:'healthy'|'degraded'|'unavailable'|'unknown';
+  latencyMs?:number;
+  connection?:string;
+};
+export type HostTelemetry = {
+  name:string;lastSeenAt:string|null;fresh:boolean;cpuPercent:number|null;
+  memoryUsedGb:number|null;memoryTotalGb:number|null;diskUsedPercent:number|null;
+};
+export type OperationsSnapshot = {
+  checkedAt:string;
+  components:{
+    website:ServiceHealth;ai:ServiceHealth;tts:ServiceHealth;database:ServiceHealth;
+    whatsapp:ServiceHealth;runner:ServiceHealth;
+  };
+  queue:{pending:number|null;failed:number|null;uncertain:number|null};
+  activity:{lastInboundAt:string|null;lastOutboundAt:string|null};
+  host:HostTelemetry;
+  websiteHost:HostTelemetry;
+};
+
 const providerList=async():Promise<Result<ProviderRow[]>>=>{
   try{return {ok:true,data:await localApi<ProviderRow[]>('llm/providers')};}
   catch(error){return {ok:false,error:toAppError(error)};}
@@ -69,6 +90,7 @@ export const testProvider=(id:string)=>localApi<{ok:boolean;latency_ms:number;mo
 export const setProviderEnabled=(id:string,enabled:boolean)=>localApi<ProviderRow[]>(`llm/providers/${id}/enabled`,{enabled});
 export const deleteProvider=(id:string)=>localApi<ProviderRow[]>(`llm/providers/${id}`,{},'DELETE');
 export const assignAgentProvider=(agentId:string,providerId:string)=>localApi<{ok:boolean}>(`llm/agents/${agentId}/provider`,{provider_id:providerId},'PATCH');
+export const loadOperationsStatus=()=>localApi<OperationsSnapshot>('operations/status');
 
 /** Live updates from the three tables this page shows, nothing wider. */
 export function subscribeToAgents(manage: boolean, onChange: () => void) {

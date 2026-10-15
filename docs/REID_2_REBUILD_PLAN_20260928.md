@@ -1,3 +1,5 @@
+> Historical plan. Current architecture and status are in [AGENTS.md](../AGENTS.md); current integration steps are in [INTEGRATION_ACTIVATION.md](../INTEGRATION_ACTIVATION.md). Pending items below describe the date of this plan.
+
 # خطة إعادة بناء ريّد — Reid 2.0
 
 التاريخ: 28 سبتمبر 2026

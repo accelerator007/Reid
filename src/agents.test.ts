@@ -11,6 +11,7 @@ const localPrimaryMigration=readFileSync(new URL('../supabase/migrations/2026090
 const localRunner=readFileSync(new URL('../supabase/functions/ai-lap-runner/index.ts',import.meta.url),'utf8');
 const gateway=readFileSync(new URL('../supabase/functions/llm-gateway/index.ts',import.meta.url),'utf8');
 const agentPage=readFileSync(new URL('./agent-admin/agent-admin-page.tsx',import.meta.url),'utf8');
+const infrastructureDashboard=readFileSync(new URL('./agent-admin/infrastructure-dashboard.tsx',import.meta.url),'utf8');
 const agentApi=readFileSync(new URL('./agent-admin/api.ts',import.meta.url),'utf8');
 const agentDetail=readFileSync(new URL('./agent-admin/agent-detail.tsx',import.meta.url),'utf8');
 const telemetryMigration=readFileSync(new URL('../supabase/migrations/202609070002_owner_command_center_metrics.sql',import.meta.url),'utf8');
@@ -94,9 +95,13 @@ describe('ai-lap primary runtime contract', () => {
     expect(localRunner).toContain('gpu_utilization');
     expect(telemetryMigration).toContain("agent_runner_status");
     expect(telemetryMigration).toContain("supabase_realtime");
-    // ai-lap telemetry is shown to those who manage agents (is_admin), never to HR.
-    expect(agentPage).toContain("{manage && (");
-    expect(agentPage).toContain("<RunnerCard");
+    // The combined host dashboard remains Owner-only; HR never receives it.
+    expect(agentPage).toContain("owner ? 'infrastructure'");
+    expect(agentPage).toContain('<InfrastructureDashboard');
+    expect(agentApi).toContain("localApi<OperationsSnapshot>('operations/status')");
+    expect(infrastructureDashboard).toContain('title="Reid Server"');
+    expect(infrastructureDashboard).toContain('title="ai-lap"');
+    expect(infrastructureDashboard).toContain('runner?.gpu_utilization');
     expect(agentApi).toContain("postgres_changes");
     expect(agentApi).toContain("table: 'agent_runner_status'");
   });

@@ -1,19 +1,21 @@
 # Deployment
 
-Migration in progress: the repository CLI link now targets new project
-`cfxntjnewkmlvkogfxyu`, while live runtime configuration still targets
-`pkogchbrknwmzefjklkr`. The new project has the schema and functions but no migrated
-Auth identities/public data yet. Follow `docs/SUPABASE_MIGRATION_20260926.md` before
-changing live configuration. Do not run the old hard-coded `provision-local.mjs`
-as a migration/cutover command.
+Current architecture and open integrations: [AGENTS.md](AGENTS.md). Historical rollout evidence: [release archive](docs/history/ENGINEERING_STATUS_THROUGH_20261013.md).
 
-Production is hosted on the saved `Reid` Ubuntu host. Docker Compose runs the unprivileged web and QR/API containers; the `reid-local` Cloudflare Tunnel publishes only the web origin at `reidpro.com`. Supabase project `pkogchbrknwmzefjklkr` remains the hosted database/Auth/Storage/Edge Functions system. `ai-lap` runs Ollama and accepts Reid only through the restricted private SSH relay.
+Production runs on the Reid Ubuntu host: Docker web/API, a private Cloudflare Tunnel, Supabase project `cfxntjnewkmlvkogfxyu`, and a restricted SSH AI relay. The September Supabase migration is complete. Do not run the old hard-coded `scripts/provision-local.mjs` to provision or switch projects.
 
-Runtime/build credentials live under `/home/reid/.config/reid-os/` with mode `0600`, outside the repository. `scripts/provision-local.mjs` refreshes browser-safe/service configuration without printing credentials and preserves the QR session/bridge keys. Do not copy those files into Git or the Docker build context.
+Credentials live outside Git in `/home/reid/.config/reid-os/` with mode 0600. Never print them, copy them into build context, or replace existing encryption/session keys while updating application code.
 
-As of 2026-09-26 15:18 UTC, Production runs the phase-1 API from `release/whatsapp-phase1-20260926` and the organising-only website. The working branch contains the full assistant and requires migrations `202609140001`–`202609140005` plus `202609260001` before promotion. Keep `reid-services:candidate` separate from the live `reid-services:local` tag until Supabase login, migrations and Edge Function deployment are complete; rebuilding the live API from this working branch before those steps will break it.
+## Release sequence
 
-Deploy from an authenticated operator machine by syncing the working tree without `.git`, dependencies, build output or env files; then build `web` and `api` and start the Compose project with `/home/reid/.config/reid-os/build.env`. Confirm every container is healthy, `/healthz` is 200, public HTTPS carries `X-Reid-Origin: local-reid`, an unauthenticated private API call is 401, and the private AI health check succeeds.
+1. Branch from the current deployed release. Local main may lag: October 13 is on `release/2026-10-13-modernization`. Preserve it when building a successor.
+2. Run frontend/service tests, production build, full SQL/RLS harness, security checks and authenticated/mobile browser review. Record actual results in the feature document.
+3. Open a feature PR for review and staging checks, then a separate Owner-approved production release. Do not claim a local build is deployed.
+4. Apply reviewed additive migrations to the explicitly verified target project before changing the API image. Check migration history; never reconcile unrelated history blindly.
+5. Build uniquely tagged candidate images. Check their unprivileged tests and Arabic PDF rendering. Preserve the running web/API images with rollback tags.
+6. Inspect pending jobs/outbox before an API restart. Preserve the encrypted QR session volume and SESSION_KEY. Activate only the reviewed candidate. Never send a real test message without explicit messaging authorization.
+7. Check public health and static bundle identity, anonymous private-API denial, authenticated component health, WhatsApp session, and queue states. Record commit, image, migration, checks and remaining blockers.
+8. Roll back to saved images if required. Database migrations are additive; reconcile any new writes before a data rollback.
 
 QR operations:
 
@@ -25,23 +27,23 @@ QR operations:
 - An Owner can check health from WhatsApp with `حالة النظام`, `حالة الموقع`, `حالة السيرفر` or `حالة واتساب`. Host metrics are read by the API container itself; no host timer or sudo is required.
 - Before rebuilding `api`, tag the running image (for example `docker tag reid-services:local reid-services:rollback-YYYYMMDD`) and confirm the outbox has no pending item. Roll back by retagging that image as `reid-services:local` and running `docker compose up -d --no-deps api`.
 
-Database changes remain additive migrations with reviewed RLS. Apply to the linked project, run live allow/deny tests with disposable identities, clean them in `finally`, and reconcile migration history only after the exact schema is verified. Only the Owner promotes feature work through the protected branch/release process.
+## Candidate verification commands
 
-Assistant service configuration (`server/`): `AI_URL` and `AI_TOKEN` reach the ai-lap adapter for chat, embeddings, transcription and images. `REID_ASSISTANT_SIGNALS=0` disables read receipts, reactions and the typing indicator. `REID_WEB_SEARCH_PROVIDER` (`brave` or `tavily`) with `REID_WEB_SEARCH_KEY` enables web access; leaving the key unset keeps both web tools off, and `REID_WEB_SEARCH_DAILY` caps daily searches (default 60). `REID_PDF_FONT` and `REID_PDF_FONT_BOLD` override the bundled Arabic faces; the service refuses to start a PDF rather than render one without a font that covers Arabic.
-
-The Arabic report font ships inside the repository at `server/assets/fonts/` because the deployment image contains no system fonts at all. Do not rely on an apt-installed font; the CI `server` job builds the image and generates a real Arabic PDF inside it to prove the bundled face is present.
-
-The image copies source as `node:node` because locally created modules can have mode `0600`. Verify the built image as its default user, not root. Production images omit `test/`; mount the suite when testing so `npm test` cannot silently pass with zero tests:
+Run commands in an environment with Node 22/npm; this host may require the cached Node/Docker tooling. `scripts/rls-local.sh` creates a disposable database. Never target production with that harness.
 
 ```bash
+npm run check
+(cd server && npm test)
+scripts/rls-local.sh
+node scripts/secret-scan.mjs
+docker build -t reid-services:candidate server
 docker run --rm --network none --read-only --tmpfs /tmp \
   --mount "type=bind,source=$PWD/server/test,target=/service/test,readonly" \
   --entrypoint npm reid-services:candidate test
 docker run --rm --network none --read-only --tmpfs /tmp \
   --entrypoint node reid-services:candidate verify-pdf.mjs
-docker run --rm --network none \
-  --mount "type=bind,source=$PWD,target=/workspace,readonly" \
-  --workdir /workspace --entrypoint bash postgres:16 scripts/rls-local.sh
 ```
 
-Apply migrations `202609140001` through `202609140005` before deploying this build: they add media and reply-quality columns, conversation memory and mood, semantic recall, the web-search quota and the initiative log. `scripts/rls-local.sh` applies every migration to a throwaway database and runs the allow/deny suites; run it before promoting.
+The Arabic PDF fonts are bundled under `server/assets/fonts/`. Do not rely on system fonts or root-only source-file permissions. Runtime code must be readable by the image's node user.
+
+For laptop installation and meeting activation, use [the integration runbook](INTEGRATION_ACTIVATION.md). New connected-operations migration: `202610140001_connected_operations.sql`; its deployment status is in [the feature record](docs/CONNECTED_OPERATIONS.md).

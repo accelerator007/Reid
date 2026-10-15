@@ -3,7 +3,7 @@
 // Opening an agent (?agent=id) shows its detail. HR, which may approve L3 runs
 // but not read the agents, sees the approvals alone.
 import React from 'react';
-import { Activity, BrainCircuit, Bot, CheckCircle2, CirclePlus, Clock3, Copy, Cpu, Gauge, HardDrive, KeyRound, ListChecks, LockKeyhole, MessagesSquare, Pencil, Power, RefreshCw, Server, ShieldAlert, ShieldCheck, TestTube2, Trash2, Wifi } from 'lucide-react';
+import { Activity, BrainCircuit, Bot, CheckCircle2, CirclePlus, Clock3, Copy, KeyRound, ListChecks, LockKeyhole, MessagesSquare, Pencil, Power, RefreshCw, Server, ShieldAlert, ShieldCheck, TestTube2, Trash2, Wifi } from 'lucide-react';
 import { operationalState, topologyFor, type AgentRow, type ProviderRow } from '../agents';
 import { messageFor, type AppError } from '../db';
 import { localError } from '../local-api';
@@ -13,14 +13,15 @@ import { Badge, Button, Card, Dialog, EmptyState, Field, FormGrid, InlineAlert, 
 import * as api from './api';
 import { AgentDetail } from './agent-detail';
 import { DecideDialog, RunRowView, when } from './agent-parts';
+import { InfrastructureDashboard } from './infrastructure-dashboard';
 import {
-  ageLabel, agentName, agentStates, canManageAgents, canToggleAgents, failedRunsLine, classificationLabels, domainLabels, levelLabel, openRun, providerRisk,
-  providerRisks, rosterOrder, runStates, runnerHealth, stateCounts, type Lang,
+  agentName, agentStates, canManageAgents, canToggleAgents, failedRunsLine, classificationLabels, domainLabels, levelLabel, openRun, providerRisk,
+  providerRisks, rosterOrder, runStates, stateCounts, type Lang,
 } from './model';
 import './agent-admin.css';
 
 const tr = (lang: Lang, ar: string, en: string) => (lang === 'ar' ? ar : en);
-type Tab = 'roster' | 'approvals' | 'runs' | 'providers';
+type Tab = 'infrastructure' | 'roster' | 'approvals' | 'runs' | 'providers';
 const agentFromUrl = () => new URLSearchParams(location.search).get('agent');
 
 export function AgentManagement({ lang, go }: { lang: Lang; go?: (page: Page) => void }) {
@@ -29,9 +30,12 @@ export function AgentManagement({ lang, go }: { lang: Lang; go?: (page: Page) =>
   const owner = canToggleAgents(roles);
   const [data, setData] = React.useState<api.AgentAdminData | null>(null);
   const [error, setError] = React.useState<AppError | null>(null);
-  const [tab, setTab] = React.useState<Tab>(manage ? 'roster' : 'approvals');
+  const [tab, setTab] = React.useState<Tab>(owner ? 'infrastructure' : manage ? 'roster' : 'approvals');
   const [selected, setSelected] = React.useState<string | null>(agentFromUrl);
   const [now, setNow] = React.useState(() => Date.now());
+  const [operations,setOperations]=React.useState<api.OperationsSnapshot|null>(null);
+  const [operationsError,setOperationsError]=React.useState('');
+  const [operationsLoading,setOperationsLoading]=React.useState(owner);
 
   const load = React.useCallback(async () => {
     const result = await api.loadAgentAdmin(manage,owner);
@@ -39,7 +43,20 @@ export function AgentManagement({ lang, go }: { lang: Lang; go?: (page: Page) =>
     setError(result.error);
     setNow(Date.now());
   }, [manage,owner]);
+  const loadOperations=React.useCallback(async()=>{
+    if(!owner)return;
+    setOperationsLoading(true);
+    try{setOperations(await api.loadOperationsStatus());setOperationsError('');}
+    catch(thrown){setOperationsError(localError(thrown,lang));}
+    finally{setOperationsLoading(false);}
+  },[lang,owner]);
   React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(()=>{
+    if(!owner)return;
+    void loadOperations();
+    const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void loadOperations();},30000);
+    return()=>window.clearInterval(timer);
+  },[loadOperations,owner]);
   React.useEffect(() => {
     let timer: number | undefined;
     const stop = api.subscribeToAgents(manage, () => { window.clearTimeout(timer); timer = window.setTimeout(() => void load(), 400); });
@@ -67,6 +84,7 @@ export function AgentManagement({ lang, go }: { lang: Lang; go?: (page: Page) =>
   const failed24h = data?.runs.filter(item => item.run_state === 'failed' && now - new Date(item.created_at).getTime() < 86_400_000).length ?? 0;
   const tabs: TabItem<Tab>[] = manage
     ? [
+      ...(owner?[{ id: 'infrastructure' as const, label: tr(lang, 'البنية التحتية', 'Infrastructure'), icon: <Server /> }]:[]),
       { id: 'roster', label: tr(lang, 'الوكلاء', 'Agents'), icon: <Bot />, count: agents.length },
       { id: 'approvals', label: tr(lang, 'الموافقات', 'Approvals'), icon: <ShieldCheck />, count: data?.pending.length },
       { id: 'runs', label: tr(lang, 'سجل التشغيل', 'Run log'), icon: <ListChecks />, count: data?.runs.length },
@@ -77,23 +95,22 @@ export function AgentManagement({ lang, go }: { lang: Lang; go?: (page: Page) =>
   return (
     <main className="agents-admin">
       <PageHeader
-        title={tr(lang, 'إدارة الوكلاء', 'Agent management')}
+        title={owner?tr(lang,'مركز النظام والذكاء','System & AI center'):tr(lang, 'إدارة الوكلاء', 'Agent management')}
         description={manage
-          ? <>{tr(lang, 'حالة كل وكيل وصلاحياته، وما ينتظر قرارك، وصحة جهاز ', 'Every agent’s state and access, what waits on you, and the health of ')}<bdi className="agents-nowrap">ai-lap</bdi>{tr(lang, ' الذي يشغّلهم.', ' that runs them.')}</>
+          ? owner?tr(lang,'سيرفر Reid وai-lap والخدمات والمودلات والوكلاء في لوحة تشغيل واحدة.','Reid server, ai-lap, services, models, and agents in one operating center.'):<>{tr(lang, 'حالة كل وكيل وصلاحياته، وما ينتظر قرارك، وصحة جهاز ', 'Every agent’s state and access, what waits on you, and the health of ')}<bdi className="agents-nowrap">ai-lap</bdi>{tr(lang, ' الذي يشغّلهم.', ' that runs them.')}</>
           : tr(lang, 'تشغيلات الوكلاء التي تنتظر موافقتك.', 'Agent runs waiting for your approval.')}
         actions={<>
           {go && manage && <Button icon={<MessagesSquare />} onClick={() => go('assistant')}>{tr(lang, 'غرفة الوكلاء', 'Agent room')}</Button>}
-          <Button icon={<RefreshCw />} onClick={() => void load()}>{tr(lang, 'تحديث', 'Refresh')}</Button>
+          <Button icon={<RefreshCw />} onClick={() => {void load();void loadOperations();}}>{tr(lang, 'تحديث', 'Refresh')}</Button>
         </>}
       />
 
       {error && <InlineAlert action={<Button size="sm" onClick={() => void load()}>{tr(lang, 'أعد المحاولة', 'Try again')}</Button>}>{messageFor(error, lang)}</InlineAlert>}
       {manage && selected && data && !agent && <InlineAlert tone="warning">{tr(lang, 'هذا الوكيل غير موجود.', 'This agent does not exist.')}</InlineAlert>}
 
-      {manage && (
-        <div className="agents-overview">
-          <RunnerCard lang={lang} data={data} now={now} />
-          <div className="agents-stats">
+      <Tabs items={tabs} value={tab} onChange={setTab} label={tr(lang, 'أقسام إدارة النظام والوكلاء', 'System and agent management sections')} dir={lang === 'ar' ? 'rtl' : 'ltr'} />
+      {manage && tab!=='infrastructure' && (
+          <div className="agents-stats agents-stats--top">
             <StatCard icon={<CheckCircle2 />} tone="success" label={tr(lang, 'جاهز', 'Ready')} value={counts?.ready ?? 0} loading={!data} />
             <StatCard icon={<Activity />} tone="brand" label={tr(lang, 'يعمل الآن', 'Working')} value={counts?.working ?? 0} loading={!data} />
             <StatCard icon={<Clock3 />} tone={data?.pending.length ? 'warning' : 'neutral'} label={tr(lang, 'ينتظر موافقة', 'Awaiting approval')}
@@ -102,56 +119,16 @@ export function AgentManagement({ lang, go }: { lang: Lang; go?: (page: Page) =>
               value={(counts?.blocked ?? 0) + (counts?.error ?? 0)} loading={!data}
               hint={failedRunsLine(failed24h, lang)} onOpen={() => setTab('runs')} />
           </div>
-        </div>
       )}
-
-      <Tabs items={tabs} value={tab} onChange={setTab} label={tr(lang, 'أقسام إدارة الوكلاء', 'Agent management sections')} dir={lang === 'ar' ? 'rtl' : 'ltr'} />
       <TabPanel id={tab}>
-        {!data && !error && <Skeleton lines={6} />}
+        {!data && !error && tab!=='infrastructure' && <Skeleton lines={6} />}
+        {owner&&tab==='infrastructure'&&<InfrastructureDashboard lang={lang} snapshot={operations} runner={data?.runner??null} providers={data?.providers??[]} loading={operationsLoading} error={operationsError} now={now} onRefresh={()=>void loadOperations()} onProviders={()=>setTab('providers')} go={go}/>}
         {data && tab === 'roster' && <Roster lang={lang} agents={agents} providerOf={providerOf} data={data} open={open} />}
         {data && tab === 'approvals' && <Approvals lang={lang} data={data} reload={load} manage={manage} />}
         {data && tab === 'runs' && <RunLog lang={lang} data={data} open={manage ? open : undefined} />}
         {data && tab === 'providers' && <Providers lang={lang} providers={data.providers} agents={agents} owner={owner} reload={load} />}
       </TabPanel>
     </main>
-  );
-}
-
-function RunnerCard({ lang, data, now }: { lang: Lang; data: api.AgentAdminData | null; now: number }) {
-  const runner = data?.runner ?? null;
-  const health = runnerHealth(runner, now);
-  const meters: Array<[React.ReactNode, string, string, number | null]> = [
-    [<Wifi key="p" />, tr(lang, 'زمن النموذج', 'Model latency'), runner?.adapter_latency_ms != null ? `${runner.adapter_latency_ms} ms` : '—', runner?.adapter_latency_ms != null ? Math.min(100, runner.adapter_latency_ms / 4) : null],
-    [<Wifi key="n" />, tr(lang, 'اتصال السحابة', 'Cloud ping'), runner?.ping_ms != null ? `${runner.ping_ms} ms` : '—', runner?.ping_ms != null ? Math.min(100, runner.ping_ms / 4) : null],
-    [<Cpu key="c" />, tr(lang, 'المعالج', 'CPU'), runner?.cpu_percent != null ? `${runner.cpu_percent}%` : '—', runner?.cpu_percent ?? null],
-    [<HardDrive key="m" />, tr(lang, 'الذاكرة', 'Memory'), runner?.memory_used_gb != null ? `${runner.memory_used_gb} / ${runner.memory_total_gb} GB` : '—', health.memory],
-    [<Gauge key="g" />, tr(lang, 'كرت الشاشة', 'GPU'), runner?.gpu_utilization != null ? `${runner.gpu_utilization}%` : '—', runner?.gpu_utilization ?? null],
-    [<HardDrive key="v" />, tr(lang, 'ذاكرة الكرت', 'VRAM'), runner?.vram_used_mb != null ? `${Math.round(runner.vram_used_mb / 1024 * 10) / 10} / ${Math.round((runner.vram_total_mb ?? 0) / 1024 * 10) / 10} GB` : '—', health.vram],
-  ];
-  return (
-    <Card className="runner" data-online={health.online}>
-      <div className="runner__head">
-        <span className="runner__icon" aria-hidden="true"><Server /></span>
-        <div className="runner__name">
-          <strong>ai-lap</strong>
-          <span><bdi dir="ltr">{runner?.model || 'gemma4:12b'}{runner?.version ? ` · v${runner.version}` : ''}</bdi></span>
-        </div>
-        {!data ? <Badge>{tr(lang, 'جارٍ الفحص', 'Checking')}</Badge>
-          : <Badge tone={health.online ? 'success' : 'danger'} dot>{health.online ? tr(lang, 'متصل', 'Online') : tr(lang, 'غير متصل', 'Offline')}</Badge>}
-      </div>
-      <div className="runner__meters">
-        {meters.map(([icon, label, value, percent]) => (
-          <div className="runner__meter" key={label}>
-            <span className="runner__label"><span aria-hidden="true">{icon}</span>{label}</span>
-            <b><bdi dir="ltr">{value}</bdi></b>
-            <span className="runner__bar" aria-hidden="true"><i style={{ inlineSize: `${Math.max(0, Math.min(100, percent ?? 0))}%` }} data-high={(percent ?? 0) >= 85} /></span>
-          </div>
-        ))}
-      </div>
-      <small className="runner__foot">
-        {runner?.gpu ? `${runner.gpu} · ` : ''}{tr(lang, 'آخر نبضة', 'Last heartbeat')}: {ageLabel(health.ageSeconds, lang)}
-      </small>
-    </Card>
   );
 }
 
@@ -208,7 +185,7 @@ function Approvals({ lang, data, reload, manage }: { lang: Lang; data: api.Agent
           </Card>
         ))}
       </div>
-      <DecideDialog lang={lang} run={deciding} agentLabel={deciding ? label(deciding.agent_id) : ''} onClose={() => setDeciding(null)} onDone={reload} />
+      <DecideDialog lang={lang} run={deciding} agentLabel={deciding ? label(deciding.agent_id) : ''} tools={data.tools} onClose={() => setDeciding(null)} onDone={reload} />
     </>
   );
 }

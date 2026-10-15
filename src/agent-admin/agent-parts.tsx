@@ -2,7 +2,7 @@
 // in a log, and the dialog that decides a run held for approval.
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { decideRun } from '../agents';
+import { decideRun, type AgentToolRow } from '../agents';
 import { messageForRaw } from '../db';
 import { Badge, Button, Dialog, Field, InlineAlert, TextArea } from '../ui';
 import type { RunWithRequester } from './api';
@@ -14,14 +14,15 @@ export const when = (iso: string, lang: Lang) =>
   new Date(iso).toLocaleString(lang === 'ar' ? 'ar-OM-u-nu-latn' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Muscat' });
 
 /** A run held for a human decision, with an optional note kept on the record. */
-export function DecideDialog({ lang, run, agentLabel, onClose, onDone }: {
-  lang: Lang; run: RunWithRequester | null; agentLabel: string; onClose: () => void; onDone: () => Promise<void>;
+export function DecideDialog({ lang, run, agentLabel, tools, onClose, onDone }: {
+  lang: Lang; run: RunWithRequester | null; agentLabel: string; tools?: AgentToolRow[]; onClose: () => void; onDone: () => Promise<void>;
 }) {
   const [note, setNote] = React.useState('');
   const [busy, setBusy] = React.useState<'approved' | 'rejected' | null>(null);
   const [error, setError] = React.useState('');
   React.useEffect(() => { setNote(''); setError(''); }, [run?.id]);
   if (!run) return null;
+  const tool = tools?.find(t => t.id === run.requested_tool);
   const decide = async (decision: 'approved' | 'rejected') => {
     setBusy(decision); setError('');
     try { await decideRun(run.id, decision, note.trim() || undefined); await onDone(); onClose(); }
@@ -38,7 +39,15 @@ export function DecideDialog({ lang, run, agentLabel, onClose, onDone }: {
           'This run is on hold until you decide. Approving lets the agent carry it out; rejecting closes it with nothing done.')}
       </p>
       <section className="decide__request" aria-label={tr(lang, 'تفاصيل الإجراء', 'Action details')}>
-        <div><small>{tr(lang, 'العملية المطلوبة', 'Requested action')}</small><strong dir="ltr">{run.requested_tool || tr(lang, 'تشغيل محادثة', 'Conversation run')}</strong></div>
+        <div>
+          <small>{tr(lang, 'العملية المطلوبة', 'Requested action')}</small>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <strong dir="ltr">{run.requested_tool || tr(lang, 'تشغيل محادثة', 'Conversation run')}</strong>
+            {tool && <Badge tone="brand">{lang === 'ar' ? tool.name_ar : tool.name_en}</Badge>}
+            {tool?.operation && <Badge tone="neutral">{tool.operation}</Badge>}
+          </div>
+          {tool?.description && <small style={{ color: 'var(--text-muted)', marginTop: '4px' }}>{tool.description}</small>}
+        </div>
         {Object.keys(run.request_summary || {}).length > 0 && <dl>
           {Object.entries(run.request_summary).map(([key, value]) => <div key={key}><dt>{fieldLabel(key, lang)}</dt><dd dir={typeof value === 'string' && /^[\x00-\x7F]*$/.test(value) ? 'ltr' : undefined}>{String(value ?? '—')}</dd></div>)}
         </dl>}
@@ -63,6 +72,7 @@ export function RunRowView({ lang, run, agentLabel, requester, onAgent, actions 
     <article className="run" data-state={run.run_state}>
       <div className="run__head">
         <Badge tone={state.tone} dot>{state.label[lang]}</Badge>
+        {run.requested_tool && <Badge tone="neutral"><span dir="ltr">{run.requested_tool}</span></Badge>}
         {agentLabel && (onAgent ? <button type="button" className="run__agent" onClick={onAgent}>{agentLabel}</button> : <strong>{agentLabel}</strong>)}
         <small>{when(run.created_at, lang)}{requester ? ` · ${requester}` : ''}</small>
       </div>

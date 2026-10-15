@@ -30,8 +30,9 @@ const addLabel: Record<Exclude<ClientDialog, null>, { ar: string; en: string }> 
 export function CrmWorkspace({ lang, user }: { lang: Lang; user: User }) {
   const [data, setData] = React.useState<api.ClientsData | null>(null);
   const [error, setError] = React.useState<AppError | null>(null);
-  const [tab, setTab] = React.useState<Tab>('pipeline');
+  const [tab, setTab] = React.useState<Tab>(new URLSearchParams(location.search).has('lead')?'leads':'pipeline');
   const [dialog, setDialog] = React.useState<ClientDialog>(() => new URLSearchParams(location.search).get('new') === 'lead' ? 'lead' : null);
+  const [focusedLead,setFocusedLead]=React.useState<string|null>(()=>new URLSearchParams(location.search).get('lead'));
   const [query, setQuery] = React.useState('');
   const [busy, setBusy] = React.useState(false);
 
@@ -42,7 +43,7 @@ export function CrmWorkspace({ lang, user }: { lang: Lang; user: User }) {
   }, []);
   React.useEffect(() => { void load(); }, [load]);
   React.useEffect(() => {
-    const follow = () => { if (new URLSearchParams(location.search).get('new') === 'lead') setDialog('lead'); };
+    const follow = () => { const params=new URLSearchParams(location.search); if(params.get('new')==='lead')setDialog('lead');setFocusedLead(params.get('lead'));if(params.has('lead'))setTab('leads'); };
     addEventListener('popstate', follow);
     return () => removeEventListener('popstate', follow);
   }, []);
@@ -95,6 +96,7 @@ export function CrmWorkspace({ lang, user }: { lang: Lang; user: User }) {
         <StatCard icon={<Check />} tone="success" loading={!data} label={tr(lang, 'صفقات تمت', 'Deals won')} value={data?.deals.filter(deal => deal.stage === 'won').length ?? 0} onOpen={() => setTab('deals')} />
       </section>
 
+      {focusedLead&&<InlineAlert tone="info" action={<Button size="sm" onClick={()=>setFocusedLead(null)}>{tr(lang,'عرض الكل','Show all')}</Button>}>{tr(lang,'الفرصة المرتبطة بالمتابعة','Lead linked to the follow-up')}</InlineAlert>}
       <Tabs items={tabs} value={tab} onChange={value => { setTab(value); setQuery(''); }} label={tr(lang, 'أقسام العملاء', 'Client sections')} dir={dir} />
       <TabPanel id={tab}>
         {!data && !error && <Skeleton lines={6} />}
@@ -145,7 +147,7 @@ export function CrmWorkspace({ lang, user }: { lang: Lang; user: User }) {
 
         {data && tab === 'leads' && (
           <Rows empty={<EmptyState icon={<Target />} title={tr(lang, 'لا توجد فرص', 'No leads')} description={tr(lang, 'كل عميل محتمل يبدأ هنا.', 'Every prospect starts here.')} />}>
-            {data.leads.filter(lead => match(lead.title, companyName(lead.company_id))).map(lead => (
+            {data.leads.filter(lead => (!focusedLead||lead.id===focusedLead)&&match(lead.title, companyName(lead.company_id))).map(lead => (
               <div className="clients-row" key={lead.id}>
                 <ListRow dir={dir} icon={<Target />} tone={optionOf(leadStages, lead.stage).tone} title={lead.title}
                   description={`${companyName(lead.company_id) ?? tr(lang, 'بدون شركة', 'No company')} · ${lead.probability}٪${lead.next_follow_up_at ? ` · ${tr(lang, 'متابعة', 'Follow up')} ${dateText(lead.next_follow_up_at, true)}` : ''}`} />

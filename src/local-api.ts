@@ -21,6 +21,11 @@ export function localError(error: unknown, lang: 'ar' | 'en') {
     sign_in_required: ['سجّل الدخول للمتابعة.', 'Sign in to continue.'],
     owner_required: ['هذه الخدمة مخصصة للمالك.', 'This service is available to the Owner.'],
     whatsapp_disconnected: ['اربط الهاتف أولًا من صفحة الاتصالات.', 'Link the phone in Connections first.'],
+    invalid_follow_up: ['أدخل عنوانًا ومسؤولًا وموعدًا صحيحًا للمتابعة.', 'Enter a valid title, assignee and due date.'],
+    ambiguous_contact: ['يوجد أكثر من عميل بنفس الرقم؛ اختر العميل من القائمة.', 'Several clients share this phone; choose a client.'],
+    invalid_assignee: ['اختر عضو فريق بحساب نشط.', 'Choose an active team member.'],
+    invalid_project: ['اختر مشروعًا متاحًا أو أدخل اسم مشروع جديد.', 'Choose an available project or enter a new name.'],
+    customer_conversation_required: ['ربط العملاء متاح لمحادثات العملاء المباشرة.', 'Client linking is available for direct customer chats.'],
     rate_limited: ['طلبات كثيرة. انتظر قليلًا ثم حاول مجددًا.', 'Too many requests. Wait a moment and retry.'],
   };
   return (errors[key] || ['تعذّر الوصول للخدمة. حاول مجددًا؛ لم يتم تأكيد الإجراء.', 'The service could not be reached. Retry; the action has not been confirmed.'])[lang === 'ar' ? 0 : 1];
