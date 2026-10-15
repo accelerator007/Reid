@@ -39,6 +39,7 @@ Branch: `feature/reid-connected-operations`. See [implementation and verificatio
 - Home has concrete pending handoff, overdue task, review and CRM-follow-up links; destination pages accept record-specific URLs.
 - Local chat requests share bounded generation, concurrency limits, circuit recovery and content-free latency/token accounting. WhatsApp no longer regenerates a whole answer just to change its opening. No automatic external fallback is enabled.
 - Connections can test meeting dependencies without creating a meeting; adapter updates have a portable installation bundle and synthetic reply evaluation.
+- The Owner dashboard is now the **System & AI center**: one responsive view combines Reid host telemetry, ai-lap CPU/GPU/model telemetry, service health, WhatsApp activity, queues, reply-runtime metrics and links to the model/API controls. WhatsApp keeps only its channel-specific health to avoid duplicating the server view.
 - Verification and deployment status are recorded in the focused document. This section must not be described as production-live until its release evidence is added.
 
 ## Remaining external dependencies and open verification

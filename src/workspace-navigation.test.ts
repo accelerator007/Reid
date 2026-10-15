@@ -30,7 +30,7 @@ describe('Reid workspace information architecture', () => {
 
   it('uses clear labels in both languages, short ones on the phone', () => {
     expect(workspaceLabel('assistant', 'ar')).toBe('ريّد');
-    expect(workspaceLabel('dashboard', 'en')).toBe('Agent setup');
+    expect(workspaceLabel('dashboard', 'en')).toBe('System & AI');
     expect(workspaceLabel('operations', 'ar')).toBe('الطلبات');
     expect(workspaceShortLabel('operations', 'ar')).toBe('الطلبات');
     expect(workspaceShortLabel('projects', 'en')).toBe('Work');

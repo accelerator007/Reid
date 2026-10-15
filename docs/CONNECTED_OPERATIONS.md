@@ -26,9 +26,15 @@ The laptop update archive includes tested source and an installer with adapter b
 
 Current architecture, release instructions and blockers are now separated from the historical engineering log. No historical unresolved audit entry was deleted; those remain in the archive for explicit re-verification.
 
+## System and AI center
+
+The Owner's `/dashboard` now opens on a combined infrastructure view instead of a standalone ai-lap card. It compares the Reid Ubuntu host and ai-lap in one place, including CPU, memory, Reid storage, GPU, VRAM, model latency, cloud ping and sample freshness. The same view orders the full request path across the public site, database, WhatsApp, voice, AI adapter and agent runner, then shows queue failures or uncertainty, last inbound/outbound activity and reply-runtime latency.
+
+The sidebar and Administration launcher call this destination **System & AI / النظام والذكاء**. Agent roster, approvals, run history and model/API management remain tabs in the same center. The WhatsApp control page now shows only WhatsApp and reply-model connectivity, with a direct link to the central server dashboard, so operational health is maintained in one place.
+
 ## Verification
 
-- Frontend: 388 Vitest checks across 25 files; TypeScript and Vite production build.
+- Frontend: 388 Vitest checks across 25 files; TypeScript and Vite production build. The infrastructure view also passed Arabic/English, light/dark, desktop/mobile browser rendering with no page errors or horizontal overflow; screenshots are under `test-results/infrastructure-dashboard/`.
 - Service: 258 Node tests pass in the candidate image as its default unprivileged user, including circuit recovery, concurrency, accounting, validation and non-creating meeting checks.
 - Full isolated PostgreSQL migration/RLS harness passes; customer journey suite passes 20/20 checks covering idempotent creation, notifications, linked status synchronization, owner/employee/anonymous access and concrete action links.
 - Eight browser combinations: Arabic/English, light/dark, desktop 1440px and mobile 390px. Exercised Home, follow-up form save/links and meeting preflight. No page errors or horizontal overflow; screenshots under `test-results/connected-operations/`. Fixtures are synthetic; this is not an authenticated production test.

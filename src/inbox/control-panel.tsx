@@ -4,7 +4,7 @@ import type { Page } from '../routes';
 import { localError } from '../local-api';
 import { Badge, Button, Card, InlineAlert, SectionHeader, StatCard, Tabs } from '../ui';
 import * as api from './api';
-import { whatsappControlCounts, type AiHealth, type AssistantAction, type Chat, type Connection, type Lang, type OperationsHealth, type OutboxItem, type WhatsappAccess, type WhatsappGroupAccess, type WhatsappHandoff, type WhatsappSettings, type WhatsappUserAccess } from './model';
+import { whatsappControlCounts, type AiHealth, type AssistantAction, type Chat, type Connection, type Lang, type OutboxItem, type WhatsappAccess, type WhatsappGroupAccess, type WhatsappHandoff, type WhatsappSettings, type WhatsappUserAccess } from './model';
 import './control-panel.css';
 
 const tr=(lang:Lang,ar:string,en:string)=>lang==='ar'?ar:en;
@@ -15,7 +15,6 @@ export function WhatsappControl({lang,go,status,chats,outbox,onChanged}:{
   const [saved,setSaved]=React.useState<WhatsappSettings|null>(null);
   const [draft,setDraft]=React.useState<WhatsappSettings|null>(null);
   const [ai,setAi]=React.useState<AiHealth|null>(null);
-  const [operations,setOperations]=React.useState<OperationsHealth|null>(null);
   const [actions,setActions]=React.useState<AssistantAction[]>([]);
   const [access,setAccess]=React.useState<WhatsappAccess>({users:[],groups:[]});
   const [handoffs,setHandoffs]=React.useState<WhatsappHandoff[]>([]);
@@ -25,8 +24,8 @@ export function WhatsappControl({lang,go,status,chats,outbox,onChanged}:{
   const [tab,setTab]=React.useState<'overview'|'agent'|'management'>('overview');
   const load=React.useCallback(async()=>{
     try{
-      const [settings,health,ops,recent,nextAccess,nextHandoffs]=await Promise.all([api.loadSettings(),api.loadAiHealth(),api.loadOperationsHealth(),api.loadActions(),api.loadAccess(),api.loadHandoffs()]);
-      setSaved(settings);setDraft(settings);setAi(health);setOperations(ops);setActions(recent.slice(0,6));setAccess(nextAccess);setHandoffs(nextHandoffs);setError('');
+      const [settings,health,recent,nextAccess,nextHandoffs]=await Promise.all([api.loadSettings(),api.loadAiHealth(),api.loadActions(),api.loadAccess(),api.loadHandoffs()]);
+      setSaved(settings);setDraft(settings);setAi(health);setActions(recent.slice(0,6));setAccess(nextAccess);setHandoffs(nextHandoffs);setError('');
     }catch(thrown){setError(localError(thrown,lang));}
   },[lang]);
   React.useEffect(()=>{void load();},[load]);
@@ -48,7 +47,6 @@ export function WhatsappControl({lang,go,status,chats,outbox,onChanged}:{
   const changeUser=async(id:string,patch:Partial<WhatsappUserAccess>)=>{setBusy(`user:${id}`);setError('');try{setAccess(await api.updateUserAccess(id,patch));}catch(thrown){setError(localError(thrown,lang));}finally{setBusy('');}};
   const changeGroup=async(jid:string,patch:Partial<WhatsappGroupAccess>)=>{setBusy(`group:${jid}`);setError('');try{setAccess(await api.updateGroupAccess(jid,patch));}catch(thrown){setError(localError(thrown,lang));}finally{setBusy('');}};
   const resolve=async(id:string)=>{setBusy(`handoff:${id}`);setError('');try{await api.resolveHandoff(id);setHandoffs(current=>current.map(item=>item.id===id?{...item,status:'resolved'}:item));}catch(thrown){setError(localError(thrown,lang));}finally{setBusy('');}};
-  const components=operations?.components||{};
   const pendingHandoffs=handoffs.filter(item=>item.status==='pending');
 
   const tabItems=[
@@ -73,8 +71,8 @@ export function WhatsappControl({lang,go,status,chats,outbox,onChanged}:{
           <div className="wa-control__buttons"><Button icon={<PlayCircle/>} busy={busy==='active'} onClick={()=>void bulk('active')}>{tr(lang,'خلّ ريد يرد على الكل','Let Reid reply everywhere')}</Button><Button variant="danger" icon={<PauseCircle/>} busy={busy==='human'} onClick={()=>void bulk('human')}>{tr(lang,'استلام كل المحادثات','Take over all chats')}</Button></div>
         </Card>
         <Card>
-          <SectionHeader title={tr(lang,'حالة النظام','System health')} description={tr(lang,'الخدمات التي يعتمد عليها الرد والإرسال.','Services used for replies and delivery.')} />
-          <div className="wa-health-list"><Health label="WhatsApp" good={status?.connection==='connected'} detail={status?.connection||'unknown'}/><Health label={ai?.model||'AI'} good={Boolean(ai?.online)} detail={ai?.latencyMs!=null?`${ai.latencyMs} ms`:'—'}/>{Object.entries(components).filter(([name])=>!['whatsapp','ai'].includes(name)).map(([name,value])=><Health key={name} label={name} good={value.status==='healthy'} detail={value.status||'unknown'}/>)}</div>
+          <SectionHeader title={tr(lang,'اتصال واتساب','WhatsApp connection')} description={tr(lang,'حالة القناة والمودل المستخدم للرد. باقي خدمات السيرفر مجمّعة في مركز النظام.','Channel and reply-model status. The complete server view lives in the system center.')} action={<Button size="sm" variant="secondary" onClick={()=>go('dashboard')}>{tr(lang,'فتح لوحة السيرفر','Open server dashboard')}</Button>}/>
+          <div className="wa-health-list"><Health label="WhatsApp" good={status?.connection==='connected'} detail={status?.connection||'unknown'}/><Health label={ai?.model||'AI'} good={Boolean(ai?.online)} detail={ai?.latencyMs!=null?`${ai.latencyMs} ms`:'—'}/></div>
         </Card>
       </div>
       <CustomerHandoffs lang={lang} items={pendingHandoffs} busy={busy} resolve={resolve}/>

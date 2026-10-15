@@ -176,7 +176,7 @@ const fixtures = {
     { id: 'ollama', name: 'Ollama على ai-lap', kind: 'local', chat_model: 'gemma4:12b', max_classification: 'restricted', retains_data: false, enabled: true },
     { id: 'gemini', name: 'Google Gemini API', kind: 'external', chat_model: 'gemini-2.5-flash', max_classification: 'restricted', retains_data: true, enabled: false },
   ],
-  agent_runner_status: { id: 'ai-lap', status: 'online', version: '1.2.2', model: 'gemma4:12b', gpu: 'NVIDIA RTX 4070', ping_ms: 38, cpu_percent: 24, memory_used_gb: 11.2, memory_total_gb: 32, gpu_utilization: 61, vram_used_mb: 9830, vram_total_mb: 12282, last_seen_at: iso(-0.005) },
+  agent_runner_status: { id: 'ai-lap', status: 'online', version: '1.2.2', model: 'gemma4:12b', gpu: 'NVIDIA RTX 4070', ping_ms: 38, adapter_latency_ms: 640, cpu_percent: 24, memory_used_gb: 11.2, memory_total_gb: 32, gpu_utilization: 61, vram_used_mb: 9830, vram_total_mb: 12282, last_seen_at: iso(-0.005) },
   agent_runs: [
     { id: 'run-1', agent_id: 'content', provider_id: 'ollama', classification: 'public', run_state: 'pending_approval', approval_level: 2, approval_state: 'pending', latency_ms: null, token_usage: null, quality_score: null, quality_flags: [], revision_count: 0, output_preview: null, error: null, created_at: iso(-0.4), requested_by: 'u-ali' },
     { id: 'run-2', agent_id: 'operations', provider_id: 'ollama', classification: 'internal', run_state: 'running', approval_level: 0, approval_state: 'not_required', latency_ms: null, token_usage: null, quality_score: null, quality_flags: [], revision_count: 0, output_preview: null, error: null, created_at: iso(-0.05), requested_by: user.id },
@@ -311,7 +311,14 @@ export function respondForLocalApi(route) {
   if(path.endsWith('/journey'))return json(null);
   if(path==='whatsapp/journey-options')return json({contacts:[],projects:[],people:[{id:user.id,full_name:'شيخة المعمري'}]});
   if (path === 'ai/health') return json({ online: true, model: 'gemma4:12b',latencyMs:640,capabilities:['chat','vision'] });
-  if (path === 'operations/status') return json({components:{website:{status:'healthy'},ai:{status:'healthy'},tts:{status:'healthy'},database:{status:'healthy'},whatsapp:{status:'healthy'},runner:{status:'healthy'}}});
+  if (path === 'operations/status') return json({
+    checkedAt:iso(0),
+    components:{website:{status:'healthy',latencyMs:82},ai:{status:'healthy',latencyMs:640},tts:{status:'healthy',latencyMs:190},database:{status:'healthy'},whatsapp:{status:'healthy',connection:'connected'},runner:{status:'healthy'}},
+    queue:{pending:2,failed:0,uncertain:0},
+    activity:{lastInboundAt:iso(-0.2),lastOutboundAt:iso(-0.18)},
+    host:{name:'ai-lap',lastSeenAt:iso(-0.005),fresh:true,cpuPercent:24,memoryUsedGb:11.2,memoryTotalGb:32,diskUsedPercent:null},
+    websiteHost:{name:'Reid',lastSeenAt:iso(-0.001),fresh:true,cpuPercent:12.4,memoryUsedGb:3.8,memoryTotalGb:16,diskUsedPercent:37.2},
+  });
   const thread = path.match(/^whatsapp\/conversations\/([^/]+)\/messages$/);
   if (thread) return json([...(threads[thread[1]] ?? [])].reverse());
   return json({ ok: true });
