@@ -9,6 +9,16 @@ const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER || '96897308003';
 
 export function PublicHome({lang,go}:{lang:'ar'|'en';go:(page:Page)=>void}) {
   const ar=lang==='ar';
+  const achievementRef=React.useRef<HTMLElement>(null);
+  const [achievementVisible,setAchievementVisible]=React.useState(false);
+  React.useEffect(()=>{
+    const section=achievementRef.current;
+    if(!section)return;
+    if(!('IntersectionObserver' in window)){setAchievementVisible(true);return;}
+    const observer=new IntersectionObserver(([entry])=>{if(entry.isIntersecting){setAchievementVisible(true);observer.disconnect();}},{threshold:.16,rootMargin:'0px 0px -8%'});
+    observer.observe(section);
+    return()=>observer.disconnect();
+  },[]);
   return <main className="reid-home">
     <section className="reid-hero">
       <div className="reid-hero-copy"><span className="os-eyebrow"><i/> {ar?'تقنية عُمانية. طموح أبعد.':'OMANI ROOTS. GREATER POSSIBILITIES.'}</span><h1>{ar?<>أفكار تستحق<br/>أن تصبح <em>واقعًا.</em></>:<>Good ideas.<br/><em>Built for real.</em></>}</h1><p>{ar?'نصمّم ونبني منتجات رقمية وحلول ذكاء اصطناعي، تقرّبك من هدفك وتسهّل العمل كل يوم.':'We design and build digital products and AI solutions that move you closer to your goals, every day.'}</p><div className="reid-hero-actions"><a className="os-primary" href="#contact">{ar?'ابدأ مشروعك':'Start your project'}<ArrowUpRight/></a><a href="#approach" className="os-text-link">{ar?'تعرّف على طريقتنا':'Discover our approach'}<ArrowDown/></a></div><div className="reid-hero-note"><span>REID</span><p>{ar?'نفهم بعمق. نبني بإتقان. نتطور معك.':'Understand deeply. Build thoughtfully. Grow together.'}</p></div></div>
@@ -20,12 +30,12 @@ export function PublicHome({lang,go}:{lang:'ar'|'en';go:(page:Page)=>void}) {
       {icon:<Workflow/>,n:'03',title:ar?'أنظمة تربط العمل':'Connected operations',text:ar?'نبسّط الإجراءات ونربط الأدوات، لتصير المعلومات أقرب والقرارات أوضح.':'Simpler processes and connected tools, bringing information closer and decisions into focus.'},
     ].map(s=><article key={s.n}><div><span className="os-icon">{s.icon}</span><small>{s.n}</small></div><h3>{s.title}</h3><p>{s.text}</p><a href="#contact">{ar?'نتكلم عن فكرتك':'Let’s talk about your idea'}<MoveUpRight/></a></article>)}</div></section>
     <section className="reid-proof" aria-labelledby="reid-proof-title"><div className="reid-proof__intro"><span className="os-eyebrow">02 / {ar?'نبني ما نستخدمه':'BUILT IN PRACTICE'}</span><h2 id="reid-proof-title">{ar?'ريّد يعمل معنا كل يوم.':'Reid works with us every day.'}</h2><p>{ar?'نظام تشغيل للشركة يجمع العمل والتواصل والوكلاء الذكيين في مكان واضح وآمن.':'A company operating system bringing work, communication and AI agents into one clear, secure place.'}</p></div><div className="reid-proof__cards"><article><Bot/><b>{ar?'فريق وكلاء متعاون':'Collaborative agents'}</b><p>{ar?'تكلّف ريّد أو أحد المتخصصين، ويتبادلون السياق والمهام.':'Brief Reid or a specialist; they share context and tasks.'}</p></article><article><MessageCircle/><b>{ar?'عمل من واتساب':'Work from WhatsApp'}</b><p>{ar?'رسائل وصوت وملفات وقرارات، مع ذاكرة تربط الحديث بالعمل.':'Messages, voice, files and decisions, with memory tied to the work.'}</p></article><article><ShieldCheck/><b>{ar?'تحكم بموافقة واضحة':'Controlled execution'}</b><p>{ar?'الإجراءات الحساسة تعرض ما سيحدث وتنتظر موافقة المالك.':'Sensitive actions explain what will happen and wait for owner approval.'}</p></article></div></section>
-    <section className="reid-achievements" id="achievements" aria-labelledby="reid-achievements-title">
+    <section ref={achievementRef} className={`reid-achievements${achievementVisible?' is-visible':''}`} id="achievements" aria-labelledby="reid-achievements-title">
       <div className="reid-section-heading"><span className="os-eyebrow">03 / {ar?'من إنجازات الشركة':'COMPANY ACHIEVEMENTS'}</span><h2 id="reid-achievements-title">{ar?<>نبتكر حلولًا<br/>قريبة من الإنسان.</>:<>Ideas made<br/>human.</>}</h2><p>{ar?'نبدأ من تجربة المستخدم، ثم نبني التقنية حولها بعناية.':'We start with the human experience, then build the technology around it.'}</p></div>
       <article className="reid-achievement-card">
         <div className="reid-achievement-media">
           <img src={corConcept} alt={ar?'تصور تقريبي لكشك COR الصحي التفاعلي للأطفال':'Concept visualization of the COR interactive pediatric health kiosk'}/>
-          <div className="reid-achievement-overlay"><div><span>COR / 01</span><span>{ar?'تصوّر للمشروع':'PROJECT CONCEPT'}</span></div><div><small>{ar?'تقنية صحية للأطفال':'PEDIATRIC HEALTH TECHNOLOGY'}</small><h3>{ar?<>قياس صحي.<br/>بتجربة أهدأ.</>:<>Vital signs.<br/>A calmer experience.</>}</h3></div></div>
+          <div className="reid-achievement-overlay"><div><span>COR / 01</span><span className="cor-concept-label"><i/>{ar?'تصوّر للمشروع':'PROJECT CONCEPT'}</span></div><div><small>{ar?'تقنية صحية للأطفال':'PEDIATRIC HEALTH TECHNOLOGY'}</small><h3>{ar?<>قياس صحي.<br/>بتجربة أهدأ.</>:<>Vital signs.<br/>A calmer experience.</>}</h3></div></div>
         </div>
         <div className="reid-achievement-body">
           <div className="reid-achievement-story"><span>{ar?'الفكرة':'THE IDEA'}</span><p>{ar?'يحوّل COR قياس العلامات الحيوية للأطفال إلى رحلة بسيطة ومطمئنة، تقودها شخصية تفاعلية وتصل نتائجها للطبيب بشكل واضح.':'COR turns pediatric vital-sign measurement into a simple, reassuring journey guided by an interactive character, with clear results for the clinician.'}</p></div>
