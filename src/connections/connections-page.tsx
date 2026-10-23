@@ -83,8 +83,8 @@ export function Connections({ lang, go }: { lang: Lang; go: (page: Page) => void
               <p style={{ color: 'var(--text-muted)', maxWidth: '420px', margin: '0 auto' }}>
                 {tr(lang, 'يستقبل ريّد الرسائل النصية والصوتية والمستندات ويتعامل معها وفق القواعد المعتمدة.', 'Reid is listening for messages, voice notes and documents according to governed rules.')}
               </p>
-              <Button variant="primary" onClick={() => go('inbox')}>
-                {tr(lang, 'فتح صندوق المحادثات', 'Open inbox')} <ArrowUpRight />
+              <Button variant="primary" icon={<ArrowUpRight />} onClick={() => go('inbox')}>
+                {tr(lang, 'فتح صندوق المحادثات', 'Open inbox')}
               </Button>
             </div>
           ) : (

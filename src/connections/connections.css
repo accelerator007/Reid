@@ -52,7 +52,7 @@
   text-align: center;
 }
 
-.connections-qr-success svg {
+.connections-qr-success > svg {
   width: 52px;
   height: 52px;
   color: var(--success-text);

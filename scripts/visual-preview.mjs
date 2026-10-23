@@ -40,11 +40,21 @@ for (const variant of variants) {
       await context.route(`https://${supabaseHost}/**`, respond);
       await context.route(`${base}/api/**`, respondForLocalApi);
       const page = await context.newPage();
-      const problems = [];
-      page.on('pageerror', error => problems.push(error.message));
       for (const path of pages) {
+        const problems = [];
+        const onPageError = error => problems.push(error.message);
+        page.on('pageerror', onPageError);
         await page.goto(base + path, { waitUntil: 'networkidle' });
         await page.waitForTimeout(600);
+        await page.evaluate(async () => {
+          const step = Math.max(320, Math.floor(innerHeight * 0.72));
+          for (let top = 0; top < document.documentElement.scrollHeight; top += step) {
+            scrollTo({ top, behavior: 'instant' });
+            await new Promise(resolve => setTimeout(resolve, 80));
+          }
+          scrollTo({ top: 0, behavior: 'instant' });
+        });
+        await page.waitForTimeout(1400);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         const file = `${out}/${variant.name}-${theme}-${lang}${path === '/' ? '-home' : path.replaceAll('/', '-')}.png`;
         await page.screenshot({ path: file, fullPage: variant.name === 'desktop' });
@@ -60,8 +70,9 @@ for (const variant of variants) {
           const tabOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
           console.log(`${tabFile}${tabOverflow > 1 ? `  ⚠ horizontal overflow ${tabOverflow}px` : ''}`);
         }
+        if (problems.length) console.log(`page errors (${variant.name}/${theme}/${lang}${path}):`, [...new Set(problems)].join(' | '));
+        page.off('pageerror', onPageError);
       }
-      if (problems.length) console.log(`page errors (${variant.name}/${theme}/${lang}):`, [...new Set(problems)].join(' | '));
       await context.close();
     }
   }

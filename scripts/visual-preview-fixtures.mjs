@@ -319,6 +319,24 @@ export function respondForLocalApi(route) {
     host:{name:'ai-lap',lastSeenAt:iso(-0.005),fresh:true,cpuPercent:24,memoryUsedGb:11.2,memoryTotalGb:32,diskUsedPercent:null},
     websiteHost:{name:'Reid',lastSeenAt:iso(-0.001),fresh:true,cpuPercent:12.4,memoryUsedGb:3.8,memoryTotalGb:16,diskUsedPercent:37.2},
   });
+  if (path === 'operations/center') return json({
+    history:Array.from({length:72},(_,index)=>({at:iso(-24+index/3),ok:index!==41&&index!==42,queue:index%9===0?2:0,latency:68+(index%7)*9})),
+    incidents:[{id:'incident-1',component:'website',openedAt:iso(-10),resolvedAt:iso(-9.7)}],
+    actions:[{id:'action-1',kind:'backup',target:'weekly-backup.yml',command:'workflow_dispatch',status:'completed',createdAt:iso(-96)}],
+    containers:[
+      {name:'reid-web',status:'running',health:'healthy',startedAt:iso(-240),restartCount:0,oomKilled:false},
+      {name:'reid-services',status:'running',health:'healthy',startedAt:iso(-238),restartCount:1,oomKilled:false},
+      {name:'reid-ai-relay',status:'running',health:'healthy',startedAt:iso(-120),restartCount:2,oomKilled:false},
+      {name:'reid-tts',status:'running',health:'healthy',startedAt:iso(-238),restartCount:0,oomKilled:false},
+    ],
+    hostCheckedAt:iso(-0.01),workflowCheckedAt:iso(-0.05),
+    workflows:{
+      'weekly-backup.yml':{id:1,status:'completed',conclusion:'success',createdAt:iso(-96),updatedAt:iso(-95.5),url:'https://example.test/runs/1',artifacts:[{name:'reid-backup.enc',sizeBytes:4823440,expired:false}]},
+      'executive-reports.yml':{id:2,status:'completed',conclusion:'success',createdAt:iso(-28),updatedAt:iso(-27.9),url:'https://example.test/runs/2'},
+      'live-agent.yml':{id:3,status:'completed',conclusion:'success',createdAt:iso(-7),updatedAt:iso(-6.8),url:'https://example.test/runs/3'},
+      'uptime.yml':{id:4,status:'completed',conclusion:'success',createdAt:iso(-1),updatedAt:iso(-0.9),url:'https://example.test/runs/4'},
+    },
+  });
   const thread = path.match(/^whatsapp\/conversations\/([^/]+)\/messages$/);
   if (thread) return json([...(threads[thread[1]] ?? [])].reverse());
   return json({ ok: true });
