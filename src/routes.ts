@@ -73,7 +73,6 @@ export const routes: readonly Route[] = [
   { page: "home", path: "/" },
   { page: "login", path: "/login" },
   { page: "apply", path: "/apply" },
-  { page: "workshops", path: "/workshops" },
   { page: "today", path: "/today", authenticated: true, allow: staff },
   { page: "inbox", path: "/inbox", authenticated: true, allow: ["owner"] },
   { page: "connections", path: "/connections", authenticated: true, allow: ["owner"] },
@@ -89,13 +88,8 @@ export const routes: readonly Route[] = [
   { page: "profile", path: "/profile", authenticated: true, allow: [...staff, "guest"] },
   { page: "workspace", path: "/workspace", authenticated: true, allow: staff },
   { page: "projects", path: "/projects", deepLinks: true, authenticated: true, allow: staff },
-  { page: "research", path: "/research", deepLinks: true, authenticated: true, allow: staff },
   { page: "crm", path: "/crm", authenticated: true, allow: ["owner", "super_admin", "admin", "hr", "sales"] },
   { page: "dashboard", path: "/dashboard", authenticated: true, allow: administrators },
-  // Workshop forms: built by administrators (is_admin in the database)...
-  { page: "forms", path: "/forms", deepLinks: true, authenticated: true, allow: ["owner", "super_admin", "admin"] },
-  // ...and answered by anyone holding the link, signed in or not.
-  { page: "respond", path: "/f", deepLinks: true },
 ];
 
 /** Where the in-app 404 lives. It is never served by the edge. */
@@ -176,4 +170,7 @@ export const legacyRedirects: Readonly<Record<string, string>> = {
   // Reid no longer runs money through the workspace; old bookmarks land somewhere useful.
   "/finance": "/today",
   "/business": "/crm",
+  "/workshops": "/",
+  "/research": "/projects",
+  "/forms": "/projects",
 };

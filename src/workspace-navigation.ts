@@ -12,20 +12,20 @@ export type WorkspaceNavGroup = {
 // a destination the gate would refuse.
 export const workspaceNavGroups: readonly WorkspaceNavGroup[] = [
   { id: 'center', label: { ar: 'ابدأ', en: 'Start' }, pages: ['owner', 'today'] },
-  { id: 'work', label: { ar: 'العمل', en: 'Work' }, pages: ['projects', 'assistant', 'inbox'] },
-  { id: 'company', label: { ar: 'كل الأدوات', en: 'All tools' }, pages: ['crm', 'operations', 'workspace', 'research', 'workshops', 'forms'] },
+  { id: 'work', label: { ar: 'العمل', en: 'Work' }, pages: ['projects', 'crm', 'inbox', 'workspace'] },
+  { id: 'company', label: { ar: 'أدوات العمل', en: 'Work tools' }, pages: ['operations', 'assistant'] },
   { id: 'administration', label: { ar: 'الإدارة', en: 'Administration' }, pages: ['admin', 'connections', 'dashboard'] },
 ] as const;
 
 /** The deliberately small everyday sidebar. Everything else stays searchable. */
-export const primaryWorkspacePages: readonly Page[] = ['owner', 'today', 'projects', 'assistant', 'inbox', 'admin'];
-export const moreWorkspacePages: readonly Page[] = ['crm', 'operations', 'workspace', 'research', 'workshops', 'forms', 'connections', 'dashboard'];
+export const primaryWorkspacePages: readonly Page[] = ['owner', 'today', 'projects', 'crm', 'inbox', 'workspace'];
+export const moreWorkspacePages: readonly Page[] = ['operations', 'assistant', 'admin', 'connections', 'dashboard'];
 
 /** Pinned below the groups, next to sign-out. */
 export const accountPages: readonly Page[] = ['profile'];
 
 /** The phone's bottom bar; everything else lives in the drawer behind "More". */
-export const mobilePrimaryPages: readonly Page[] = ['owner', 'today', 'projects', 'assistant', 'inbox'];
+export const mobilePrimaryPages: readonly Page[] = ['owner', 'today', 'projects', 'crm', 'inbox', 'workspace'];
 
 const labels: Partial<Record<Page, { ar: string; en: string }>> = {
   owner: { ar: 'الرئيسية', en: 'Home' },
@@ -34,13 +34,10 @@ const labels: Partial<Record<Page, { ar: string; en: string }>> = {
   operations: { ar: 'الطلبات', en: 'Requests' },
   projects: { ar: 'العمل', en: 'Work' },
   crm: { ar: 'العملاء', en: 'Clients' },
-  research: { ar: 'الأبحاث', en: 'Research' },
-  workshops: { ar: 'الورش', en: 'Workshops' },
   workspace: { ar: 'فريق الشركة', en: 'Company team' },
   inbox: { ar: 'واتساب', en: 'WhatsApp' },
-  dashboard: { ar: 'إعداد الوكلاء', en: 'Agent setup' },
-  forms: { ar: 'النماذج', en: 'Forms' },
-  admin: { ar: 'الإدارة', en: 'Administration' },
+  dashboard: { ar: 'النظام والذكاء', en: 'System & AI' },
+  admin: { ar: 'الإعدادات', en: 'Settings' },
   connections: { ar: 'الربط والتكاملات', en: 'Connections' },
   profile: { ar: 'حسابي', en: 'My account' },
 };

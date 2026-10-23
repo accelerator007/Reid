@@ -37,21 +37,20 @@ function build({ identity = owner, notes = [], workshops = [], contacts = [], ro
 const chat = { id: 'chat-1', jid: '96896709444@s.whatsapp.net' };
 const actions = admin => admin.table('whatsapp_actions');
 
-test('an Owner meeting request starts immediately and returns the live link', async () => {
+test('an Owner meeting request receives the retired-feature response', async () => {
   let started=0;
   const { handle }=build({meetings:{start:async ({identity,conversationId})=>{started+=1;assert.equal(identity.id,owner.id);assert.equal(conversationId,chat.id);return {id:'meeting-1',meeting_url:'https://meet.google.com/abc-defg-hij',reused:false};},latest:async()=>null,end:async()=>null}});
   const result=await handle({identity:owner,chat,text:'خلنا ندخل ميتنج'});
-  assert.equal(started,1);
-  assert.match(result.text,/meet\.google\.com\/abc-defg-hij/);
-  assert.match(result.text,/يدخل مباشرة/);
+  assert.equal(started,0);
+  assert.match(result.text,/أوقفت/);
 });
 
-test('an employee cannot create the Owner voice meeting', async () => {
+test('an employee also receives the retired meeting response', async () => {
   let started=0;
   const { handle }=build({identity:employee,meetings:{start:async()=>{started+=1;}}});
   const result=await handle({identity:employee,chat,text:'أرسل لي رابط ميتنج'});
   assert.equal(started,0);
-  assert.match(result.text,/للمالك فقط/);
+  assert.match(result.text,/أوقفت/);
 });
 
 test('an instruction hidden in a stored note never becomes an action', async () => {
@@ -167,7 +166,7 @@ test('a disabled capability refuses instead of quietly doing it anyway', async (
   const locked = { ...owner, notes_enabled: false, workshops_enabled: false, artifacts_enabled: false };
   const { admin, handle } = build({ identity: locked });
   assert.match((await handle({ identity: locked, chat, text: 'احفظ ملاحظة: شيء' })).text, /الملاحظات مقفّلة/);
-  assert.match((await handle({ identity: locked, chat, text: 'اعرض الورش' })).text, /أوامر الورش مقفّلة/);
+  assert.match((await handle({ identity: locked, chat, text: 'اعرض الورش' })).text, /أوقفت/);
   assert.match((await handle({ identity: locked, chat, text: 'سوّي لي تقرير عن المبيعات' })).text, /مقفّل لحسابك/);
   assert.equal(actions(admin).length, 0);
 });

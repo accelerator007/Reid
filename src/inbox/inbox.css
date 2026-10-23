@@ -147,3 +147,9 @@
   .bubble { max-width: 88%; }
 }
 .inbox-contact-kind{display:inline-flex;vertical-align:middle;margin-inline-start:5px;padding:2px 6px;border-radius:var(--radius-pill);background:var(--bg);color:var(--muted);font-size:8px;font-weight:600;white-space:nowrap}.inbox-contact-kind[data-kind="internal"]{background:var(--good-fill);color:var(--good)}.inbox-contact-kind[data-kind="group"]{background:var(--info-soft);color:var(--info-text)}
+
+.customer-journey { padding: var(--space-3); border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); flex-shrink: 0; max-height: 30%; overflow: auto; }
+.customer-journey__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.customer-journey p { margin: var(--space-2) 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.customer-journey nav { position: static; display: flex; flex-wrap: wrap; gap: var(--space-3); padding: 0; background: none; border: 0; box-shadow: none; }
+.customer-journey a { color: var(--primary-text); font-size: var(--text-sm); }

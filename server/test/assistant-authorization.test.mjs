@@ -221,22 +221,15 @@ test('Arabic withdrawal commands prepare only a draft transition',()=>{
   }
 });
 
-test('hiding a named workshop needs confirmation and preserves all other fields',async()=>{
+test('workshop commands are retired without creating an action',async()=>{
   const state=fixture();
   state.tables.whatsapp_actions.length=0;
   Object.assign(state.tables.workshops[0],{title_ar:'مقدمة الذكاء',status:'published',capacity:20});
-  const preview=await state.handle({identity:state.identity,chat:state.chat,text:'أخف الورشة مقدمة الذكاء'});
-  assert.match(preview.text,/موافقة/);
+  const result=await state.handle({identity:state.identity,chat:state.chat,text:'أخف الورشة مقدمة الذكاء'});
+  assert.match(result.text,/أوقفت/);
   assert.equal(state.tables.workshops[0].status,'published');
-  const action=state.tables.whatsapp_actions[0];
-  assert.equal(action.kind,'workshop_update');
-  assert.deepEqual(action.payload,{workshop_id:'workshop-id',status:'draft'});
-  assert.equal(action.status,'pending_confirmation');
-  await approve(state);
-  assert.equal(state.tables.workshops[0].status,'draft');
-  assert.equal(state.tables.workshops[0].capacity,20);
-  assert.equal(action.status,'completed');
-  assert.deepEqual(state.writes.filter(write=>write.table==='workshops').map(write=>write.payload),[{status:'draft'}]);
+  assert.equal(state.tables.whatsapp_actions.length,0);
+  assert.equal(state.writes.some(write=>write.table==='workshops'),false);
 });
 
 test('workshop withdrawal also respects revoked flags and manager roles',async()=>{
@@ -262,7 +255,7 @@ test('workshop updates cannot approve arbitrary fields or status transitions',as
   }
 });
 
-test('publish, cancel and hide require a uniquely named workshop',async()=>{
+test('publish, cancel and hide workshop commands stay retired',async()=>{
   for(const command of ['انشر ورشة','الغي ورشة','أخف الورشة'])for(const name of ['', ' الذكاء']){
     const state=fixture();
     state.tables.whatsapp_actions.length=0;
@@ -272,13 +265,13 @@ test('publish, cancel and hide require a uniquely named workshop',async()=>{
     ];
     const result=await state.handle({identity:state.identity,chat:state.chat,text:`${command}${name}`});
     assert.equal(result.handled,true);
-    assert.match(result.text,name?/أكثر من ورشة/:/اكتب اسم الورشة/);
+    assert.match(result.text,/أوقفت/);
     assert.equal(state.tables.whatsapp_actions.length,0);
     assert.equal(state.writes.some(write=>write.table==='workshops'),false);
   }
 });
 
-test('group address prefixes are removed for commands and their confirmation',async()=>{
+test('group address prefixes still reach the retired-workshop response',async()=>{
   for(const prefix of ['ريد','ريّد،','Reid:']){
     const state=fixture();
     state.chat.jid='123456@g.us';
@@ -286,8 +279,8 @@ test('group address prefixes are removed for commands and their confirmation',as
     Object.assign(state.tables.workshops[0],{title_ar:'مقدمة الذكاء',status:'published'});
     const result=await state.handle({identity:state.identity,chat:state.chat,text:`${prefix} أخف الورشة مقدمة الذكاء`});
     assert.equal(result.handled,true);
+    assert.match(result.text,/أوقفت/);
     assert.equal(state.tables.workshops[0].status,'published');
-    await state.handle({identity:state.identity,chat:state.chat,text:`${prefix} موافقة`});
-    assert.equal(state.tables.workshops[0].status,'draft');
+    assert.equal(state.tables.whatsapp_actions.length,0);
   }
 });

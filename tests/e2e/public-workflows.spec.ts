@@ -52,12 +52,10 @@ test('protects project routes for anonymous visitors', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
 });
 
-test('protects research routes for anonymous visitors', async ({ page }) => {
+test('redirects the retired research workspace to projects', async ({ page }) => {
   await page.goto('/research');
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
-  await expect(page.getByText('الأبحاث')).toHaveCount(0);
-  await page.goto('/research/00000000-0000-0000-0000-000000000002');
-  await expect(page.getByRole('heading', { name: 'تسجيل الدخول' })).toBeVisible();
+  await expect(page).toHaveURL(/\/projects$/);
 });
 
 test('protects CRM for anonymous visitors', async ({ page }) => {

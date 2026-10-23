@@ -112,14 +112,10 @@ test.describe('authenticated employee role journeys', () => {
     await page.locator('input[name="email"]').fill(users.owner.email);
     await page.locator('input[name="password"]').fill(password);
     await page.getByRole('main').getByRole('button', { name: 'تسجيل الدخول', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'إدارة الوكلاء' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'مركز قيادة النظام' })).toBeVisible();
-    const runnerCard=page.locator('.runner-card');
-    await expect(runnerCard).toContainText('gemma4:12b');
-    await expect(runnerCard).toContainText('متصل', { timeout:15_000 });
-    await expect(runnerCard.locator('.telemetry')).toHaveCount(5);
-    await page.getByRole('button', { name: /Operations:/ }).click();
-    await expect(page.getByRole('button', { name: 'تشغيل يدوي' })).toBeVisible();
+    await expect(page.locator('.infra-dashboard')).toBeVisible({timeout:20_000});
+    const runnerCard=page.locator('.infra-host').filter({has:page.getByRole('heading',{name:'ai-lap',exact:true})});
+    await expect(runnerCard).toHaveAttribute('data-online','true',{timeout:20_000});
+    await expect(runnerCard.locator('.infra-meters')).toBeVisible();
     const caller = createClient(url!, publishableKey!, { auth: { persistSession: false } });
     const signed = await caller.auth.signInWithPassword({ email: users.owner.email, password });
     if (signed.error) throw signed.error;

@@ -57,6 +57,7 @@ const fixtures = {
     { id: 'ts2', user_id: 'u-maryam', task_id: null, minutes: 390, work_date: '2026-09-28', notes: 'مراجعة مكونات الواجهة' },
     { id: 'ts3', user_id: 'u-maryam', task_id: null, minutes: 300, work_date: '2026-09-27', notes: null },
   ],
+  owner_action_items: [{id:'handoff:1',kind:'handoff',title:'أحمد البلوشي',due_at:iso(-2),href:'/inbox?chat=chat-1'},{id:'task:1',kind:'task',title:'متابعة متطلبات المشروع',due_at:iso(-24),href:'/today?task=t1'}],
   owner_company_snapshot: {
     as_of: iso(0),
     metrics: { active_people: 14, active_projects: 5 },
@@ -175,7 +176,7 @@ const fixtures = {
     { id: 'ollama', name: 'Ollama على ai-lap', kind: 'local', chat_model: 'gemma4:12b', max_classification: 'restricted', retains_data: false, enabled: true },
     { id: 'gemini', name: 'Google Gemini API', kind: 'external', chat_model: 'gemini-2.5-flash', max_classification: 'restricted', retains_data: true, enabled: false },
   ],
-  agent_runner_status: { id: 'ai-lap', status: 'online', version: '1.2.2', model: 'gemma4:12b', gpu: 'NVIDIA RTX 4070', ping_ms: 38, cpu_percent: 24, memory_used_gb: 11.2, memory_total_gb: 32, gpu_utilization: 61, vram_used_mb: 9830, vram_total_mb: 12282, last_seen_at: iso(-0.005) },
+  agent_runner_status: { id: 'ai-lap', status: 'online', version: '1.2.2', model: 'gemma4:12b', gpu: 'NVIDIA RTX 4070', ping_ms: 38, adapter_latency_ms: 640, cpu_percent: 24, memory_used_gb: 11.2, memory_total_gb: 32, gpu_utilization: 61, vram_used_mb: 9830, vram_total_mb: 12282, last_seen_at: iso(-0.005) },
   agent_runs: [
     { id: 'run-1', agent_id: 'content', provider_id: 'ollama', classification: 'public', run_state: 'pending_approval', approval_level: 2, approval_state: 'pending', latency_ms: null, token_usage: null, quality_score: null, quality_flags: [], revision_count: 0, output_preview: null, error: null, created_at: iso(-0.4), requested_by: 'u-ali' },
     { id: 'run-2', agent_id: 'operations', provider_id: 'ollama', classification: 'internal', run_state: 'running', approval_level: 0, approval_state: 'not_required', latency_ms: null, token_usage: null, quality_score: null, quality_flags: [], revision_count: 0, output_preview: null, error: null, created_at: iso(-0.05), requested_by: user.id },
@@ -304,8 +305,38 @@ export function respondForLocalApi(route) {
     {id:'ollama',name:'Reid ai-lap',kind:'local',api_style:'ollama',model_mode:'auto',last_model_resolved_at:iso(-1),endpoint:'outbound://ai-lap',chat_model:'gemma4:12b',embedding_model:'nomic-embed-text:latest',max_classification:'restricted',retains_data:false,enabled:true,requests_per_hour:120,requests_per_day:2000,notes:'Primary local runtime',has_api_key:false,last_tested_at:iso(-1),last_test_status:'success',last_test_latency_ms:640,last_test_error:null,usage:{requests_24h:34,tokens_24h:18240,requests_30d:416,succeeded_30d:402,failed_30d:14,prompt_tokens_30d:142600,completion_tokens_30d:78120,total_tokens_30d:220720,average_latency_ms_30d:1740,requests_total:1288,total_tokens_total:681400,last_used_at:iso(-0.02)},created_at:iso(-500),updated_at:iso(-1)},
     {id:'gemini',name:'Google Gemini API',kind:'external',api_style:'google_gemini',model_mode:'fixed',last_model_resolved_at:null,endpoint:'https://generativelanguage.googleapis.com/v1beta',chat_model:'gemini-3.6-flash',embedding_model:'gemini-embedding-001',max_classification:'public',retains_data:true,enabled:false,requests_per_hour:20,requests_per_day:250,notes:'Public-data fallback',has_api_key:true,last_tested_at:iso(-2),last_test_status:'success',last_test_latency_ms:820,last_test_error:null,usage:{requests_24h:0,tokens_24h:0,requests_30d:18,succeeded_30d:17,failed_30d:1,prompt_tokens_30d:5400,completion_tokens_30d:2300,total_tokens_30d:7700,average_latency_ms_30d:980,requests_total:94,total_tokens_total:41280,last_used_at:iso(-36)},created_at:iso(-500),updated_at:iso(-2)},
   ]);
+  if(path==='ai/runtime')return json({active:0,maxConcurrent:3,circuit:'closed',retryAfterMs:0,windowRequests:40,windowFailures:2,p50Ms:1200,p95Ms:3500,externalFallback:false});
+  if(path==='meet/status')return json({googleAppConfigured:true,googleConnected:false,googleEmail:null,voiceProviderConfigured:false,transcriptionConfigured:false,ready:false,active:null});
+  if(path==='meet/preflight')return json({checkedAt:new Date().toISOString(),ready:false,checks:{google:false,voice:false,ai:true,tts:true,transcription:false},createsMeeting:false});
+  if(path.endsWith('/journey'))return json(null);
+  if(path==='whatsapp/journey-options')return json({contacts:[],projects:[],people:[{id:user.id,full_name:'شيخة المعمري'}]});
   if (path === 'ai/health') return json({ online: true, model: 'gemma4:12b',latencyMs:640,capabilities:['chat','vision'] });
-  if (path === 'operations/status') return json({components:{website:{status:'healthy'},ai:{status:'healthy'},tts:{status:'healthy'},database:{status:'healthy'},whatsapp:{status:'healthy'},runner:{status:'healthy'}}});
+  if (path === 'operations/status') return json({
+    checkedAt:iso(0),
+    components:{website:{status:'healthy',latencyMs:82},ai:{status:'healthy',latencyMs:640},tts:{status:'healthy',latencyMs:190},database:{status:'healthy'},whatsapp:{status:'healthy',connection:'connected'},runner:{status:'healthy'}},
+    queue:{pending:2,failed:0,uncertain:0},
+    activity:{lastInboundAt:iso(-0.2),lastOutboundAt:iso(-0.18)},
+    host:{name:'ai-lap',lastSeenAt:iso(-0.005),fresh:true,cpuPercent:24,memoryUsedGb:11.2,memoryTotalGb:32,diskUsedPercent:null},
+    websiteHost:{name:'Reid',lastSeenAt:iso(-0.001),fresh:true,cpuPercent:12.4,memoryUsedGb:3.8,memoryTotalGb:16,diskUsedPercent:37.2},
+  });
+  if (path === 'operations/center') return json({
+    history:Array.from({length:72},(_,index)=>({at:iso(-24+index/3),ok:index!==41&&index!==42,queue:index%9===0?2:0,latency:68+(index%7)*9})),
+    incidents:[{id:'incident-1',component:'website',openedAt:iso(-10),resolvedAt:iso(-9.7)}],
+    actions:[{id:'action-1',kind:'backup',target:'weekly-backup.yml',command:'workflow_dispatch',status:'completed',createdAt:iso(-96)}],
+    containers:[
+      {name:'reid-web',status:'running',health:'healthy',startedAt:iso(-240),restartCount:0,oomKilled:false},
+      {name:'reid-services',status:'running',health:'healthy',startedAt:iso(-238),restartCount:1,oomKilled:false},
+      {name:'reid-ai-relay',status:'running',health:'healthy',startedAt:iso(-120),restartCount:2,oomKilled:false},
+      {name:'reid-tts',status:'running',health:'healthy',startedAt:iso(-238),restartCount:0,oomKilled:false},
+    ],
+    hostCheckedAt:iso(-0.01),workflowCheckedAt:iso(-0.05),
+    workflows:{
+      'weekly-backup.yml':{id:1,status:'completed',conclusion:'success',createdAt:iso(-96),updatedAt:iso(-95.5),url:'https://example.test/runs/1',artifacts:[{name:'reid-backup.enc',sizeBytes:4823440,expired:false}]},
+      'executive-reports.yml':{id:2,status:'completed',conclusion:'success',createdAt:iso(-28),updatedAt:iso(-27.9),url:'https://example.test/runs/2'},
+      'live-agent.yml':{id:3,status:'completed',conclusion:'success',createdAt:iso(-7),updatedAt:iso(-6.8),url:'https://example.test/runs/3'},
+      'uptime.yml':{id:4,status:'completed',conclusion:'success',createdAt:iso(-1),updatedAt:iso(-0.9),url:'https://example.test/runs/4'},
+    },
+  });
   const thread = path.match(/^whatsapp\/conversations\/([^/]+)\/messages$/);
   if (thread) return json([...(threads[thread[1]] ?? [])].reverse());
   return json({ ok: true });

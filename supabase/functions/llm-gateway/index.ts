@@ -284,7 +284,7 @@ async function buildAgentContext(admin: DbClient, agentId: string, requesterId: 
   const context: Record<string, unknown> = { meta: { generated_at: now.toISOString(), timezone: 'Asia/Muscat', local_time: `${localTime} (Asia/Muscat, UTC+4)`, clock_rule: 'Use meta.local_time for any question about the current time or date; never reuse a time found in memory or conversation.', company: 'Reid' } };
   if (['ceo', 'operations', 'analytics'].includes(agentId)) {
     context.projects = await rows(admin, 'projects', 'id,name,type,status,start_date,target_date,manager_id', 'updated_at');
-    context.tasks = await rows(admin, 'tasks', 'id,title,status,priority,due_at,project_id,research_id,assignee_id');
+    context.tasks = await rows(admin, 'tasks', 'id,title,status,priority,due_at,project_id,assignee_id');
   }
   if (['ceo', 'sales', 'support'].includes(agentId)) {
     context.leads = await rows(admin, 'crm_leads', 'id,title,stage,probability,next_follow_up_at,owner_id', 'updated_at');
@@ -302,7 +302,6 @@ async function buildAgentContext(admin: DbClient, agentId: string, requesterId: 
   }
   if (agentId === 'knowledge') {
     context.projectDocuments = await rows(admin, 'project_files', 'id,project_id,title,category,restricted,created_at');
-    context.researchDocuments = await rows(admin, 'research_documents', 'id,research_id,title,category,restricted,created_at');
   }
   context.memory = await scopedMemories(admin, agentId, requesterId, args);
   return context;
@@ -320,7 +319,7 @@ async function executeTool(admin: DbClient, tool: AgentTool, args: Record<string
   const uuid = (value: unknown) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value) ? value : null;
   switch (tool.id) {
     case 'projects.list': return rows(admin, 'projects', 'id,name,type,status,start_date,target_date,manager_id', 'updated_at');
-    case 'tasks.list': return rows(admin, 'tasks', 'id,title,status,priority,due_at,project_id,research_id,assignee_id');
+    case 'tasks.list': return rows(admin, 'tasks', 'id,title,status,priority,due_at,project_id,assignee_id');
     case 'crm.pipeline': return {
       leads: await rows(admin, 'crm_leads', 'id,title,stage,probability,next_follow_up_at,owner_id', 'updated_at'),
       deals: await rows(admin, 'crm_deals', 'id,title,stage,expected_close_date,owner_id', 'updated_at'),
@@ -335,13 +334,12 @@ async function executeTool(admin: DbClient, tool: AgentTool, args: Record<string
     };
     case 'knowledge.search': {
       const query = text(args.query, 120)?.toLowerCase() || '';
-      const [projectDocuments, researchDocuments, memory] = await Promise.all([
+      const [projectDocuments, memory] = await Promise.all([
         rows(admin, 'project_files', 'id,project_id,title,category,restricted,created_at'),
-        rows(admin, 'research_documents', 'id,research_id,title,category,restricted,created_at'),
         scopedMemories(admin, 'knowledge', requesterId, args),
       ]);
       const match = (row: Record<string, unknown>) => JSON.stringify(row).toLowerCase().includes(query);
-      return { projectDocuments: projectDocuments.filter(match).slice(0, 12), researchDocuments: researchDocuments.filter(match).slice(0, 12), memory: memory.filter(match).slice(0, 12) };
+      return { projectDocuments: projectDocuments.filter(match).slice(0, 12), memory: memory.filter(match).slice(0, 12) };
     }
     case 'reminders.list': {
       const result=await admin.from('personal_reminders').select('id,reminder_text,due_at,status,timezone').eq('owner_id',requesterId).eq('status','scheduled').order('due_at').limit(30);
@@ -356,9 +354,9 @@ async function executeTool(admin: DbClient, tool: AgentTool, args: Record<string
       if(result.error)throw new Error('tool_reminder_cancel_failed'); return result.data;
     }
     case 'tasks.create': {
-      const payload = { title: text(args.title, 200), description: text(args.description, 2000), project_id: uuid(args.project_id), research_id: uuid(args.research_id), assignee_id: uuid(args.assignee_id), priority: Math.max(0, Math.min(4, Number(args.priority ?? 2))), due_at: text(args.due_at, 40), created_by: requesterId };
-      if (!payload.project_id && !payload.research_id) throw new Error('tool_argument_missing:project_id_or_research_id');
-      const result = await admin.from('tasks').insert(payload).select('id,title,status,priority,due_at,project_id,research_id,assignee_id').single();
+      const payload = { title: text(args.title, 200), description: text(args.description, 2000), project_id: uuid(args.project_id), assignee_id: uuid(args.assignee_id), priority: Math.max(0, Math.min(4, Number(args.priority ?? 2))), due_at: text(args.due_at, 40), created_by: requesterId };
+      if (!payload.project_id) throw new Error('tool_argument_missing:project_id');
+      const result = await admin.from('tasks').insert(payload).select('id,title,status,priority,due_at,project_id,assignee_id').single();
       if (result.error) throw new Error('tool_tasks_create_failed'); return result.data;
     }
     case 'crm.follow_up.create': {

@@ -175,12 +175,24 @@ export function createMeetingService({admin,check,env,fetchImpl=fetch}) {
   }
 
   async function status(ownerId) {
-    const linked=await connection(ownerId).catch(()=>null);
-    const active=await check(admin.from('reid_meetings').select('id,status,meeting_url,started_at,created_at').eq('owner_id',ownerId).in('status',['creating','joining','active']).order('created_at',{ascending:false}).limit(1).maybeSingle()).catch(()=>null);
+    const linked=await connection(ownerId);
+    const active=await check(admin.from('reid_meetings').select('id,status,meeting_url,started_at,created_at').eq('owner_id',ownerId).in('status',['creating','joining','active']).order('created_at',{ascending:false}).limit(1).maybeSingle());
     return {googleAppConfigured:googleReady,googleConnected:Boolean(linked?.google_refresh_token),googleEmail:linked?.google_email||null,voiceProviderConfigured:recallKeyReady,transcriptionConfigured:transcriptionReady,ready:googleReady&&recallReady&&Boolean(linked?.google_refresh_token),active};
   }
 
-  return {start,end,latest,status,authorizationUrl,completeAuthorization};
+  async function preflight(ownerId) {
+    const configured=await status(ownerId);
+    const probe=async(url,headers={})=>{try{return (await fetchImpl(url,{headers,redirect:'error',signal:AbortSignal.timeout(8000)})).ok;}catch{return false;}};
+    const [google,voice,ai,tts]=await Promise.all([
+      configured.googleConnected?accessToken(ownerId).then(()=>true,()=>false):false,
+      recallKeyReady?probe(`${recallBase}/bot/?limit=1`,{Authorization:`Token ${env.RECALL_API_KEY}`}):false,
+      env.AI_URL?probe(`${env.AI_URL}/health`,{'x-reid-origin-token':env.AI_TOKEN}):false,
+      probe(`${env.REID_TTS_URL||'http://tts:5050'}/healthz`),
+    ]);
+    const checks={google,voice,ai,tts,transcription:transcriptionReady};
+    return {checkedAt:new Date().toISOString(),checks,ready:Object.values(checks).every(Boolean),createsMeeting:false};
+  }
+  return {start,end,latest,status,preflight,authorizationUrl,completeAuthorization};
 }
 
 export function meetingErrorMessage(error) {

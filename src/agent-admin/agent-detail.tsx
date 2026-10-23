@@ -173,7 +173,7 @@ export function AgentDetail({ lang, agent, provider, data, back, reload }: {
       </div>
 
       <ToolDialog lang={lang} agent={agent} tool={tool} onClose={() => setTool(null)} onDone={async text => { setResult(text); await reload(); }} />
-      <DecideDialog lang={lang} run={deciding} agentLabel={name} onClose={() => setDeciding(null)} onDone={reload} />
+      <DecideDialog lang={lang} run={deciding} agentLabel={name} tools={data.tools} onClose={() => setDeciding(null)} onDone={reload} />
       <DisableDialog lang={lang} open={disabling} name={name} onClose={() => setDisabling(false)}
         confirm={reason => change('enable', { enabled: false, disabled_reason: reason || null }).then(() => setDisabling(false))} />
     </main>

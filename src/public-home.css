@@ -1,13 +1,67 @@
-.reid-proof{padding:clamp(70px,9vw,130px) clamp(22px,7vw,110px);background:var(--ink);color:var(--card)}
+.reid-proof{padding:clamp(70px,9vw,130px) clamp(22px,7vw,110px);background:var(--neutral-12);color:var(--neutral-1)}
 .reid-proof__intro{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr);align-items:end;gap:36px;max-width:1240px;margin:0 auto 42px}
 .reid-proof__intro .os-eyebrow{grid-column:1/-1;color:var(--brand-300)}
 .reid-proof__intro h2{margin:0;font-family:a,sans-serif;font-size:clamp(34px,5vw,66px);line-height:1.2;letter-spacing:-.04em}
-.reid-proof__intro p{margin:0;color:color-mix(in srgb,var(--card) 67%,transparent);font-size:16px;line-height:1.9}
-.reid-proof__cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;max-width:1240px;margin:auto;background:color-mix(in srgb,var(--card) 14%,transparent);border:1px solid color-mix(in srgb,var(--card) 14%,transparent);border-radius:22px;overflow:hidden}
-.reid-proof__cards article{display:grid;align-content:start;gap:13px;min-height:250px;padding:34px;background:var(--ink)}
+.reid-proof__intro p{margin:0;color:color-mix(in srgb,var(--neutral-1) 67%,transparent);font-size:16px;line-height:1.9}
+.reid-proof__cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;max-width:1240px;margin:auto;background:color-mix(in srgb,var(--neutral-1) 14%,transparent);border:1px solid color-mix(in srgb,var(--neutral-1) 14%,transparent);border-radius:22px;overflow:hidden}
+.reid-proof__cards article{display:grid;align-content:start;gap:13px;min-height:250px;padding:34px;background:var(--neutral-12)}
 .reid-proof__cards svg{width:27px;height:27px;color:var(--brand-300)}
 .reid-proof__cards b{font-size:18px}
-.reid-proof__cards p{margin:0;color:color-mix(in srgb,var(--card) 64%,transparent);font-size:13px;line-height:1.85}
+.reid-proof__cards p{margin:0;color:color-mix(in srgb,var(--neutral-1) 64%,transparent);font-size:13px;line-height:1.85}
+.dark .reid-proof{background:var(--neutral-1);color:var(--neutral-12)}
+.dark .reid-proof__intro p,.dark .reid-proof__cards p{color:color-mix(in srgb,var(--neutral-12) 67%,transparent)}
+.dark .reid-proof__cards{background:color-mix(in srgb,var(--neutral-12) 14%,transparent);border-color:color-mix(in srgb,var(--neutral-12) 14%,transparent)}
+.dark .reid-proof__cards article{background:var(--neutral-1)}
+.reid-achievements{position:relative;isolation:isolate;overflow:hidden;padding:clamp(76px,10vw,144px) clamp(22px,7vw,110px);background:linear-gradient(180deg,var(--bg),color-mix(in srgb,var(--brand-fill) 34%,var(--bg)))}
+.reid-achievements::before,.reid-achievements::after{content:"";position:absolute;z-index:-1;border-radius:999px;filter:blur(2px);pointer-events:none;opacity:.6}
+.reid-achievements::before{width:360px;height:360px;inset-block-start:9%;inset-inline-start:-180px;background:radial-gradient(circle,color-mix(in srgb,var(--brand-300) 22%,transparent),transparent 68%);animation:cor-orbit 14s ease-in-out infinite alternate}
+.reid-achievements::after{width:460px;height:460px;inset-block-end:-220px;inset-inline-end:-220px;background:radial-gradient(circle,color-mix(in srgb,var(--brand-400) 16%,transparent),transparent 70%);animation:cor-orbit 17s ease-in-out -4s infinite alternate-reverse}
+.reid-achievements>.reid-section-heading{max-width:1240px;margin:0 auto 48px}
+.reid-achievements>.reid-section-heading>*{opacity:0;transform:translateY(28px);transition:opacity .55s ease,transform .65s cubic-bezier(.2,.8,.2,1)}
+.reid-achievements>.reid-section-heading h2{transition-delay:.05s}
+.reid-achievements>.reid-section-heading p{transition-delay:.1s}
+.reid-achievements.is-visible>.reid-section-heading>*{opacity:1;transform:none}
+.reid-achievement-card{max-width:1240px;margin:auto;overflow:hidden;border:1px solid color-mix(in srgb,var(--brand-500) 14%,var(--line));border-radius:36px;background:var(--card);box-shadow:0 30px 90px color-mix(in srgb,var(--ink) 11%,transparent);opacity:0;transform:translateY(54px) scale(.985);transition:opacity .65s .12s ease,transform .75s .12s cubic-bezier(.2,.8,.2,1),box-shadow .4s ease}
+.reid-achievements.is-visible .reid-achievement-card{opacity:1;transform:none}
+.reid-achievement-card:hover{box-shadow:0 38px 110px color-mix(in srgb,var(--ink) 16%,transparent)}
+.reid-achievement-media{position:relative;min-height:560px;overflow:hidden;background:var(--ink)}
+.reid-achievement-media::before{content:"";position:absolute;z-index:2;inset-block-start:0;inset-inline-start:0;width:0;height:3px;background:linear-gradient(90deg,var(--brand-300),white,var(--brand-400));transition:width 1.4s 1s cubic-bezier(.2,.8,.2,1)}
+.reid-achievements.is-visible .reid-achievement-media::before{width:100%}
+.reid-achievement-media::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,15,30,.12),rgba(20,15,30,0) 42%,rgba(20,15,30,.72))}
+.reid-achievement-media img{width:100%;height:100%;position:absolute;inset:0;object-fit:cover;display:block;transform:scale(1.09);filter:saturate(.88);transition:transform 1s .18s cubic-bezier(.2,.8,.2,1),filter .8s .18s ease}
+.reid-achievements.is-visible .reid-achievement-media img{transform:scale(1);filter:saturate(1)}
+.reid-achievement-card:hover .reid-achievement-media img{transform:scale(1.025)}
+.reid-achievement-overlay{position:absolute;z-index:1;inset:0;display:flex;flex-direction:column;justify-content:space-between;padding:clamp(24px,4vw,48px);color:white}
+.reid-achievement-overlay>div:first-child{display:flex;justify-content:space-between;gap:16px;align-items:center}
+.reid-achievement-overlay>div:first-child span{padding:9px 13px;border:1px solid rgba(255,255,255,.3);border-radius:999px;background:rgba(21,16,29,.2);font-size:10px;font-weight:800;letter-spacing:.12em;backdrop-filter:blur(12px);opacity:0;transform:translateY(-16px);transition:opacity .42s .34s ease,transform .5s .34s cubic-bezier(.2,.8,.2,1)}
+.reid-achievement-overlay>div:first-child span:last-child{transition-delay:.4s}
+.reid-achievements.is-visible .reid-achievement-overlay>div:first-child span{opacity:1;transform:none}
+.cor-concept-label{display:flex;align-items:center;gap:7px}
+.cor-concept-label i{width:6px;height:6px;border-radius:50%;background:var(--success-solid);box-shadow:0 0 0 0 color-mix(in srgb,var(--success-solid) 55%,transparent);animation:cor-pulse 2s ease-out infinite}
+.reid-achievement-overlay>div:last-child{max-width:760px}
+.reid-achievement-overlay small{display:block;font-size:10px;font-weight:800;letter-spacing:.16em;color:rgba(255,255,255,.78);opacity:0;transform:translateY(18px);transition:opacity .42s .4s ease,transform .5s .4s cubic-bezier(.2,.8,.2,1)}
+.reid-achievement-overlay h3{margin:14px 0 0;font-family:a,sans-serif;font-size:clamp(42px,6vw,82px);line-height:1.02;letter-spacing:-.05em;color:white;text-shadow:0 4px 30px rgba(0,0,0,.24);opacity:0;transform:translateY(34px);transition:opacity .55s .46s ease,transform .65s .46s cubic-bezier(.2,.8,.2,1)}
+.reid-achievements.is-visible .reid-achievement-overlay small,.reid-achievements.is-visible .reid-achievement-overlay h3{opacity:1;transform:none}
+.reid-achievement-body{display:grid;grid-template-columns:minmax(280px,.78fr) minmax(0,1.22fr);gap:clamp(34px,5vw,76px);padding:clamp(34px,5vw,68px)}
+.reid-achievement-story,.reid-achievement-points,.reid-achievement-meta{opacity:0;transform:translateY(25px);transition:opacity .5s ease,transform .6s cubic-bezier(.2,.8,.2,1)}
+.reid-achievement-story{transition-delay:.48s}
+.reid-achievement-points{transition-delay:.56s}
+.reid-achievement-meta{transition-delay:.64s}
+.reid-achievements.is-visible .reid-achievement-story,.reid-achievements.is-visible .reid-achievement-points,.reid-achievements.is-visible .reid-achievement-meta{opacity:1;transform:none}
+.reid-achievement-story>span{display:block;margin-bottom:18px;color:var(--brand-600);font-size:10px;font-weight:850;letter-spacing:.15em}
+.reid-achievement-story>p{margin:0;color:var(--ink);font-family:a,sans-serif;font-size:clamp(21px,2.4vw,31px);line-height:1.65;letter-spacing:-.025em}
+.reid-achievement-points{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:20px;overflow:hidden}
+.reid-achievement-points article{min-height:210px;padding:24px;background:var(--card);transition:transform .3s ease,background .3s ease}
+.reid-achievement-points article:hover{position:relative;z-index:1;transform:translateY(-5px);background:color-mix(in srgb,var(--brand-fill) 35%,var(--card))}
+.reid-achievement-points small{display:block;margin-bottom:34px;color:var(--brand-500);font-size:10px;font-weight:800}
+.reid-achievement-points b{display:block;margin-bottom:10px;color:var(--ink);font-size:14px}
+.reid-achievement-points p{margin:0;color:var(--muted);font-size:11px;line-height:1.8}
+.reid-achievement-meta{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding-top:26px;border-top:1px solid var(--line)}
+.reid-achievement-meta span{display:grid;gap:7px;padding-inline:24px;border-inline-start:1px solid var(--line);color:var(--ink);font-size:13px;font-weight:750}
+.reid-achievement-meta span:first-child{padding-inline-start:0;border-inline-start:0}
+.reid-achievement-meta small{color:var(--muted);font-size:9px;font-weight:800;letter-spacing:.13em}
+@keyframes cor-pulse{70%{box-shadow:0 0 0 8px color-mix(in srgb,var(--success-solid) 0%,transparent)}100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--success-solid) 0%,transparent)}}
+@keyframes cor-orbit{from{transform:translate3d(0,-10px,0) scale(.95)}to{transform:translate3d(46px,34px,0) scale(1.08)}}
 .reid-invitation#contact{display:grid;justify-items:center;text-align:center;padding-inline:clamp(20px,6vw,90px)}
 .reid-contact-brief{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;width:min(760px,100%);margin:28px auto 20px;text-align:start}
 .reid-contact-brief label{display:grid;gap:7px;color:var(--muted);font-size:12px}
@@ -15,4 +69,6 @@
 .reid-contact-brief input,.reid-contact-brief textarea{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:var(--radius-xs);background:var(--card);color:var(--ink);font:inherit;resize:vertical}
 .reid-contact-brief input:focus,.reid-contact-brief textarea:focus{outline:2px solid var(--brand-400);outline-offset:2px}
 .reid-contact-brief .os-primary{grid-column:1/-1;justify-self:center;border:0;cursor:pointer}
-@media(max-width:760px){.reid-proof__intro,.reid-proof__cards,.reid-contact-brief{grid-template-columns:minmax(0,1fr)}.reid-proof__intro .os-eyebrow,.reid-contact-brief label:nth-child(3),.reid-contact-brief .os-primary{grid-column:auto}.reid-proof__cards article{min-height:0}.reid-hero-art .tag-two{display:none}}
+@media(max-width:900px){.reid-achievement-media{min-height:480px}.reid-achievement-body{grid-template-columns:minmax(0,1fr)}.reid-achievement-meta{grid-column:auto}}
+@media(max-width:760px){.reid-proof__intro,.reid-proof__cards,.reid-contact-brief{grid-template-columns:minmax(0,1fr)}.reid-proof__intro .os-eyebrow,.reid-contact-brief label:nth-child(3),.reid-contact-brief .os-primary{grid-column:auto}.reid-proof__cards article{min-height:0}.reid-hero-art .tag-two{display:none}.reid-achievement-card{border-radius:24px}.reid-achievement-media{min-height:440px}.reid-achievement-media img{object-position:55% center}.reid-achievement-overlay>div:first-child span:last-child{display:none}.reid-achievement-points{grid-template-columns:minmax(0,1fr)}.reid-achievement-points article{min-height:0}.reid-achievement-points small{margin-bottom:18px}.reid-achievement-meta{grid-template-columns:minmax(0,1fr);gap:18px}.reid-achievement-meta span{padding-inline:0;border-inline-start:0}}
+@media(prefers-reduced-motion:reduce){.reid-achievements::before,.reid-achievements::after,.cor-concept-label i{animation:none}.reid-achievements>.reid-section-heading>*,.reid-achievement-card,.reid-achievement-media img,.reid-achievement-media::before,.reid-achievement-overlay>div:first-child span,.reid-achievement-overlay small,.reid-achievement-overlay h3,.reid-achievement-story,.reid-achievement-points,.reid-achievement-meta{opacity:1;transform:none;filter:none;transition:none}.reid-achievement-media::before{width:100%}}

@@ -26,7 +26,7 @@ export type Decision = {
 /** What needs the Owner, most consequential first. Zero counts are omitted. */
 export function decisions(snapshot: Snapshot): Decision[] {
   const all: Decision[] = [
-    { key: 'approvals', count: snapshot.alerts.pending_approvals, page: 'admin', tone: 'brand',
+    { key: 'approvals', count: snapshot.alerts.pending_approvals, page: 'dashboard', tone: 'brand',
       title: { ar: 'موافقات بانتظارك', en: 'Approvals waiting for you' },
       detail: { ar: 'أوامر الوكلاء لا تُنفّذ قبل قرارك', en: 'Agent actions stay on hold until you decide' } },
     { key: 'agents', count: snapshot.alerts.failed_agent_runs_7d, page: 'dashboard', tone: 'danger',
@@ -35,7 +35,7 @@ export function decisions(snapshot: Snapshot): Decision[] {
     { key: 'tasks', count: snapshot.alerts.overdue_tasks, page: 'projects', tone: 'warning',
       title: { ar: 'مهام تجاوزت موعدها', en: 'Overdue tasks' },
       detail: { ar: 'تحتاج مسؤولًا أو موعدًا جديدًا', en: 'Need an owner or a new date' } },
-    { key: 'applications', count: snapshot.alerts.pending_applications, page: 'dashboard', tone: 'brand',
+    { key: 'applications', count: snapshot.alerts.pending_applications, page: 'workspace', tone: 'brand',
       title: { ar: 'طلبات انضمام جديدة', en: 'New join applications' },
       detail: { ar: 'بانتظار قرار الإدارة', en: 'Waiting for a management decision' } },
   ];

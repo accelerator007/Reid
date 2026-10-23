@@ -18,6 +18,8 @@ import './owner-overview.css';
 
 const tr = (lang: Lang, ar: string, en: string) => (lang === 'ar' ? ar : en);
 
+type ActionItem={id:string;kind:'handoff'|'task'|'review'|'lead';title:string;due_at:string;href:string};
+const actionLabels={handoff:{ar:'عميل ينتظر رد الفريق',en:'Customer awaiting a reply'},task:{ar:'مهمة متأخرة',en:'Overdue task'},review:{ar:'طلب يحتاج مراجعتك',en:'Request needs review'},lead:{ar:'متابعة عميل مستحقة',en:'Client follow-up due'}};
 type Team = { ready: number; total: number; health: AgentHealth };
 
 const decisionIcons: Record<Decision['key'], React.ReactNode> = {
@@ -37,18 +39,22 @@ export function OwnerOverview({ lang, go }: { lang: Lang; go: (page: Page) => vo
   const [team, setTeam] = React.useState<Team | null>(null);
   const [error, setError] = React.useState<AppError | null>(null);
   const [busy, setBusy] = React.useState(true);
+  const [actions,setActions]=React.useState<ActionItem[]|null>(null);
+  const [actionsError,setActionsError]=React.useState<AppError|null>(null);
   const [brief, setBrief] = React.useState('');
 
   const load = React.useCallback(async () => {
     if (!supabase) return;
     setBusy(true);
-    const [company, agents, runner] = await Promise.all([
+    const [company, agents, runner, actionResult] = await Promise.all([
       run<Snapshot>(supabase.rpc('owner_company_snapshot')),
       list<{ id: string; enabled: boolean; status: string }>(supabase.from('agents').select('id,enabled,status')),
       run<{ status: string; last_seen_at: string }>(
         supabase.from('agent_runner_status').select('status,last_seen_at').eq('id', 'ai-lap').maybeSingle(),
       ),
+      list<ActionItem>(supabase.rpc('owner_action_items')),
     ]);
+    if(actionResult.ok){setActions(actionResult.data);setActionsError(null);}else setActionsError(actionResult.error);
     if (company.ok) { setSnapshot(company.data); setError(null); } else setError(company.error);
     // The team card is secondary: if it cannot be read, it says "unknown"
     // rather than blocking the page.
@@ -112,6 +118,11 @@ export function OwnerOverview({ lang, go }: { lang: Lang; go: (page: Page) => vo
         <Button variant="primary" type="submit" disabled={!brief.trim()}>{tr(lang, 'ابدأ', 'Start')}</Button>
       </form>
 
+      <Card>
+        <SectionHeader title={tr(lang,'ابدأ بهذه الإجراءات','Start with these actions')} description={tr(lang,'حتى ٣٠ إجراء، مرتبة حسب الأولوية ثم الأقدم.','Up to 30 actions, ordered by priority then oldest first.')}/>
+        {actionsError?<InlineAlert action={<Button size="sm" onClick={()=>void load()}>{tr(lang,'تحديث','Refresh')}</Button>}>{messageFor(actionsError,lang)}</InlineAlert>:!actions?<Skeleton lines={3}/>:actions.length?<div className="overview-list">{actions.map(item=><ListRow key={item.id} dir={lang==='ar'?'rtl':'ltr'} icon={<CalendarClock/>} tone={item.kind==='handoff'?'danger':'warning'} title={item.title} description={actionLabels[item.kind][lang]} meta={new Date(item.due_at).toLocaleDateString(lang==='ar'?'ar-OM':'en-GB')} onOpen={()=>{location.assign(item.href);}}/>)}</div>:<EmptyState icon={<CheckCircle2/>} title={tr(lang,'لا توجد إجراءات عاجلة','No urgent actions')}/>}
+      </Card>
+
       {!busy && snapshot && snapshot.metrics.active_projects === 0 && (
         <Card className="overview-first-step">
           <div><FolderKanban aria-hidden="true" /><span><h2>{tr(lang, 'ابدأ العمل الحقيقي', 'Start the real work')}</h2><p>{tr(lang, 'المساحة نظيفة الآن. أضف أول مشروع أو أول عميل، وبعدها تعرض الرئيسية ما يحتاج انتباهك فقط.', 'The workspace is clean. Add the first project or client, then Home will show only what needs attention.')}</p></span></div>
@@ -132,7 +143,7 @@ export function OwnerOverview({ lang, go }: { lang: Lang; go: (page: Page) => vo
         />
         <StatCard
           icon={<ClipboardCheck />} tone={snapshot?.alerts.pending_approvals ? 'danger' : 'neutral'} loading={busy && !snapshot}
-          onOpen={() => go('admin')} label={tr(lang, 'موافقات بانتظارك', 'Awaiting approval')} value={snapshot?.alerts.pending_approvals ?? 0}
+          onOpen={() => location.assign('/dashboard?tab=approvals')} label={tr(lang, 'موافقات بانتظارك', 'Awaiting approval')} value={snapshot?.alerts.pending_approvals ?? 0}
           hint={snapshot?.alerts.pending_approvals ? tr(lang, 'قرارك مطلوب', 'Your decision needed') : tr(lang, 'لا شيء معلّق', 'Nothing pending')}
         />
         <StatCard
@@ -155,7 +166,7 @@ export function OwnerOverview({ lang, go }: { lang: Lang; go: (page: Page) => vo
                   <ListRow
                     key={item.key} dir={lang === 'ar' ? 'rtl' : 'ltr'} icon={decisionIcons[item.key]} tone={item.tone}
                     title={item.title[lang]} description={item.detail[lang]} meta={<strong className="overview-count">{item.count}</strong>}
-                    onOpen={() => go(item.page)}
+                    onOpen={() => item.key==='approvals'?location.assign('/dashboard?tab=approvals'):item.key==='applications'?location.assign('/workspace?tab=applications'):item.key==='agents'?location.assign('/dashboard?tab=runs'):go(item.page)}
                   />
                 ))}
               </div>

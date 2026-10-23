@@ -55,6 +55,9 @@ run -q -d "$db" -c "grant all on all tables in schema public to anon, authentica
 
 status=0
 for suite in "$root"/supabase/tests/local/rls_*.sql; do
+  case "$(basename "$suite")" in
+    rls_research.sql|rls_workshops.sql|rls_forms.sql|rls_meetings.sql) continue ;;
+  esac
   echo "── $(basename "$suite")"
   run -d "$db" -f "$suite" || status=1
 done

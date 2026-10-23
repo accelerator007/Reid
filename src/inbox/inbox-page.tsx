@@ -12,6 +12,7 @@ import type { Page } from '../routes';
 import { Badge, Button, EmptyState, InlineAlert, PageHeader, Skeleton } from '../ui';
 import * as api from './api';
 import { WhatsappControl } from './control-panel';
+import { CustomerJourney } from './customer-journey';
 import {
   MESSAGE_LIMIT, avatarLetter, chatName, clock, connectionLabel, connectionStates, contactKindLabel, deliveryLabel, filterChats, formatPhone,
   groupByDay, isGroup, listStamp, moodLabel, moodTones, pendingOutbox, phoneOf,
@@ -229,6 +230,7 @@ function Thread({ lang, chat, connected, outbox, now, back, onChanged, onMode }:
         </Button>
       </div>
 
+      {chat.contact_kind==='customer' && <CustomerJourney conversationId={chat.id} lang={lang}/>}
       {chat.summary && (
         <div className="thread-memory" data-open={memoryOpen}>
           <button type="button" onClick={() => setMemoryOpen(value => !value)} aria-expanded={memoryOpen}>

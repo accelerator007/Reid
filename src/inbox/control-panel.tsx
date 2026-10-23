@@ -4,7 +4,8 @@ import type { Page } from '../routes';
 import { localError } from '../local-api';
 import { Badge, Button, Card, InlineAlert, SectionHeader, StatCard, Tabs } from '../ui';
 import * as api from './api';
-import { whatsappControlCounts, type AiHealth, type AssistantAction, type Chat, type Connection, type Lang, type OperationsHealth, type OutboxItem, type WhatsappAccess, type WhatsappGroupAccess, type WhatsappHandoff, type WhatsappSettings, type WhatsappUserAccess } from './model';
+import { whatsappControlCounts, type AiHealth, type AssistantAction, type Chat, type Connection, type Lang, type OutboxItem, type WhatsappAccess, type WhatsappGroupAccess, type WhatsappHandoff, type WhatsappSettings, type WhatsappUserAccess } from './model';
+import { LinkWhatsappUser } from './link-user';
 import './control-panel.css';
 
 const tr=(lang:Lang,ar:string,en:string)=>lang==='ar'?ar:en;
@@ -15,7 +16,6 @@ export function WhatsappControl({lang,go,status,chats,outbox,onChanged}:{
   const [saved,setSaved]=React.useState<WhatsappSettings|null>(null);
   const [draft,setDraft]=React.useState<WhatsappSettings|null>(null);
   const [ai,setAi]=React.useState<AiHealth|null>(null);
-  const [operations,setOperations]=React.useState<OperationsHealth|null>(null);
   const [actions,setActions]=React.useState<AssistantAction[]>([]);
   const [access,setAccess]=React.useState<WhatsappAccess>({users:[],groups:[]});
   const [handoffs,setHandoffs]=React.useState<WhatsappHandoff[]>([]);
@@ -25,8 +25,8 @@ export function WhatsappControl({lang,go,status,chats,outbox,onChanged}:{
   const [tab,setTab]=React.useState<'overview'|'agent'|'management'>('overview');
   const load=React.useCallback(async()=>{
     try{
-      const [settings,health,ops,recent,nextAccess,nextHandoffs]=await Promise.all([api.loadSettings(),api.loadAiHealth(),api.loadOperationsHealth(),api.loadActions(),api.loadAccess(),api.loadHandoffs()]);
-      setSaved(settings);setDraft(settings);setAi(health);setOperations(ops);setActions(recent.slice(0,6));setAccess(nextAccess);setHandoffs(nextHandoffs);setError('');
+      const [settings,health,recent,nextAccess,nextHandoffs]=await Promise.all([api.loadSettings(),api.loadAiHealth(),api.loadActions(),api.loadAccess(),api.loadHandoffs()]);
+      setSaved(settings);setDraft(settings);setAi(health);setActions(recent.slice(0,30));setAccess(nextAccess);setHandoffs(nextHandoffs);setError('');
     }catch(thrown){setError(localError(thrown,lang));}
   },[lang]);
   React.useEffect(()=>{void load();},[load]);
@@ -48,7 +48,6 @@ export function WhatsappControl({lang,go,status,chats,outbox,onChanged}:{
   const changeUser=async(id:string,patch:Partial<WhatsappUserAccess>)=>{setBusy(`user:${id}`);setError('');try{setAccess(await api.updateUserAccess(id,patch));}catch(thrown){setError(localError(thrown,lang));}finally{setBusy('');}};
   const changeGroup=async(jid:string,patch:Partial<WhatsappGroupAccess>)=>{setBusy(`group:${jid}`);setError('');try{setAccess(await api.updateGroupAccess(jid,patch));}catch(thrown){setError(localError(thrown,lang));}finally{setBusy('');}};
   const resolve=async(id:string)=>{setBusy(`handoff:${id}`);setError('');try{await api.resolveHandoff(id);setHandoffs(current=>current.map(item=>item.id===id?{...item,status:'resolved'}:item));}catch(thrown){setError(localError(thrown,lang));}finally{setBusy('');}};
-  const components=operations?.components||{};
   const pendingHandoffs=handoffs.filter(item=>item.status==='pending');
 
   const tabItems=[
@@ -73,15 +72,15 @@ export function WhatsappControl({lang,go,status,chats,outbox,onChanged}:{
           <div className="wa-control__buttons"><Button icon={<PlayCircle/>} busy={busy==='active'} onClick={()=>void bulk('active')}>{tr(lang,'خلّ ريد يرد على الكل','Let Reid reply everywhere')}</Button><Button variant="danger" icon={<PauseCircle/>} busy={busy==='human'} onClick={()=>void bulk('human')}>{tr(lang,'استلام كل المحادثات','Take over all chats')}</Button></div>
         </Card>
         <Card>
-          <SectionHeader title={tr(lang,'حالة النظام','System health')} description={tr(lang,'الخدمات التي يعتمد عليها الرد والإرسال.','Services used for replies and delivery.')} />
-          <div className="wa-health-list"><Health label="WhatsApp" good={status?.connection==='connected'} detail={status?.connection||'unknown'}/><Health label={ai?.model||'AI'} good={Boolean(ai?.online)} detail={ai?.latencyMs!=null?`${ai.latencyMs} ms`:'—'}/>{Object.entries(components).filter(([name])=>!['whatsapp','ai'].includes(name)).map(([name,value])=><Health key={name} label={name} good={value.status==='healthy'} detail={value.status||'unknown'}/>)}</div>
+          <SectionHeader title={tr(lang,'اتصال واتساب','WhatsApp connection')} description={tr(lang,'حالة القناة والمودل المستخدم للرد. باقي خدمات السيرفر مجمّعة في مركز النظام.','Channel and reply-model status. The complete server view lives in the system center.')} action={<Button size="sm" variant="secondary" onClick={()=>go('dashboard')}>{tr(lang,'فتح لوحة السيرفر','Open server dashboard')}</Button>}/>
+          <div className="wa-health-list"><Health label="WhatsApp" good={status?.connection==='connected'} detail={status?.connection||'unknown'}/><Health label={ai?.model||'AI'} good={Boolean(ai?.online)} detail={ai?.latencyMs!=null?`${ai.latencyMs} ms`:'—'}/></div>
         </Card>
       </div>
       <CustomerHandoffs lang={lang} items={pendingHandoffs} busy={busy} resolve={resolve}/>
       <RecentActions lang={lang} actions={actions}/>
     </>}
     {tab==='agent'&&<AgentSettings lang={lang} draft={draft} dirty={dirty} busy={busy==='save'} patch={patch} save={save}/>} 
-    {tab==='management'&&<Management lang={lang} go={go} access={access} busy={busy} changeUser={changeUser} changeGroup={changeGroup}/>}
+    {tab==='management'&&<Management lang={lang} go={go} access={access} busy={busy} changeUser={changeUser} changeGroup={changeGroup} reload={load}/>}
   </div>;
 }
 
@@ -104,7 +103,7 @@ function AgentSettings({lang,draft,dirty,busy,patch,save}:{lang:Lang;draft:Whats
   </Card>;
 }
 
-function Management({lang,go,access,busy,changeUser,changeGroup}:{lang:Lang;go:(page:Page)=>void;access:WhatsappAccess;busy:string;changeUser:(id:string,patch:Partial<WhatsappUserAccess>)=>Promise<void>;changeGroup:(jid:string,patch:Partial<WhatsappGroupAccess>)=>Promise<void>}){
+function Management({lang,go,access,busy,changeUser,changeGroup,reload}:{lang:Lang;go:(page:Page)=>void;access:WhatsappAccess;busy:string;changeUser:(id:string,patch:Partial<WhatsappUserAccess>)=>Promise<void>;changeGroup:(jid:string,patch:Partial<WhatsappGroupAccess>)=>Promise<void>;reload:()=>Promise<void>}){
   const [section,setSection]=React.useState<'groups'|'users'>('groups');
   const activeGroups=access.groups.filter(group=>group.enabled).length;
   const recipients=access.users.filter(user=>user.enabled&&user.handoff_notifications_enabled).length;
@@ -118,15 +117,14 @@ function Management({lang,go,access,busy,changeUser,changeGroup}:{lang:Lang;go:(
         <Permission checked={group.guest_chat_enabled} disabled={!!busy||!group.enabled} title={tr(lang,'السماح لغير المرتبطين','Allow unlinked members')} description={tr(lang,'محادثة عامة فقط؛ لا بيانات شركة ولا أدوات حساب ولا أوامر حساسة.','Public chat only; no company data, account tools, or sensitive actions.')} onChange={value=>void changeGroup(group.jid,{guest_chat_enabled:value})}/>
         <label className="wa-access-select"><span><b>{tr(lang,'طريقة الرد الافتراضية','Default reply format')}</b><small>{tr(lang,`${group.known_participants} أعضاء معروفين من المحادثات`,`${group.known_participants} known participants from conversations`)}</small></span><select value={group.reply_mode} disabled={!!busy||!group.enabled} onChange={event=>void changeGroup(group.jid,{reply_mode:event.target.value as WhatsappGroupAccess['reply_mode']})}><option value="text">{tr(lang,'كتابة','Text')}</option><option value="voice">{tr(lang,'فويس','Voice')}</option></select></label>
       </div></details>):<p className="wa-actions__empty">{tr(lang,'لم يظهر أي جروب بعد. أضف رقم ريد إلى جروب، وسيظهر هنا مقفّلًا تلقائيًا.','No groups yet. Add Reid to a group and it will appear here disabled automatically.')}</p>}</div>
-    </Card>:<Card><SectionHeader title={tr(lang,'المستخدمون المرتبطون بواتساب','WhatsApp-linked users')} description={tr(lang,'الصلاحية مرتبطة بالحساب والرقم، ولا يمنح الاسم أي وصول.','Permissions follow the account and phone number; a display name grants no access.')} action={<Button variant="secondary" onClick={()=>go('connections')}>{tr(lang,'ربط مستخدم جديد','Link a new user')}</Button>} />
-      <div className="wa-access-list">{access.users.map(user=><details key={user.user_id} className="wa-access-card"><summary><span className={`wa-access-icon${user.enabled?' is-on':''}`}><UsersRound/></span><span><b>{user.display_name}</b><small><bdi dir="ltr">+{user.phone_e164}</bdi> · {user.role}</small></span><Badge tone={user.enabled?'success':'neutral'}>{user.enabled?tr(lang,'مرتبط','Linked'):tr(lang,'موقوف','Paused')}</Badge></summary><div className="wa-access-controls">
+    </Card>:<Card><SectionHeader title={tr(lang,'المستخدمون المرتبطون بواتساب','WhatsApp-linked users')} description={tr(lang,'الصلاحية مرتبطة بالحساب والرقم، ولا يمنح الاسم أي وصول.','Permissions follow the account and phone number; a display name grants no access.')}  />
+      <LinkWhatsappUser lang={lang} onSaved={reload}/><div className="wa-access-list">{access.users.map(user=><details key={user.user_id} className="wa-access-card"><summary><span className={`wa-access-icon${user.enabled?' is-on':''}`}><UsersRound/></span><span><b>{user.display_name}</b><small><bdi dir="ltr">+{user.phone_e164}</bdi> · {user.role}</small></span><Badge tone={user.enabled?'success':'neutral'}>{user.enabled?tr(lang,'مرتبط','Linked'):tr(lang,'موقوف','Paused')}</Badge></summary><div className="wa-access-controls">
         <Permission checked={user.enabled} disabled={!!busy} title={tr(lang,'تفعيل حساب واتساب','Enable WhatsApp account')} description={tr(lang,'عند الإيقاف يعامل الرقم كجهة خارجية بلا صلاحيات داخلية.','When off, the number is treated as an external contact without internal access.')} onChange={value=>void changeUser(user.user_id,{enabled:value})}/>
         <Permission checked={user.handoff_notifications_enabled} disabled={!!busy||!user.enabled} title={tr(lang,'تنبيهات طلب الإنسان','Human handoff alerts')} description={tr(lang,'يرسل ريد لهذا الشخص رسالة واتساب فيها اسم العميل ورقمه ورابط المحادثة.','Reid sends this person a WhatsApp alert with the customer, number, and chat link.')} onChange={value=>void changeUser(user.user_id,{handoff_notifications_enabled:value})}/>
         <Permission checked={user.voice_enabled} disabled={!!busy||!user.enabled} title={tr(lang,'الرسائل الصوتية','Voice replies')} description={tr(lang,'يسمح بطلب الفويس واستخدامه كوضع افتراضي.','Allows voice requests and voice as a default mode.')} onChange={value=>void changeUser(user.user_id,{voice_enabled:value})}/>
         <Permission checked={user.memory_enabled} disabled={!!busy||!user.enabled} title={tr(lang,'الذاكرة الشخصية','Personal memory')} description={tr(lang,'ذاكرة منفصلة لهذا الحساب فقط.','Memory isolated to this account.')} onChange={value=>void changeUser(user.user_id,{memory_enabled:value})}/>
         <Permission checked={user.style_learning_enabled} disabled={!!busy||!user.enabled} title={tr(lang,'تعلّم الأسلوب','Style learning')} description={tr(lang,'يتعلم طريقة كتابة هذا الشخص دون مشاركة ذاكرته.','Learns this person’s writing style without sharing memory.')} onChange={value=>void changeUser(user.user_id,{style_learning_enabled:value})}/>
         <Permission checked={user.artifacts_enabled} disabled={!!busy||!user.enabled} title={tr(lang,'الملفات والصور','Files and images')} description={tr(lang,'إنشاء وإرسال التقارير والملفات والصور.','Create and send reports, files, and images.')} onChange={value=>void changeUser(user.user_id,{artifacts_enabled:value})}/>
-        <Permission checked={user.workshops_enabled} disabled={!!busy||!user.enabled} title={tr(lang,'إدارة الورش','Workshop management')} description={tr(lang,'إنشاء وتحديث الورش حسب مستوى الموافقة.','Create and update workshops under approval rules.')} onChange={value=>void changeUser(user.user_id,{workshops_enabled:value})}/>
         <Permission checked={user.notes_enabled} disabled={!!busy||!user.enabled} title={tr(lang,'الملاحظات الخاصة','Private notes')} description={tr(lang,'حفظ وإدارة ملاحظاته الخاصة فقط.','Manage only this user’s private notes.')} onChange={value=>void changeUser(user.user_id,{notes_enabled:value})}/>
         <Permission checked={user.proactive_enabled} disabled={!!busy||!user.enabled} title={tr(lang,'المبادرة التلقائية','Proactive messages')} description={tr(lang,'يسمح لريد بالمبادرة بالتحديثات المجدولة لهذا المستخدم.','Allows Reid to initiate scheduled updates for this user.')} onChange={value=>void changeUser(user.user_id,{proactive_enabled:value})}/>
         <label className="wa-access-select"><span><b>{tr(lang,'الرد الافتراضي','Default reply')}</b><small>{tr(lang,'يمكن تغييره أيضًا بأمر فويس أو اكتب.','Can also be changed with voice or text commands.')}</small></span><select value={user.reply_mode} disabled={!!busy||!user.enabled||!user.voice_enabled} onChange={event=>void changeUser(user.user_id,{reply_mode:event.target.value as WhatsappUserAccess['reply_mode']})}><option value="text">{tr(lang,'كتابة','Text')}</option><option value="voice">{tr(lang,'فويس','Voice')}</option></select></label>

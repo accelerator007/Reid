@@ -146,3 +146,23 @@ test('status reports each readiness gate without exposing credentials',async()=>
   assert.ok(!JSON.stringify(status).includes('refresh-token'));
   assert.ok(!JSON.stringify(status).includes('recall-secret'));
 });
+
+
+test('meeting preflight checks credentials and health without creating a meeting or bot',async()=>{
+  const db=database(),requests=[];
+  const service=createMeetingService({admin:db,check,env:{...baseEnv,AI_URL:'http://ai',AI_TOKEN:'private'},fetchImpl:async(url,options={})=>{
+    requests.push({url:String(url),method:options.method||'GET'});
+    return response(200,String(url).includes('oauth2.googleapis.com')?{access_token:'temporary'}:{ok:true});
+  }});
+  const result=await service.preflight(owner.id);
+  assert.equal(result.ready,true);assert.equal(result.createsMeeting,false);assert.equal(db.table('reid_meetings').length,0);
+  assert.ok(requests.every(row=>row.method==='GET'||row.url==='https://oauth2.googleapis.com/token'));
+  assert.ok(!JSON.stringify(result).includes('temporary'));
+});
+
+test('missing meeting credentials remain explicit and never call unconfigured providers',async()=>{
+  const db=database({meeting_connections:[]});
+  const service=createMeetingService({admin:db,check,env:{SESSION_KEY:secret},fetchImpl:async()=>response(503)});
+  const result=await service.preflight(owner.id);
+  assert.equal(result.ready,false);assert.equal(result.checks.google,false);assert.equal(result.checks.voice,false);assert.equal(result.checks.transcription,false);
+});
