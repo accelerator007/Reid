@@ -120,13 +120,12 @@ async function bridgeOperation(admin:ReturnType<typeof createClient>,body:Record
   if(operation==='knowledge.search'){
     const query=String(args.query||'').trim().replace(/[^\p{L}\p{N}\s.-]/gu,'').slice(0,120); if(!query) throw new Error('query_required');
     const pattern=`%${query}%`;
-    const [projectFiles,researchFiles,employeeFiles,memories]=await Promise.all([
+    const [projectFiles,employeeFiles,memories]=await Promise.all([
       admin.from('project_files').select('id,title,storage_path,project_id,category,created_at').ilike('title',pattern).limit(10),
-      admin.from('research_documents').select('id,title,storage_path,research_id,category,created_at').ilike('title',pattern).limit(10),
       admin.from('employee_documents').select('id,title,storage_path,owner_id,category,created_at').ilike('title',pattern).limit(10),
       admin.from('memories').select('id,title,content,scope,scope_id,created_at').or(`title.ilike.${pattern},content.ilike.${pattern}`).limit(10),
     ]);
-    return {projectFiles:projectFiles.data||[],researchFiles:researchFiles.data||[],employeeFiles:employeeFiles.data||[],memories:memories.data||[],sourceNote:'المسارات معرفات داخل Reid؛ فتح الملف يتم من الوحدة المالكة مع تطبيق صلاحياتها.'};
+    return {projectFiles:projectFiles.data||[],employeeFiles:employeeFiles.data||[],memories:memories.data||[],sourceNote:'المسارات معرفات داخل Reid؛ فتح الملف يتم من الوحدة المالكة مع تطبيق صلاحياتها.'};
   }
   if(operation==='content.draft.create'){
     const row=await admin.from('content_drafts').insert({title_ar:String(args.title_ar||args.title||'مسودة ريّد').slice(0,180),title_en:String(args.title_en||args.title||'Reid draft').slice(0,180),body_ar:String(args.body_ar||args.body||'').slice(0,12000),body_en:String(args.body_en||'').slice(0,12000),created_by:owner.id}).select('id,title_ar,status').single();
@@ -272,12 +271,12 @@ Deno.serve(async request => {
         logs: [{ at: new Date().toISOString(), event: 'requeued_after_runner_timeout' }],
       }).eq('provider_id', 'ollama').eq('run_state', 'running')
         .lt('started_at', new Date(Date.now() - 15 * 60 * 1000).toISOString());
-      const pending = await admin.from('agent_runs').select('id,agent_id,classification,approval_level')
+      const pending = await admin.from('agent_runs').select('id,agent_id,classification,approval_level,source_system')
         .eq('provider_id','ollama').eq('run_state','queued').order('created_at').limit(1).maybeSingle();
       if (pending.error) throw pending.error;
       if (!pending.data) return json({ job: null });
       const claimed = await admin.from('agent_runs').update({ run_state:'running',status:'running',started_at:new Date().toISOString() })
-        .eq('id',pending.data.id).eq('run_state','queued').select('id,agent_id,classification,approval_level').maybeSingle();
+        .eq('id',pending.data.id).eq('run_state','queued').select('id,agent_id,classification,approval_level,source_system').maybeSingle();
       if (claimed.error) throw claimed.error;
       if (!claimed.data) return json({ job: null });
       await updateAgentRoomMessage(admin,claimed.data.id,'running');
@@ -298,7 +297,7 @@ Deno.serve(async request => {
       const qualityVersion=String(body.qualityVersion||'').slice(0,40)||null;
       const revisionCount=Math.max(0,Math.min(2,Number(body.revisionCount)||0));
       const [run,payload] = await Promise.all([
-        admin.from('agent_runs').select('id,agent_id,requested_by,classification').eq('id',body.runId).eq('provider_id','ollama').eq('run_state','running').single(),
+        admin.from('agent_runs').select('id,agent_id,requested_by,classification,source_system').eq('id',body.runId).eq('provider_id','ollama').eq('run_state','running').single(),
         admin.from('agent_run_payloads').select('action').eq('run_id',body.runId).single(),
       ]);
       if (run.error) throw new Error('run_not_claimed');
@@ -309,7 +308,7 @@ Deno.serve(async request => {
       const updated = await admin.from('agent_runs').update({
         run_state:'succeeded',status:'succeeded',latency_ms:Number(body.latencyMs)||null,token_usage:Number(body.tokenUsage)||null,
         prompt_tokens:Number(body.promptTokens)||null,completion_tokens:Number(body.completionTokens)||null,
-        output_preview:output.slice(0,280),quality_score:isChat?qualityScore:null,quality_flags:isChat?qualityFlags:[],
+        output_preview:output.slice(0,280),external_output:run.data.source_system==='khos'?output:null,quality_score:isChat?qualityScore:null,quality_flags:isChat?qualityFlags:[],
         quality_version:isChat?qualityVersion:null,revision_count:isChat?revisionCount:0,finished_at:new Date().toISOString(),
       }).eq('id',run.data.id);
       if (updated.error) throw updated.error;
@@ -323,6 +322,8 @@ Deno.serve(async request => {
     if (body.action === 'fail') {
       const localError=String(body.error||'local_runner_failed').slice(0,500);
       try {
+        const source = await admin.from('agent_runs').select('source_system').eq('id',body.runId).maybeSingle();
+        if (source.data?.source_system === 'khos') throw new Error('khos_local_only_policy');
         await completeWithGeminiFallback(admin,String(body.runId),localError);
         return json({ok:true,fallback:'gemini'});
       } catch(fallbackError) {

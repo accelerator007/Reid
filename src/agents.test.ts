@@ -96,7 +96,7 @@ describe('ai-lap primary runtime contract', () => {
     expect(telemetryMigration).toContain("agent_runner_status");
     expect(telemetryMigration).toContain("supabase_realtime");
     // The combined host dashboard remains Owner-only; HR never receives it.
-    expect(agentPage).toContain("owner ? 'infrastructure'");
+    expect(agentPage).toMatch(/owner\s*\?\s*'infrastructure'/);
     expect(agentPage).toContain('<InfrastructureDashboard');
     expect(agentApi).toContain("localApi<OperationsSnapshot>('operations/status')");
     expect(infrastructureDashboard).toContain('title="Reid Server"');

@@ -41,11 +41,7 @@ const Operations=React.lazy(()=>import('./work/operations-page').then(module=>({
 const AssistantWorkspace=React.lazy(()=>import('./agent-team/agent-team-page').then(module=>({default:module.AgentTeamRoom})));
 const Connections=React.lazy(()=>import('./connections/connections-page').then(module=>({default:module.Connections})));
 const Inbox=React.lazy(()=>import('./inbox/inbox-page').then(module=>({default:module.Inbox})));
-const ResearchWorkspace=React.lazy(()=>import('./research/research-page').then(module=>({default:module.ResearchWorkspace})));
 const CrmWorkspace=React.lazy(()=>import('./clients/clients-page').then(module=>({default:module.CrmWorkspace})));
-const Workshops=React.lazy(()=>import('./workshops').then(module=>({default:module.Workshops})));
-const FormsWorkspace=React.lazy(()=>import('./forms/forms-workspace').then(module=>({default:module.FormsWorkspace})));
-const RespondPage=React.lazy(()=>import('./forms/respond-page').then(module=>({default:module.RespondPage})));
 
 type Lang = "ar" | "en";
 type ProfileData = {
@@ -671,9 +667,9 @@ function Chat({ lang }: { lang: Lang }) {
 
 function navLabel(page: Page, lang: Lang, t: (typeof tr)["ar"]): string {
   switch (page) {
-    case "today": case "inbox": case "connections": case "operations": case "workshops":
+    case "today": case "inbox": case "connections": case "operations":
     case "assistant": case "admin": case "owner": case "workspace": case "projects":
-    case "research": case "crm": case "dashboard": case "forms": case "profile": return workspaceLabel(page,lang);
+    case "crm": case "dashboard": case "profile": return workspaceLabel(page,lang);
     case "home":
       return t.home;
     case "apply":
@@ -758,8 +754,7 @@ function Chrome({ session }: { session: Session | null }) {
   const content = (
       <React.Suspense fallback={<main className="workspace-page-loading"><LoaderCircle/><span>{lang==='ar'?'جارٍ فتح المساحة…':'Opening workspace…'}</span></main>}>
       {page === "home" && <><PublicHome lang={lang} go={go} /><Chat lang={lang} /></>}
-      {page === "workshops" && <Workshops lang={lang} go={go} />}
-      {(["owner", "today", "inbox", "connections", "operations", "assistant", "admin", "forms"] as Page[]).includes(page) && (
+      {(["owner", "today", "inbox", "connections", "operations", "assistant", "admin"] as Page[]).includes(page) && (
         <Guarded page={page} lang={lang} renderSignIn={() => <Login lang={lang} done={() => go(page)} apply={() => go("apply")} />} onProfile={() => go("profile")}>
           {page === "today" && <Today lang={lang} go={go} />}
           {page === "owner" && <OwnerOverview lang={lang} go={go} />}
@@ -768,7 +763,6 @@ function Chrome({ session }: { session: Session | null }) {
           {page === "operations" && <Operations lang={lang} />}
           {page === "assistant" && <AssistantWorkspace lang={lang} />}
           {page === "admin" && <AdminWorkspace lang={lang} go={go} />}
-          {page === "forms" && <FormsWorkspace lang={lang} go={go} />}
         </Guarded>
       )}
       {page === "login" && (
@@ -842,18 +836,6 @@ function Chrome({ session }: { session: Session | null }) {
           {session?.user && <ProjectWorkspace lang={lang} user={session.user} />}
         </Guarded>
       )}{" "}
-      {page === "research" && (
-        <Guarded
-          page="research"
-          lang={lang}
-          renderSignIn={() => (
-            <Login lang={lang} done={() => go("research")} apply={() => go("apply")} />
-          )}
-          onProfile={() => go("profile")}
-        >
-          {session?.user && <ResearchWorkspace lang={lang} user={session.user} />}
-        </Guarded>
-      )}{" "}
       {page === "crm" && (
         <Guarded
           page="crm"
@@ -908,16 +890,6 @@ function Chrome({ session }: { session: Session | null }) {
       </React.Suspense>
   );
   const appClass = `${dark ? "app dark" : "app"}${internalPage ? " workspace-mode" : ""}`;
-  // A respondent's page stands alone: no site header, footer or chat.
-  if (page === "respond") {
-    return (
-      <div className={appClass} dir={lang === "ar" ? "rtl" : "ltr"}>
-        <React.Suspense fallback={<main className="workspace-page-loading"><LoaderCircle/></main>}>
-          <RespondPage lang={lang} toggleLang={() => setLang(value => (value === "ar" ? "en" : "ar"))} />
-        </React.Suspense>
-      </div>
-    );
-  }
   if (internalPage) {
     return (
       <div className={appClass} dir={lang === "ar" ? "rtl" : "ltr"}>
@@ -942,7 +914,7 @@ function Chrome({ session }: { session: Session | null }) {
           {/* Derived from src/routes.ts, so the navigation can never offer a
               destination the gate would then refuse. */}
           {navigation
-            .filter(({ page: target }) => ["home", "workshops", "apply", "today"].includes(target))
+            .filter(({ page: target }) => ["home", "apply", "today"].includes(target))
             .map(({ page: target }) => (
               <button
                 key={target}

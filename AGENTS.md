@@ -1,16 +1,16 @@
 # Reid engineering guide
 
-Last reviewed: 2026-10-14. This file is the current handoff. Historical release evidence and unresolved historical observations are preserved in [the release archive](docs/history/ENGINEERING_STATUS_THROUGH_20261013.md). New changes update this file and their focused documentation before merge.
+Last reviewed: 2026-10-23. This file is the current handoff. Historical release evidence and unresolved historical observations are preserved in [the release archive](docs/history/ENGINEERING_STATUS_THROUGH_20261013.md). New changes update this file and their focused documentation before merge.
 
 ## Current architecture
 
 - Reid / ريّد is a bilingual Arabic/English company workspace at `reidpro.com`, with RTL/LTR, light/dark and mobile support. COR is a project name, never the company name.
 - React 19, TypeScript and Vite 7 frontend; `src/main.tsx` assembles modules and `src/routes.ts` is the shared route/role manifest.
 - Production web/API run in Docker on the Reid Ubuntu host behind the private Cloudflare Tunnel. Supabase project `cfxntjnewkmlvkogfxyu` provides Postgres, Auth, Storage, Realtime and Edge Functions. The September migration is complete; the former project is historical.
-- `server/` owns WhatsApp QR transport, assistant execution, customer handoffs, provider management and meetings. Browser API calls use `src/local-api.ts`; the host requires an active Owner/Super Admin.
+- `server/` owns WhatsApp QR transport, assistant execution, customer handoffs and provider management. Browser API calls use `src/local-api.ts`; the host requires an active Owner/Super Admin.
 - `ai-lap` runs the local model through a restricted authenticated SSH relay. The existing SSH key allows forwarding only, not a laptop shell. `gemma4:12b` and `nomic-embed-text:latest` are the last verified models. Only the local provider was enabled in the October 12 release; external providers need their own successful tests and clearance.
-- Research is modular under `src/research/`; Connections is under `src/connections/`. The older `src/qr-workspace.tsx` is not the active Connections entry.
-- Daily navigation stays Home, Work, Reid, WhatsApp and Administration; additional permission-filtered modules live in All tools and command search.
+- The active product is intentionally narrow: Home, projects, clients, WhatsApp, team and requests, with assistant, settings, connections and monitoring as supporting tools. Research, workshops, general forms and the live meeting bot are retired from routes and runtime.
+- Connections is under `src/connections/`. The older `src/qr-workspace.tsx` is not the active Connections entry.
 
 ## Engineering rules
 
@@ -31,20 +31,21 @@ Last reviewed: 2026-10-14. This file is the current handoff. Historical release 
 - WhatsApp has governed user/group settings, customer classification, durable human handoffs, document extraction and scoped memory. New groups default disabled.
 - Backup/restore verification exists: encrypted public-table exports plus a disposable restore rehearsal. This is not a complete managed Auth/Storage disaster-recovery backup.
 
-## Current work: connected operations
+## Current work: product simplification
 
-Branch: `feature/reid-connected-operations`. See [implementation and verification](docs/CONNECTED_OPERATIONS.md).
+Branch: `feature/reid-connected-operations`. See [the simplification plan and release order](docs/PRODUCT_SIMPLIFICATION_20261023.md) and [connected-operations implementation](docs/CONNECTED_OPERATIONS.md).
 
 - Customer follow-up links a conversation to CRM contact/lead, support request, task and optional project through one authenticated database transaction. Conversation locking makes retries idempotent. Task assignment uses the existing notification trigger.
 - Home has concrete pending handoff, overdue task, review and CRM-follow-up links; destination pages accept record-specific URLs.
 - Local chat requests share bounded generation, concurrency limits, circuit recovery and content-free latency/token accounting. WhatsApp no longer regenerates a whole answer just to change its opening. No automatic external fallback is enabled.
-- Connections can test meeting dependencies without creating a meeting; adapter updates have a portable installation bundle and synthetic reply evaluation.
+- The homepage presents COR under Company Achievements with a clearly labelled generated concept image and a non-clinical product summary.
+- Project detail is reduced to Overview, Tasks, Files and Activity. Milestones, KPIs and manual project meeting records remain inside Overview.
+- Migration `202610230001_product_simplification.sql` removes retired feature data after the web/API release and verified backup.
 - The Owner dashboard is now the **System & AI center**: one responsive view combines Reid host telemetry, ai-lap CPU/GPU/model telemetry, service health, WhatsApp activity, queues, reply-runtime metrics and links to the model/API controls. WhatsApp keeps only its channel-specific health to avoid duplicating the server view.
 - Verification and deployment status are recorded in the focused document. This section must not be described as production-live until its release evidence is added.
 
 ## Remaining external dependencies and open verification
 
-- Meetings: service configuration inspected October 14 contains Google app settings but no Recall key or transcription readiness flag. Owner Google consent, Recall account/region plus ElevenLabs configuration, and a real meeting test are required. Do not create an account, buy service or claim activation without those inputs.
 - Physical ai-lap installation requires a shell-capable operator login. A port-forward-only key cannot install adapter/runner files. The prepared bundle does not mean it has been installed.
 - External model fallback has no enabled, tested provider at the last recorded release. Do not silently widen data clearance or enable an untested model.
 - SMTP/invitation delivery, company Microsoft/GitHub OAuth, full Auth/Storage recovery and previously requested credential rotations still require explicit verification; archived entries are not proof they are resolved.

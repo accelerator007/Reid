@@ -16,7 +16,7 @@ describe('owner decisions', () => {
   it('lists only what has a count, approvals first, each opening its own page', () => {
     const items = decisions(snapshot({ overdue_tasks: 3, pending_approvals: 2, pending_applications: 1 }));
     expect(items.map(item => [item.key, item.count, item.page])).toEqual([
-      ['approvals', 2, 'admin'], ['tasks', 3, 'projects'], ['applications', 1, 'dashboard'],
+      ['approvals', 2, 'dashboard'], ['tasks', 3, 'projects'], ['applications', 1, 'workspace'],
     ]);
   });
 

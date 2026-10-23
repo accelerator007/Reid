@@ -1,5 +1,5 @@
 const userBooleans=new Set([
-  'enabled','memory_enabled','style_learning_enabled','artifacts_enabled','workshops_enabled',
+  'enabled','memory_enabled','style_learning_enabled','artifacts_enabled',
   'notes_enabled','proactive_enabled','voice_enabled','handoff_notifications_enabled',
 ]);
 const userChoices={outbound_scope:new Set(['none','company','any']),reply_mode:new Set(['text','voice'])};

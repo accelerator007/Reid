@@ -24,7 +24,7 @@ export type WhatsappSettings = {
 export type WhatsappUserAccess = {
   user_id:string; phone_e164:string; display_name:string; email:string; role:string; enabled:boolean;
   memory_enabled:boolean; style_learning_enabled:boolean; outbound_scope:'none'|'company'|'any'; artifacts_enabled:boolean;
-  workshops_enabled:boolean; notes_enabled:boolean; proactive_enabled:boolean; voice_enabled:boolean; reply_mode:'text'|'voice';
+  notes_enabled:boolean; proactive_enabled:boolean; voice_enabled:boolean; reply_mode:'text'|'voice';
   handoff_notifications_enabled:boolean;
 };
 export type WhatsappGroupAccess = {

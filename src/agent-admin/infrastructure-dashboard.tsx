@@ -8,6 +8,7 @@ import type { Page } from '../routes';
 import { Badge, Button, Card, InlineAlert, SectionHeader, Skeleton, StatCard } from '../ui';
 import type { HostTelemetry, OperationsSnapshot, ServiceHealth } from './api';
 import { ageLabel, runnerHealth, type Lang } from './model';
+import { OperationsConsole } from './operations-console';
 import { RuntimeHealth } from './runtime-health';
 
 const tr=(lang:Lang,ar:string,en:string)=>lang==='ar'?ar:en;
@@ -41,7 +42,7 @@ function healthLabel(status:string|undefined,lang:Lang){
 }
 
 function Meter({icon,label,value,share}:{icon:React.ReactNode;label:string;value:string;share:number|null}){
-  return <div className="infra-meter"><span>{icon}{label}</span><b><bdi dir="ltr">{value}</bdi></b><i aria-hidden="true"><span style={{inlineSize:`${share??0}%`}} data-high={(share??0)>=85}/></i></div>;
+  return <div className="infra-meter"><span>{icon}{label}</span><b><bdi dir="ltr">{value}</bdi></b>{share!=null&&<i aria-hidden="true"><span style={{inlineSize:`${share??0}%`}} data-high={(share??0)>=85}/></i>}</div>;
 }
 
 function HostCard({lang,title,subtitle,online,telemetry,extra}:{lang:Lang;title:string;subtitle:string;online:boolean;telemetry:HostTelemetry|null;extra?:React.ReactNode}){
@@ -69,21 +70,23 @@ export function InfrastructureDashboard({lang,snapshot,runner,providers,loading,
   onRefresh:()=>void;onProviders:()=>void;go?:(page:Page)=>void;
 }){
   if(!snapshot&&loading)return <Skeleton lines={8}/>;
-  const components=snapshot?.components;
+  const stale=!snapshot||!Number.isFinite(Date.parse(snapshot.checkedAt))||now-Date.parse(snapshot.checkedAt)>90000;
+  const components=stale?null:snapshot?.components;
   const serviceEntries=components?serviceOrder.map(name=>[name,components[name]] as [keyof OperationsSnapshot['components'],ServiceHealth]):[];
   const healthy=serviceEntries.filter(([,value])=>value.status==='healthy').length;
-  const queueHealthy=snapshot?.queue.pending!=null&&snapshot.queue.failed===0&&snapshot.queue.uncertain===0;
+  const queueHealthy=snapshot?.queue.pending!=null&&snapshot.queue.failed===0&&snapshot.queue.uncertain===0&&snapshot.queue.pending<=20;
   const alerts=serviceEntries.filter(([,value])=>value.status!=='healthy').length+(snapshot?.queue.failed??0)+(snapshot?.queue.uncertain??0);
-  const overall=Boolean(snapshot&&healthy===serviceEntries.length&&queueHealthy);
+  const overall=Boolean(!stale&&snapshot&&healthy===serviceEntries.length&&queueHealthy);
   const ai=runnerHealth(runner,now);
   const localProvider=providers.find(provider=>provider.id==='ollama');
   return <div className="infra-dashboard">
+    {stale&&!loading&&<InlineAlert tone="warning">{tr(lang,'القياسات قديمة أو غير متاحة؛ لا يمكن تأكيد حالة النظام الآن.','Observations are stale or unavailable; current system health is unverified.')}</InlineAlert>}
     {error&&<InlineAlert action={<Button size="sm" onClick={onRefresh}>{tr(lang,'إعادة المحاولة','Retry')}</Button>}>{error}</InlineAlert>}
     <div className="infra-summary">
-      <StatCard icon={overall?<CheckCircle2/>:<CircleAlert/>} label={tr(lang,'حالة النظام','System status')} value={overall?tr(lang,'سليم','Healthy'):tr(lang,'يحتاج متابعة','Needs attention')} tone={overall?'success':'danger'} hint={tr(lang,`آخر فحص ${stamp(snapshot?.checkedAt,lang)}`,`Checked ${stamp(snapshot?.checkedAt,lang)}`)}/>
-      <StatCard icon={<Activity/>} label={tr(lang,'الخدمات السليمة','Healthy services')} value={`${healthy} / ${serviceEntries.length||6}`} tone={healthy===serviceEntries.length?'success':'warning'}/>
+      <StatCard icon={overall?<CheckCircle2/>:<CircleAlert/>} label={tr(lang,'حالة النظام','System status')} value={stale?tr(lang,'غير معروف','Unknown'):overall?tr(lang,'سليم','Healthy'):tr(lang,'يحتاج متابعة','Needs attention')} tone={overall?'success':'danger'} hint={tr(lang,`آخر فحص ${stamp(snapshot?.checkedAt,lang)}`,`Checked ${stamp(snapshot?.checkedAt,lang)}`)}/>
+      <StatCard icon={<Activity/>} label={tr(lang,'الخدمات السليمة','Healthy services')} value={`${healthy} / ${serviceEntries.length||6}`} tone={!stale&&healthy===serviceEntries.length?'success':'warning'}/>
       <StatCard icon={<Clock3/>} label={tr(lang,'في الطابور','Queued work')} value={snapshot?.queue.pending??'—'} tone={(snapshot?.queue.pending??0)>0?'warning':'success'} hint={tr(lang,`${snapshot?.queue.failed??0} فاشلة · ${snapshot?.queue.uncertain??0} غير مؤكدة`,`${snapshot?.queue.failed??0} failed · ${snapshot?.queue.uncertain??0} uncertain`)}/>
-      <StatCard icon={<CircleAlert/>} label={tr(lang,'تنبيهات التشغيل','Operational alerts')} value={alerts} tone={alerts?'danger':'success'} hint={alerts?tr(lang,'راجع الخدمة أو الطابور أدناه','Review the service or queue below'):tr(lang,'لا توجد أعطال ظاهرة','No visible failures')}/>
+      <StatCard icon={<CircleAlert/>} label={tr(lang,'تنبيهات التشغيل','Operational alerts')} value={stale?'—':alerts} tone={stale?'neutral':alerts?'danger':'success'} hint={stale?tr(lang,'بانتظار قياس حديث','Waiting for a fresh sample'):alerts?tr(lang,'راجع الخدمة أو الطابور أدناه','Review the service or queue below'):tr(lang,'لا توجد أعطال ظاهرة','No visible failures')}/>
     </div>
 
     <section>
@@ -93,8 +96,8 @@ export function InfrastructureDashboard({lang,snapshot,runner,providers,loading,
         <HostCard lang={lang} title="ai-lap" subtitle={`${runner?.model||localProvider?.chat_model||'gemma4:12b'}${runner?.version?` · v${runner.version}`:''}`} online={ai.online&&components?.ai.status==='healthy'} telemetry={snapshot?.host??null} extra={<>
           <Meter icon={<Gauge/>} label="GPU" value={runner?.gpu_utilization==null?'—':`${number(runner.gpu_utilization,lang)}%`} share={bounded(runner?.gpu_utilization??null)}/>
           <Meter icon={<HardDrive/>} label="VRAM" value={runner?.vram_used_mb==null?'—':`${number(runner.vram_used_mb/1024,lang,1)} / ${number((runner.vram_total_mb??0)/1024,lang,1)} GB`} share={ai.vram}/>
-          <Meter icon={<Wifi/>} label={tr(lang,'زمن النموذج','Model latency')} value={runner?.adapter_latency_ms==null?'—':`${number(runner.adapter_latency_ms,lang)} ms`} share={runner?.adapter_latency_ms==null?null:bounded(runner.adapter_latency_ms/4)}/>
-          <Meter icon={<Wifi/>} label={tr(lang,'اتصال السحابة','Cloud ping')} value={runner?.ping_ms==null?'—':`${number(runner.ping_ms,lang)} ms`} share={runner?.ping_ms==null?null:bounded(runner.ping_ms/4)}/>
+          <Meter icon={<Wifi/>} label={tr(lang,'زمن النموذج','Model latency')} value={runner?.adapter_latency_ms==null?'—':`${number(runner.adapter_latency_ms,lang)} ms`} share={null}/>
+          <Meter icon={<Wifi/>} label={tr(lang,'اتصال السحابة','Cloud ping')} value={runner?.ping_ms==null?'—':`${number(runner.ping_ms,lang)} ms`} share={null}/>
         </>}/>
       </div>
     </section>
@@ -116,5 +119,6 @@ export function InfrastructureDashboard({lang,snapshot,runner,providers,loading,
       </Card>
     </div>
     <RuntimeHealth lang={lang}/>
+    <OperationsConsole lang={lang}/>
   </div>;
 }

@@ -222,3 +222,14 @@
   .agent-hero__side { justify-items: start; inline-size: 100%; }
   .run__head small { margin-inline-start: 0; inline-size: 100%; }
 }
+
+/* Operations records keep one readable row and wrap at narrow widths. */
+.infra-activity{grid-template-columns:minmax(0,1fr)}
+.ops-console{display:grid;gap:var(--space-5)}
+.ops-history{display:flex;gap:3px;height:40px;direction:ltr}
+.ops-history span{flex:1;border-radius:3px;background:var(--border)}
+.ops-history [data-state="healthy"]{background:var(--success-text)}
+.ops-history [data-state="unavailable"]{background:var(--danger-text)}
+.ops-rows>div{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-3);padding-block:var(--space-3);border-bottom:1px solid var(--border)}
+.ops-rows>div>span:first-child{flex:1;min-width:160px}.ops-rows small{display:block;color:var(--text-muted);margin-block-start:4px}
+.ops-buttons{display:flex;gap:var(--space-2);flex-wrap:wrap}.ops-command{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;background:var(--surface-sunken);padding:var(--space-3);border-radius:var(--radius-md)}

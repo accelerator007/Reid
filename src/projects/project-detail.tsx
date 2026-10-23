@@ -18,7 +18,7 @@ import { arabicCount } from '../owner-overview.model';
 import { ActivityTab, FilesTab, KpisTab, MeetingsTab, MilestonesTab, TasksTab } from './project-sections';
 
 const tr = (lang: Lang, ar: string, en: string) => (lang === 'ar' ? ar : en);
-type Tab = 'overview' | 'tasks' | 'milestones' | 'meetings' | 'files' | 'kpis' | 'activity';
+type Tab = 'overview' | 'tasks' | 'files' | 'activity';
 // "باقي يومان" but "تأخير يومين": the case changes with the word before it.
 const dayForms = { one: 'يوم واحد', two: 'يومان', few: 'أيام', many: 'يومًا' };
 const lateForms = { one: 'يوم', two: 'يومين', few: 'أيام', many: 'يومًا' };
@@ -64,16 +64,12 @@ export function ProjectDetailView({ lang, user, admin, project, people, back, re
   const status = statusOf(projectStatuses, project.status);
   const percent = progress(detail.tasks);
   const days = daysUntil(project.target_date, now);
-  const upcoming = detail.meetings.filter(meeting => new Date(meeting.ends_at) >= now);
   const BackIcon = lang === 'ar' ? ArrowRight : ArrowLeft;
 
   const tabs: TabItem<Tab>[] = [
     { id: 'overview', label: tr(lang, 'نظرة عامة', 'Overview'), icon: <LayoutDashboard /> },
     { id: 'tasks', label: tr(lang, 'المهام', 'Tasks'), icon: <ListChecks />, count: detail.tasks.filter(task => task.status !== 'done').length },
-    { id: 'milestones', label: tr(lang, 'المراحل', 'Milestones'), icon: <Flag />, count: detail.milestones.length },
-    { id: 'meetings', label: tr(lang, 'الاجتماعات', 'Meetings'), icon: <Video />, count: upcoming.length },
     { id: 'files', label: tr(lang, 'الملفات', 'Files'), icon: <FolderOpen />, count: detail.files.length },
-    { id: 'kpis', label: tr(lang, 'المؤشرات', 'KPIs'), icon: <Gauge />, count: detail.kpis.length },
     { id: 'activity', label: tr(lang, 'النشاط', 'Activity'), icon: <ActivityIcon /> },
   ];
 
@@ -121,19 +117,18 @@ export function ProjectDetailView({ lang, user, admin, project, people, back, re
       <TabPanel id={tab}>
         {tab === 'overview' && (
           <Overview lang={lang} project={project} detail={detail} loaded={loaded} manager={manager} person={person}
-            addMember={() => setDialog('member')} removeMember={userId => void act(api.removeMember(project.id, userId))} goTo={setTab} />
+            addMember={() => setDialog('member')} removeMember={userId => void act(api.removeMember(project.id, userId))} goTo={setTab}
+            addMilestone={fields => act(api.createMilestone(project.id, user.id, fields))}
+            setMilestoneStatus={(id, next) => void act(api.updateMilestoneStatus(id, next))}
+            addMeeting={fields => act(api.createMeeting(project.id, user.id, fields))}
+            addKpi={fields => act(api.createKpi(project.id, user.id, fields))} />
         )}
         {tab === 'tasks' && <TasksTab lang={lang} tasks={detail.tasks} manager={manager} person={person} now={now}
           add={() => setDialog('task')} move={(taskId, next) => void act(api.moveTask(taskId, next))} />}
-        {tab === 'milestones' && <MilestonesTab lang={lang} milestones={detail.milestones} manager={manager}
-          add={fields => act(api.createMilestone(project.id, user.id, fields))} setStatus={(id, next) => void act(api.updateMilestoneStatus(id, next))} />}
-        {tab === 'meetings' && <MeetingsTab lang={lang} meetings={detail.meetings} manager={manager} now={now}
-          add={fields => act(api.createMeeting(project.id, user.id, fields))} />}
         {tab === 'files' && <FilesTab lang={lang} files={detail.files} permissions={detail.permissions} members={detail.members} manager={manager} person={person}
           upload={(file, fields) => act(api.uploadFile(project.id, user.id, file, fields))}
           grant={(fileId, grant) => void act(api.grantFile(fileId, user.id, grant))} revoke={id => void act(api.revokeFile(id))}
           openFile={async path => { const result = await api.openFile(path); if (!result.ok) setError(result.error); }} />}
-        {tab === 'kpis' && <KpisTab lang={lang} kpis={detail.kpis} manager={manager} add={fields => act(api.createKpi(project.id, user.id, fields))} />}
         {tab === 'activity' && <ActivityTab lang={lang} activity={detail.activity} person={person} />}
       </TabPanel>
 
@@ -147,9 +142,13 @@ export function ProjectDetailView({ lang, user, admin, project, people, back, re
   );
 }
 
-function Overview({ lang, project, detail, loaded, manager, person, addMember, removeMember, goTo }: {
+function Overview({ lang, project, detail, loaded, manager, person, addMember, removeMember, goTo, addMilestone, setMilestoneStatus, addMeeting, addKpi }: {
   lang: Lang; project: Project; detail: ProjectDetail; loaded: boolean; manager: boolean; person: (id: string | null) => string;
   addMember: () => void; removeMember: (userId: string) => void; goTo: (tab: Tab) => void;
+  addMilestone: (fields: { title: string; description: string | null; due_date: string | null }) => Promise<Result<unknown>>;
+  setMilestoneStatus: (id: string, status: string) => void;
+  addMeeting: (fields: { title: string; agenda: string | null; starts_at: string; ends_at: string; location: string | null }) => Promise<Result<unknown>>;
+  addKpi: (fields: { title: string; target_value: number; current_value: number; unit: string }) => Promise<Result<unknown>>;
 }) {
   const now = new Date();
   const overdue = detail.tasks.filter(task => isOverdue(task, now));
@@ -172,11 +171,11 @@ function Overview({ lang, project, detail, loaded, manager, person, addMember, r
               ))}
               {blocked.map(milestone => (
                 <ListRow key={milestone.id} dir={dir} icon={<Flag />} tone="danger" title={milestone.title}
-                  description={statusOf(milestoneStatuses, milestone.status).label[lang]} onOpen={() => goTo('milestones')} />
+                  description={statusOf(milestoneStatuses, milestone.status).label[lang]} />
               ))}
               {atRisk.map(kpi => (
                 <ListRow key={kpi.id} dir={dir} icon={<Gauge />} tone="danger" title={kpi.title}
-                  description={`${kpi.current_value} / ${kpi.target_value} ${kpi.unit} · ${statusOf(kpiStatuses, kpi.status).label[lang]}`} onOpen={() => goTo('kpis')} />
+                  description={`${kpi.current_value} / ${kpi.target_value} ${kpi.unit} · ${statusOf(kpiStatuses, kpi.status).label[lang]}`} />
               ))}
             </div>
           ) : (
@@ -189,14 +188,14 @@ function Overview({ lang, project, detail, loaded, manager, person, addMember, r
             {nextMilestone ? (
               <ListRow dir={dir} icon={<Flag />} tone="brand" title={nextMilestone.title}
                 description={formatDate(nextMilestone.due_date, lang)} meta={<Badge tone={statusOf(milestoneStatuses, nextMilestone.status).tone}>{statusOf(milestoneStatuses, nextMilestone.status).label[lang]}</Badge>}
-                onOpen={() => goTo('milestones')} />
+              />
             ) : <p className="project-muted">{tr(lang, 'لا توجد مراحل قادمة.', 'No upcoming milestones.')}</p>}
           </Card>
           <Card>
             <SectionHeader title={tr(lang, 'الاجتماع القادم', 'Next meeting')} />
             {nextMeeting ? (
               <ListRow dir={dir} icon={<Video />} tone="info" title={nextMeeting.title}
-                description={formatDate(nextMeeting.starts_at, lang, true)} onOpen={() => goTo('meetings')} />
+                description={formatDate(nextMeeting.starts_at, lang, true)} />
             ) : <p className="project-muted">{tr(lang, 'لا يوجد اجتماع مجدول.', 'Nothing scheduled.')}</p>}
           </Card>
         </div>
@@ -206,6 +205,15 @@ function Overview({ lang, project, detail, loaded, manager, person, addMember, r
             <p className="project-description">{project.description}</p>
           </Card>
         )}
+        <Card className="project-overview__embedded">
+          <MilestonesTab lang={lang} milestones={detail.milestones} manager={manager} add={addMilestone} setStatus={setMilestoneStatus} />
+        </Card>
+        <Card className="project-overview__embedded">
+          <KpisTab lang={lang} kpis={detail.kpis} manager={manager} add={addKpi} />
+        </Card>
+        <Card className="project-overview__embedded">
+          <MeetingsTab lang={lang} meetings={detail.meetings} manager={manager} now={now} add={addMeeting} />
+        </Card>
       </div>
       <Card className="project-team">
         <SectionHeader title={tr(lang, 'الفريق', 'Team')} action={manager ? <Button size="sm" variant="ghost" icon={<UserPlus />} onClick={addMember}>{tr(lang, 'إضافة', 'Add')}</Button> : undefined} />

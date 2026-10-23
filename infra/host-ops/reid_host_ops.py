@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -60,6 +61,71 @@ SECRET_PATTERNS = [
     re.compile(r"\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
 ]
+
+MANAGED_CONTAINERS = ("reid-web", "reid-services", "reid-tts", "reid-host-ops", "reid-ai-relay", "reid-agent-runner", "reid-tunnel", "reid-assistant")
+WORKFLOWS = ("weekly-backup.yml", "executive-reports.yml", "live-agent.yml", "uptime.yml")
+
+
+def host_read(argv: list[str]) -> str:
+    result = subprocess.run(["nsenter", "--target", "1", "--mount", "--uts", "--ipc", "--net", "--pid",
+                             f"--wdns={HOST_WORKDIR}", "--", *argv], capture_output=True, text=True, timeout=15)
+    if result.returncode:
+        raise ValueError("observation_unavailable")
+    return (result.stdout + (result.stderr if argv[:2] == ["docker", "logs"] else ""))[:1_000_000]
+
+
+def observe(data: dict) -> dict:
+    """Fixed reads only. Never return container environment or log message bodies."""
+    kind = data.get("kind")
+    if kind == "containers":
+        present = set(host_read(["docker", "ps", "-a", "--format", "{{.Names}}"]).splitlines())
+        names = [name for name in MANAGED_CONTAINERS if name in present]
+        rows = json.loads(host_read(["docker", "inspect", *names])) if names else []
+        return {"containers": [{"name": row["Name"].lstrip("/"), "status": row["State"]["Status"],
+                                "health": row["State"].get("Health", {}).get("Status", "unconfigured"),
+                                "startedAt": row["State"].get("StartedAt"), "restartCount": row.get("RestartCount", 0),
+                                "exitCode": row["State"].get("ExitCode"), "oomKilled": row["State"].get("OOMKilled", False)} for row in rows]}
+    if kind == "logs":
+        name = data.get("container")
+        if name not in MANAGED_CONTAINERS:
+            raise ValueError("container_not_allowed")
+        # Raw logs can contain customer messages, URLs and tokens. Only expose
+        # severity/time and a conservative event identifier from JSON logs.
+        raw = host_read(["docker", "logs", "--tail", "100", "--since", "1h", name])
+        events = []
+        for line in raw.splitlines()[-100:]:
+            try:
+                row = json.loads(line)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(row, dict):
+                continue
+            event = str(row.get("event", ""))
+            events.append({"level": row.get("level") if isinstance(row.get("level"), (int, float)) else None,
+                           "time": row.get("time") if isinstance(row.get("time"), (int, float)) else None,
+                           "event": event if re.fullmatch(r"[a-z_]{3,64}", event) else "structured_log"})
+        return {"container": name, "events": events, "scope": "structured_metadata_only"}
+    if kind == "workflows":
+        latest = {}
+        def get_run(filename):
+            payload = json.loads(host_read(["runuser", "-u", "reid", "--", "gh", "api",
+                f"repos/accelerator007/Reid/actions/workflows/{filename}/runs?per_page=1"]))
+            return filename, payload.get("workflow_runs", [])
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for filename, rows in pool.map(get_run, WORKFLOWS):
+                if not rows:
+                    continue
+                row = rows[0]
+                latest[filename] = {"id": row["id"], "status": row["status"], "conclusion": row["conclusion"],
+                                    "createdAt": row["created_at"], "updatedAt": row["updated_at"], "url": row["html_url"]}
+        backup = latest.get("weekly-backup.yml")
+        if backup:
+            artifacts = json.loads(host_read(["runuser", "-u", "reid", "--", "gh", "api",
+                f"repos/accelerator007/Reid/actions/runs/{int(backup['id'])}/artifacts"]))
+            backup["artifacts"] = [{"name": item["name"], "sizeBytes": item["size_in_bytes"], "expired": item["expired"]}
+                                   for item in artifacts.get("artifacts", []) if item["name"].startswith("reid-db-backup-")]
+        return {"workflows": latest}
+    raise ValueError("observation_not_allowed")
 
 
 def risk_for(command: str) -> str:
@@ -199,6 +265,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             data = json.loads(raw)
+            if self.path == "/v1/observe":
+                self.reply(200, observe(data))
+                return
             command, risk = validate_command(data.get("command"))
             if self.path == "/v1/validate":
                 self.reply(200, {"ok": True, "risk": risk, "command_sha256": hashlib.sha256(command.encode()).hexdigest()})

@@ -16,15 +16,15 @@ describe('Reid workspace information architecture', () => {
   it('offers every authenticated destination exactly once', () => {
     expect(new Set(workspacePages).size).toBe(workspacePages.length);
     const authenticated = routes.filter(route => route.authenticated).map(route => route.page);
-    // Workshops is a public page that also carries the management view once
-    // signed in, so it is the one shell destination without an auth route.
-    expect([...workspacePages].sort()).toEqual([...authenticated, 'workshops'].sort());
+    expect([...workspacePages].sort()).toEqual(authenticated.sort());
     expect(accountPages).toEqual(['profile']);
   });
 
-  it('keeps the phone bar to five destinations including the agents', () => {
-    expect(mobilePrimaryPages).toHaveLength(5);
-    expect(mobilePrimaryPages).toContain('assistant');
+  it('keeps the core company workflow in the mobile navigation', () => {
+    expect(mobilePrimaryPages).toHaveLength(6);
+    expect(mobilePrimaryPages).toContain('crm');
+    expect(mobilePrimaryPages).toContain('workspace');
+    expect(mobilePrimaryPages).not.toContain('assistant');
     expect(mobilePrimaryPages.every(page => grouped.includes(page))).toBe(true);
   });
 
@@ -37,7 +37,7 @@ describe('Reid workspace information architecture', () => {
   });
 
   it('knows which group a page belongs to', () => {
-    expect(workspaceGroupOf('crm')?.id).toBe('company');
+    expect(workspaceGroupOf('crm')?.id).toBe('work');
     expect(workspaceGroupOf('profile')).toBeUndefined();
   });
 });

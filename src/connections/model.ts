@@ -24,7 +24,6 @@ export type AdminLink = {
   sample_count: number;
   outbound_scope: 'none' | 'company' | 'any';
   artifacts_enabled: boolean;
-  workshops_enabled: boolean;
   notes_enabled: boolean;
   proactive_enabled: boolean;
   voice_enabled: boolean;

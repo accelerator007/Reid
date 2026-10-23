@@ -143,7 +143,7 @@ export function OwnerOverview({ lang, go }: { lang: Lang; go: (page: Page) => vo
         />
         <StatCard
           icon={<ClipboardCheck />} tone={snapshot?.alerts.pending_approvals ? 'danger' : 'neutral'} loading={busy && !snapshot}
-          onOpen={() => go('admin')} label={tr(lang, 'موافقات بانتظارك', 'Awaiting approval')} value={snapshot?.alerts.pending_approvals ?? 0}
+          onOpen={() => location.assign('/dashboard?tab=approvals')} label={tr(lang, 'موافقات بانتظارك', 'Awaiting approval')} value={snapshot?.alerts.pending_approvals ?? 0}
           hint={snapshot?.alerts.pending_approvals ? tr(lang, 'قرارك مطلوب', 'Your decision needed') : tr(lang, 'لا شيء معلّق', 'Nothing pending')}
         />
         <StatCard
@@ -166,7 +166,7 @@ export function OwnerOverview({ lang, go }: { lang: Lang; go: (page: Page) => vo
                   <ListRow
                     key={item.key} dir={lang === 'ar' ? 'rtl' : 'ltr'} icon={decisionIcons[item.key]} tone={item.tone}
                     title={item.title[lang]} description={item.detail[lang]} meta={<strong className="overview-count">{item.count}</strong>}
-                    onOpen={() => go(item.page)}
+                    onOpen={() => item.key==='approvals'?location.assign('/dashboard?tab=approvals'):item.key==='applications'?location.assign('/workspace?tab=applications'):item.key==='agents'?location.assign('/dashboard?tab=runs'):go(item.page)}
                   />
                 ))}
               </div>

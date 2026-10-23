@@ -23,6 +23,7 @@ import './agent-admin.css';
 const tr = (lang: Lang, ar: string, en: string) => (lang === 'ar' ? ar : en);
 type Tab = 'infrastructure' | 'roster' | 'approvals' | 'runs' | 'providers';
 const agentFromUrl = () => new URLSearchParams(location.search).get('agent');
+const tabFromUrl=(owner:boolean,manage:boolean):Tab=>{const value=new URLSearchParams(location.search).get('tab') as Tab;return (owner?['infrastructure','roster','approvals','runs','providers']:manage?['roster','approvals','runs','providers']:['approvals','runs']).includes(value)?value:owner?'infrastructure':manage?'roster':'approvals';};
 
 export function AgentManagement({ lang, go }: { lang: Lang; go?: (page: Page) => void }) {
   const { roles } = useSession();
@@ -30,7 +31,7 @@ export function AgentManagement({ lang, go }: { lang: Lang; go?: (page: Page) =>
   const owner = canToggleAgents(roles);
   const [data, setData] = React.useState<api.AgentAdminData | null>(null);
   const [error, setError] = React.useState<AppError | null>(null);
-  const [tab, setTab] = React.useState<Tab>(owner ? 'infrastructure' : manage ? 'roster' : 'approvals');
+  const [tab, setTab] = React.useState<Tab>(()=>tabFromUrl(owner,manage));
   const [selected, setSelected] = React.useState<string | null>(agentFromUrl);
   const [now, setNow] = React.useState(() => Date.now());
   const [operations,setOperations]=React.useState<api.OperationsSnapshot|null>(null);
@@ -65,7 +66,7 @@ export function AgentManagement({ lang, go }: { lang: Lang; go?: (page: Page) =>
     return () => { stop(); window.clearTimeout(timer); window.clearInterval(tick); };
   }, [load, manage]);
   React.useEffect(() => {
-    const follow = () => setSelected(agentFromUrl());
+    const follow = () => {setSelected(agentFromUrl());setTab(tabFromUrl(owner,manage));};
     addEventListener('popstate', follow);
     return () => removeEventListener('popstate', follow);
   }, []);
@@ -108,7 +109,7 @@ export function AgentManagement({ lang, go }: { lang: Lang; go?: (page: Page) =>
       {error && <InlineAlert action={<Button size="sm" onClick={() => void load()}>{tr(lang, 'أعد المحاولة', 'Try again')}</Button>}>{messageFor(error, lang)}</InlineAlert>}
       {manage && selected && data && !agent && <InlineAlert tone="warning">{tr(lang, 'هذا الوكيل غير موجود.', 'This agent does not exist.')}</InlineAlert>}
 
-      <Tabs items={tabs} value={tab} onChange={setTab} label={tr(lang, 'أقسام إدارة النظام والوكلاء', 'System and agent management sections')} dir={lang === 'ar' ? 'rtl' : 'ltr'} />
+      <Tabs items={tabs} value={tab} onChange={value=>{setTab(value);history.replaceState({},'',`/dashboard?tab=${value}`);}} label={tr(lang, 'أقسام إدارة النظام والوكلاء', 'System and agent management sections')} dir={lang === 'ar' ? 'rtl' : 'ltr'} />
       {manage && tab!=='infrastructure' && (
           <div className="agents-stats agents-stats--top">
             <StatCard icon={<CheckCircle2 />} tone="success" label={tr(lang, 'جاهز', 'Ready')} value={counts?.ready ?? 0} loading={!data} />

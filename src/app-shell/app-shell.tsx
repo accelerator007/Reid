@@ -3,7 +3,7 @@
 // it unchanged, and permissions still come from routes.ts via useNavigation.
 import React from 'react';
 import {
-  Bot, CalendarCheck, CircleUserRound, ClipboardList, FilePlus2, FlaskConical, FolderKanban, GraduationCap, Handshake, House, ListChecks,
+  Bot, CalendarCheck, CircleUserRound, FolderKanban, Handshake, House, ListChecks,
   LogOut, Menu, MessageCircle, Moon, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plug, Plus, Search,
   ShieldCheck, Sparkles, Sun, UsersRound, X,
 } from 'lucide-react';
@@ -21,9 +21,9 @@ type Navigation = ReturnType<typeof useNavigation>;
 
 export const pageIcons: Partial<Record<Page, React.ReactNode>> = {
   owner: <House />, today: <CalendarCheck />, assistant: <Sparkles />,
-  operations: <ListChecks />, projects: <FolderKanban />, crm: <Handshake />, research: <FlaskConical />,
-  workshops: <GraduationCap />, workspace: <UsersRound />, inbox: <MessageCircle />,
-  dashboard: <Bot />, forms: <ClipboardList />, admin: <ShieldCheck />, connections: <Plug />, profile: <CircleUserRound />,
+  operations: <ListChecks />, projects: <FolderKanban />, crm: <Handshake />,
+  workspace: <UsersRound />, inbox: <MessageCircle />,
+  dashboard: <Bot />, admin: <ShieldCheck />, connections: <Plug />, profile: <CircleUserRound />,
 };
 
 const COLLAPSE_KEY = 'reid-nav-collapsed';
@@ -83,7 +83,6 @@ export function AppShell({ lang, page, navigation, userName, dark, logo, go, tog
     { page: 'operations' as Page, path: '/operations?new=request', icon: <ListChecks />, ar: 'طلب أو مهمة', en: 'Task or request' },
     { page: 'crm' as Page, path: '/crm?new=lead', icon: <Handshake />, ar: 'عميل أو فرصة', en: 'Client or lead' },
     { page: 'assistant' as Page, path: '/assistant?focus=compose', icon: <Sparkles />, ar: 'تكليف ريّد', en: 'Brief Reid' },
-    { page: 'forms' as Page, path: '/forms?new=form', icon: <FilePlus2 />, ar: 'نموذج', en: 'Form' },
   ].filter(item => allowed.has(item.page));
   const commands: CommandItem[] = workspaceNavGroups.flatMap(group =>
     group.pages.filter(target => allowed.has(target)).map(target => ({
@@ -128,7 +127,7 @@ export function AppShell({ lang, page, navigation, userName, dark, logo, go, tog
             </div>}
             {allowed.has('assistant') && page !== 'assistant' && (
               <button type="button" className="shell-agents" onClick={() => go('assistant')}>
-                <Sparkles aria-hidden="true" /><span>{rtl ? 'اسأل الفريق' : 'Ask the team'}</span>
+                <Sparkles aria-hidden="true" /><span>{rtl ? 'اطلب من ريّد' : 'Ask Reid'}</span>
               </button>
             )}
             <button type="button" className="ui-icon-button shell-search-icon" aria-label={rtl ? 'بحث' : 'Search'} onClick={() => setCommandOpen(true)}><Search /></button>

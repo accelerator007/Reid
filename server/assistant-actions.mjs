@@ -174,13 +174,11 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
   }
 
   async function reportContext(identity) {
-    const manager=hasRole(identity,workshopManagerRoles);
-    const [notes,tasks,workshops]=await Promise.all([
+    const [notes,tasks]=await Promise.all([
       check(admin.from('assistant_notes').select('title,body,scope,updated_at').eq('owner_id',identity.id).eq('status','active').order('updated_at',{ascending:false}).limit(20)),
       check(admin.from('tasks').select('title,status,priority,due_at,project_id').eq('assignee_id',identity.id).order('due_at').limit(30)),
-      check((manager?admin.from('workshops').select('title_ar,title_en,status,visibility,start_at,end_at,capacity'):admin.from('workshops').select('title_ar,title_en,status,visibility,start_at,end_at,capacity').eq('status','published')).order('start_at').limit(30)),
     ]);
-    return {notes,tasks,workshops};
+    return {notes,tasks};
   }
 
   async function generate(identity,chat,request,sourceDocuments='') {
@@ -503,10 +501,6 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     if(intent==='note_list')return handleNote(identity,chat,{kind:'list'});
     if(intent==='note_search')return handleNote(identity,chat,{kind:'search',query:args.query});
     if(intent==='note_delete')return handleNote(identity,chat,{kind:'delete'});
-    if(intent==='workshop_create')return handleWorkshop(identity,chat,{kind:'create',input:args.input});
-    if(intent==='workshop_list')return handleWorkshop(identity,chat,{kind:'list',query:args.query||''});
-    if(intent==='workshop_publish')return handleWorkshop(identity,chat,{kind:'publish',query:args.query||''});
-    if(intent==='workshop_cancel')return handleWorkshop(identity,chat,{kind:'cancel',query:args.query||''});
     return null;
   }
 
@@ -516,9 +510,9 @@ export function createAssistantActions({admin,check,aiChat,aiImage,queueText,que
     if(isCancellation(value)){const cancelled=await cancelPending(identity,chat);if(cancelled)return cancelled;}
     if(isConfirmation(value)||/^(?:نفذ|نفّذ|execute)\s+[A-F0-9]{6}$/iu.test(value))return executePending(identity,chat,value);
     if(/(?:حالة|وش صار|وين وصل).*(?:طلب|إرسال|ارسال)|^(?:طلباتي|حالة الطلبات)$/iu.test(value))return statusReport(identity);
-    const meeting=parseMeetingCommand(value);if(meeting)return handleMeeting(identity,chat,meeting,value);
+    if(parseMeetingCommand(value))return {handled:true,text:'ميزة الاجتماعات الصوتية أوقفت ضمن تبسيط ريّد. تقدر تسجل اجتماعًا يدويًا داخل المشروع.'};
+    if(parseWorkshopCommand(value))return {handled:true,text:'ميزة الورش أوقفت ضمن تبسيط ريّد. تقدر تدير العمل المرتبط بها كمشروع ومهام.'};
     const note=parseNoteCommand(value);if(note)return handleNote(identity,chat,note);
-    const workshop=parseWorkshopCommand(value);if(workshop)return handleWorkshop(identity,chat,workshop);
     const artifact=parseArtifactRequest(value);if(artifact)return generate(identity,chat,artifact,sourceDocuments);
     const outbound=parseOutboundRequest(value);
     if(outbound)return handleOutbound(identity,chat,outbound);

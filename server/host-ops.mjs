@@ -50,5 +50,5 @@ export function createHostOps({url,token,fetchImpl=fetch}) {
     if(!response.ok)throw new Error(result.error||`host_ops_${response.status}`);
     return result;
   }
-  return {validate:command=>call('/v1/validate',{command}),execute:(actionId,command)=>call('/v1/execute',{action_id:actionId,command})};
+  return {observe:(kind,container)=>call('/v1/observe',{kind,container}),validate:command=>call('/v1/validate',{command}),execute:(actionId,command)=>call('/v1/execute',{action_id:actionId,command})};
 }
